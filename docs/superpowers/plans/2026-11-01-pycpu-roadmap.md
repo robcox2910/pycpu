@@ -17,6 +17,34 @@ proof, and Plan 3 depends on Pebble's public API at the pinned tag.
 | 4 | **The Cockpit** | Bench grows into the full layout A: Pebble and machine-code panes, registers, memory, drill-down zoom panel, four step sizes, program loading, live updates over WebSocket or SSE. |
 | 5 | **Integration and first release** | PyStack `pycpu` plugin (shell command, `import "cpu"`, pin, registry, docs); complete docs and README; final definition-of-done pass against spec section 9; add PyCPU to the series with the runbook in `robcox2910.github.io/README.md` (`series.yml`, `HOME_GROUPS`, enable Pages, `series sync`, `series hub`); `v0.1.0` tag. |
 
+## Proof result
+
+**`RAM_ADDRESS_BITS` stays 12: 4,096 words of 16 bits, every bit real gates. All limits met,
+with no engine changes needed.** Plan 2 can rely on this size.
+
+Measured 2026-11-02 with `scripts/prove_ram.py` (`measure` in `src/pycpu/proof.py`), fresh
+process, on an Intel Core i7-9750H at 2.60 GHz with 16 GB, macOS 26.5, Python 3.14.3. RAM holds
+random words from a fixed seed; reads and writes go through the gates at random addresses, and
+a write includes `Simulator.tick`. Every read, and every word after the writes, is checked.
+
+| Measure | Result | Limit |
+|---|---|---|
+| `gates` | 607,454 | none |
+| `build_seconds` | 2.52 | under 30 |
+| `memory_mib` | 115 | under 1024 |
+| `load_seconds` | 0.095 | under 5 |
+| `read_seconds` (median of 100) | 0.0010 | under 0.1 |
+| `write_seconds` (median of 100) | 0.024 | under 0.1 |
+
+Across five fresh runs: build 2.49 to 2.71 s, memory 111 to 115 MiB, load 0.091 to 0.102 s,
+read 0.0009 to 0.0010 s, write 0.023 to 0.027 s. Slowest seen in a longer run (2,000 reads, 500 writes): read 0.0065 s, write
+0.044 s, and a write flipping all 16 data wires 0.051 s.
+
+**This is the RAM alone.** The CPU adds gates in Plan 2, so these figures are a floor, not a
+forecast. A write is costly (median 43,162 gate evaluations against 1,752 for a read) because
+each changed data wire wakes one gate per word. Two reads and a write take about 0.026 s, which
+suits gate stepping and is why long runs need Plan 2's fast engine.
+
 ## Rule #1: docs ship with the code
 
 Documentation is as important as code, and it outranks everything else in these plans. The

@@ -159,10 +159,13 @@ so the write is a short, clean pulse. A cell's enable is its word line AND that
 pulse.
 
 **Waiting for the wires.** Signals take time to run through gates. When the
-address changes, the decoder does not jump straight to the right answer; it
-flickers, like a row of dominoes where some fall a moment before others. For
-that moment a *wrong* word line can be on. If the write pulse arrives during the
-flicker, the wrong locker gets written. (The first Try It block above showed 43
+address changes, the row decoder and the column decoder do not jump straight to
+the right answer. Some address wires reach them a moment before others, like a
+row of dominoes where some fall first, so for that moment each decoder is working
+from an address that is part old and part new, and it lights the wrong line. We
+say the decoders *flicker*. A wrong row light crossing a wrong column light
+switches on a *wrong* word line. If the write pulse arrives during the flicker,
+the wrong locker gets written. (The rushed run in the block above showed 43
 lockers hurt this way.) The safe rule is: **let everything settle, then pulse**.
 `Simulator.tick` settles first, so it is always safe. A real computer gets the
 same effect by making its clock slower than its slowest path, so every signal has
@@ -198,6 +201,5 @@ machine gets a memory big enough to hold a program.
 ## What's Next
 
 We built a 4,096-word RAM out of gates, but is it small enough to simulate and
-quick enough to use? On the next page we
-measure it. (That page comes next; until it exists, [Registers](registers.md)
-is where this one picks up from.)
+quick enough to use? In [How Big Is Our Memory?](how-big-is-our-memory.md) we
+take out a stopwatch and measure it.
