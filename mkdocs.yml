@@ -42,3 +42,19 @@ markdown_extensions:
 nav:
   - Home: index.md
   - From Scratch: from-scratch.md
+  - The Basics:
+      - Bits and Binary: concepts/bits-and-binary.md
+      - Switches and NAND: concepts/switches-and-nand.md
+      - Simulating a Circuit: concepts/simulating-a-circuit.md
+      - Logic Gates from NAND: concepts/gates.md
+      - Choosing and Decoding: concepts/choosing-and-decoding.md
+      - Looking Inside a Circuit: concepts/looking-inside.md
+      - Adding: concepts/adding.md
+      - Negative Numbers: concepts/negative-numbers.md
+      - The ALU: concepts/the-alu.md
+      - Remembering: concepts/remembering.md
+      - The Clock: concepts/the-clock.md
+      - Registers: concepts/registers.md
+      - RAM: concepts/ram.md
+      - How Big Is Our Memory?: concepts/how-big-is-our-memory.md
+      - The Bench: concepts/the-bench.md

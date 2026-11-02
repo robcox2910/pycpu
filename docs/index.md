@@ -71,26 +71,28 @@ Here it is as a picture. Read it from the bottom up.
   ├──────────────────────────────────────────────────────┤
   │  The CPU          follows a list of instructions     │  coming later in the climb
   ├──────────────────────────────────────────────────────┤
-  │  Memory           latches, registers, RAM            │  next up in the climb
+  │  Memory           latches, registers, RAM            │  built and working
   ├──────────────────────────────────────────────────────┤
-  │  Arithmetic       adders and the ALU                 │  next up in the climb
+  │  Arithmetic       adders and the ALU                 │  built and working
   ├──────────────────────────────────────────────────────┤
-  │  Gates            NOT, AND, OR, XOR                  │  next up in the climb
+  │  Gates            NOT, AND, OR, XOR                  │  built and working
   ├──────────────────────────────────────────────────────┤
-  │  NAND             the one brick                      │  where it all starts
+  │  NAND             the one brick                      │  built, where it all starts
   └──────────────────────────────────────────────────────┘
 ```
 
-Each layer is built only from the layer beneath it. Nothing above NAND exists yet; the
-rungs marked "next up" are what gets built first.
+Each layer is built only from the layer beneath it. NAND, gates, arithmetic and
+memory now exist and work; the rungs marked "coming later" do not exist yet.
 
 ## Where We Are Today
 
-Honesty first: right now this repository holds the foundations and the story, not the
-machine. The pages you are reading explain what we are going to build and why. As each
-rung of the ladder gets built, a new page appears for it, and each page does three
-things: it explains the idea with an everyday comparison, it lets you run real code to
-see it for yourself, and it shows you how the part is built from the one below.
+The bottom of the ladder is built: gates, adders, the ALU, registers and a 4,096-word
+RAM, every bit of it made of real NAND gates. There is also a first piece of the
+Cockpit, called **the Bench**: a page on your own computer where you set two numbers,
+pick what the ALU should do, and then click down from the whole ALU, through its
+adders, to a single gate, watching the real 0s and 1s on its wires. Registers and RAM
+join the Bench when the CPU does. Start it with `uv run python -m pycpu`, or
+read [The Bench](concepts/the-bench.md). The processor, assembler and Pebble come next.
 
 ## By the End of the Climb
 
@@ -109,7 +111,8 @@ the instruction that is running right now. You will be able to **pause at any mo
 and click down through the layers (the ALU, the adder, a single bit, a single gate)
 and see the real circuit, with real wires carrying real values.
 
-The Cockpit does not exist yet. It is where the climb is heading.
+The full Cockpit does not exist yet, but its zoom panel does: that is the Bench. The rest of
+the Cockpit is where the climb is heading.
 
 ## Start Here
 

@@ -18,21 +18,53 @@ that is the real circuit, doing the real work.
 ## The ladder
 
 Each rung is built only from the rung beneath it. An ALU is the part that does the
-sums, and RAM is the computer's big notebook. The docs explain every word.
+sums, RAM is the computer's big notebook, the CPU is the processor that follows instructions,
+and the Assembler turns readable instructions into the numbers the CPU understands. The docs explain every word.
 
 ```
   Pebble programs           <- coming later in the climb
   Assembler                 <- coming later in the climb
   The CPU                   <- coming later in the climb
-  Memory (RAM)              <- next up in the climb
-  Arithmetic (adders, ALU)  <- next up in the climb
-  Gates (AND, OR, ...)      <- next up in the climb
-  NAND                      <- where it all starts
+  Memory (RAM)              <- built
+  Arithmetic (adders, ALU)  <- built
+  Gates (AND, OR, ...)      <- built
+  NAND                      <- built, where it all starts
 ```
 
 The destination is the **Cockpit**, a screen where you can watch a program written in
 Pebble (a small programming language from the same series) run on this computer, pause at any moment, and zoom all the way down to individual gates.
-The Cockpit is not built yet. Right now the project is the scaffold and the story.
+The Cockpit is not built yet, but its first piece is: the **Bench**, a local page for
+looking inside the ALU gate by gate (registers and RAM join it with the CPU). Gates, adders, the ALU, registers and RAM exist.
+
+## Features
+
+- **A gate simulator** -- NAND is the only building block, and every wire's value is real
+- **Logic gates** -- NOT, AND, OR, XOR and friends, each built from NANDs
+- **Choosing and decoding** -- pick one of two values, or light one of many lines
+- **Arithmetic** -- half and full adders, a 16-bit adder, negative numbers
+- **The ALU** -- add, subtract, AND, OR, XOR and shifts, with zero, negative, carry and overflow flags
+- **Memory** -- latches, flip-flops, a two-beat clock, registers, and 4,096 words of RAM
+- **Zoom** -- every part is named, so you can open any circuit and see the gates inside
+- **The Bench** -- a local web page (served by [PyWeb](https://github.com/robcox2910/pyweb)) for driving the ALU and clicking down to single gates
+
+## Example
+
+```python
+from pycpu.arithmetic import ripple_adder
+from pycpu.circuit import Circuit
+from pycpu.simulator import Simulator
+
+c = Circuit()
+a = c.bus_input("a", 16)
+b = c.bus_input("b", 16)
+total, carry_out = ripple_adder(c, a, b, c.low)
+
+sim = Simulator(c)
+sim.set_bus(a, 1234)
+sim.set_bus(b, 4321)
+sim.settle()
+print(sim.get_bus(total))  # 5555, worked out by 240 NAND gates
+```
 
 ## Quick start
 
@@ -41,14 +73,64 @@ You need Python 3.14 and [uv](https://docs.astral.sh/uv/).
 ```bash
 uv sync --all-extras
 uv run pytest
+uv run python examples/alu_tour.py   # more programs live in examples/
 uv run mkdocs serve   # read the docs at http://127.0.0.1:8000
+uv run python -m pycpu   # open the Bench at http://127.0.0.1:8765
 ```
+
+## Concepts
+
+Every idea gets its own page, with an everyday analogy:
+
+| Concept | Doc | Analogy |
+|---------|-----|---------|
+| Bits and binary | [bits-and-binary.md](docs/concepts/bits-and-binary.md) | A light switch |
+| Switches and NAND | [switches-and-nand.md](docs/concepts/switches-and-nand.md) | A lamp with two switches |
+| Simulating a circuit | [simulating-a-circuit.md](docs/concepts/simulating-a-circuit.md) | Dominoes |
+| Logic gates from NAND | [gates.md](docs/concepts/gates.md) | One lamp, many questions |
+| Choosing and decoding | [choosing-and-decoding.md](docs/concepts/choosing-and-decoding.md) | Railway points and a hotel panel |
+| Looking inside a circuit | [looking-inside.md](docs/concepts/looking-inside.md) | A map you can zoom |
+| Adding | [adding.md](docs/concepts/adding.md) | Column addition and carrying the one |
+| Negative numbers | [negative-numbers.md](docs/concepts/negative-numbers.md) | A mileage counter that rolls backwards |
+| The ALU | [the-alu.md](docs/concepts/the-alu.md) | A kitchen multi-tool with a dial |
+| Remembering | [remembering.md](docs/concepts/remembering.md) | Two friends who keep repeating |
+| The clock | [the-clock.md](docs/concepts/the-clock.md) | The drummer in a rowing boat |
+| Registers | [registers.md](docs/concepts/registers.md) | A row of sticky notes |
+| RAM | [ram.md](docs/concepts/ram.md) | A wall of lockers |
+| How big is our memory? | [how-big-is-our-memory.md](docs/concepts/how-big-is-our-memory.md) | Lockers and a stopwatch |
+| The Bench | [the-bench.md](docs/concepts/the-bench.md) | A workbench with the lid off |
 
 ## Read the docs
 
 Start with [`docs/index.md`](docs/index.md) ("What Is a Computer, Really?"), then
 [`docs/from-scratch.md`](docs/from-scratch.md) ("Why Build a Computer From Nothing?").
 The docs are the heart of the project; the code exists to back them up.
+
+## Developing alongside a sibling
+
+PyCPU uses PyWeb from a pinned git tag. To work on a PyWeb checkout at the
+same time, install it editable and tell `uv` not to re-sync over it:
+
+```bash
+uv pip install -e ../pyweb
+uv run --no-sync pytest
+```
+
+## Releasing
+
+PyCPU has no release yet. Its first release, `v0.1.0`, comes when the whole
+climb is finished, from gates to Pebble programs running in the Cockpit. From
+then on it follows the series' release steps:
+
+1. Merge the change to `main`.
+2. Tag it: `git tag -a vX.Y.Z -m vX.Y.Z && git push origin vX.Y.Z`.
+   A change to the public API bumps the minor version (`v0.1.0` → `v0.2.0`);
+   anything else bumps the patch (`v0.1.0` → `v0.1.1`).
+3. In each project that uses it, edit the tag in `[tool.uv.sources]`, run
+   `uv lock --upgrade-package pycpu`, and open a pull request so CI checks
+   the pair together.
+
+Docs-only and tooling-only changes do not get a release tag.
 
 ## License
 

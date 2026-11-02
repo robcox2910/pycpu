@@ -1,0 +1,194 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>The Bench - PyCPU</title>
+<style>
+  :root { --bg:#fafafa; --fg:#1d1d27; --card:#fff; --line:#d5d5e0; --accent:#5e35b1; --hot:#ffb300; --hotfg:#201600; --muted:#5d5d70; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg:#17171f; --fg:#ececf4; --card:#222230; --line:#3a3a4e; --accent:#b39ddb; --hot:#ffb300; --hotfg:#201600; --muted:#a4a4b8; }
+  }
+  body { margin:0; font:16px/1.5 system-ui, sans-serif; background:var(--bg); color:var(--fg); }
+  main { max-width:56rem; margin:0 auto; padding:1rem; }
+  h1 { margin:.2rem 0; } h2 { margin:1.2rem 0 .4rem; font-size:1.1rem; }
+  .muted { color:var(--muted); }
+  form { display:flex; flex-wrap:wrap; gap:.8rem; align-items:end; background:var(--card); border:1px solid var(--line); border-radius:8px; padding:.8rem; }
+  label { display:flex; flex-direction:column; font-size:.85rem; gap:.2rem; }
+  input, select, button { font:inherit; padding:.35rem .5rem; border:1px solid var(--line); border-radius:6px; background:var(--bg); color:var(--fg); }
+  button { background:var(--accent); color:var(--bg); cursor:pointer; border-color:var(--accent); }
+  #answer { margin-top:.6rem; display:flex; flex-wrap:wrap; gap:.5rem; align-items:center; }
+  .lamp { border:1px solid var(--line); border-radius:999px; padding:.1rem .7rem; font-size:.85rem; }
+  .lamp.on, .wire.on { background:var(--hot); color:var(--hotfg); border-color:var(--hot); }
+  #error { color:#c62828; font-weight:600; }
+  nav#crumbs { display:flex; flex-wrap:wrap; gap:.3rem; align-items:center; }
+  nav#crumbs button { background:transparent; color:var(--accent); border-color:var(--line); }
+  #level { background:var(--card); border:1px solid var(--line); border-left:4px solid var(--accent); border-radius:6px; padding:.6rem .8rem; margin:.6rem 0; }
+  ul#parts { list-style:none; padding:0; display:grid; grid-template-columns:repeat(auto-fill,minmax(13rem,1fr)); gap:.5rem; }
+  ul#parts button { width:100%; text-align:left; background:var(--card); color:var(--fg); border-color:var(--line); }
+  .gate { display:flex; flex-wrap:wrap; gap:.4rem; align-items:center; background:var(--card); border:1px solid var(--line); border-radius:6px; padding:.4rem .6rem; margin:.3rem 0; }
+  .wire { border:1px solid var(--line); border-radius:4px; padding:0 .45rem; font-family:ui-monospace,monospace; font-size:.9rem; }
+</style>
+</head>
+<body>
+<main>
+  <h1>The Bench</h1>
+  <p class="muted">The lid is off. Set the inputs, then click down through the parts to a single gate. Everything shown is read from the real circuit, a wire carrying a 1 is highlighted.</p>
+
+  <form id="inputs">
+    <label>A (0 to 65535)<input id="a" type="number" min="0" max="65535" value="3"></label>
+    <label>B (0 to 65535)<input id="b" type="number" min="0" max="65535" value="1"></label>
+    <label>Op
+      <select id="op">
+        <option value="0">0 ADD</option><option value="1">1 SUB</option><option value="2">2 AND</option>
+        <option value="3">3 OR</option><option value="4">4 XOR</option><option value="5">5 SHL</option>
+        <option value="6">6 SHR</option><option value="7">7 PASS_B</option>
+      </select>
+    </label>
+    <button type="submit">Set inputs</button>
+  </form>
+  <div id="answer" aria-live="polite"></div>
+  <div id="error" role="alert"></div>
+
+  <h2>Where you are</h2>
+  <nav id="crumbs" aria-label="Breadcrumb trail"></nav>
+  <div id="level"></div>
+
+  <h2>Parts inside</h2>
+  <ul id="parts"></ul>
+
+  <h2>Gates here</h2>
+  <div id="gates"></div>
+</main>
+<script>
+"use strict";
+// What each level means, in plain words, and which concept page explains it.
+const LEVELS = {
+  "": ["The whole circuit: everything we built, filed into named parts.", "Looking Inside a Circuit (looking-inside.md)"],
+  "alu": ["The ALU: two numbers go in, a dial picks the job, a result and four flag lamps come out.", "The ALU (the-alu.md)"],
+  "adder": ["The adder: sixteen columns that add, one after the other, passing a carry along.", "Adding (adding.md)"],
+  "bit": ["One column of the sum: it adds one bit of A, one bit of B and a carry from the right.", "Adding (adding.md)"],
+  "full_adder": ["A full adder: adds two bits and a carry that came in.", "Adding (adding.md)"],
+  "half_adder": ["A half adder: adds two bits, giving a sum digit and a carry.", "Adding (adding.md)"],
+  "xor": ["An XOR gate, made of 4 NANDs: on when its inputs differ.", "Logic Gates from NAND (gates.md)"],
+  "and": ["An AND gate, made of 2 NANDs: on only when both inputs are on.", "Logic Gates from NAND (gates.md)"],
+  "or": ["An OR gate, made of 3 NANDs: on when either input is on.", "Logic Gates from NAND (gates.md)"],
+  "mux": ["A chooser: picks one of two wires, steered by a select wire.", "Choosing and Decoding (choosing-and-decoding.md)"],
+  "choose": ["The inside of a chooser: gates that let one of the two wires through.", "Choosing and Decoding (choosing-and-decoding.md)"],
+  "or_many": ["An OR over many wires: on if any one of them is on.", "Logic Gates from NAND (gates.md)"],
+  "is_zero": ["The zero check: on only when every wire of the result is off.", "The ALU (the-alu.md)"],
+  "control": ["The control: works out from the op dial whether this is a subtraction.", "The ALU (the-alu.md)"],
+  "operand": ["The operand: flips the bits of B when subtracting.", "Negative Numbers (negative-numbers.md)"],
+  "overflow": ["The overflow check: spots a signed answer that does not fit.", "Negative Numbers (negative-numbers.md)"],
+  "select": ["The select: choosers steered by the op dial pick the answer.", "Choosing and Decoding (choosing-and-decoding.md)"],
+  "flags": ["The flags part: it holds the zero check, which lights up when the result is all 0s.", "The ALU (the-alu.md)"],
+};
+const GATE_LINE = ["One NAND gate: its output is 0 only when both inputs are 1. Every part above is built from these.", "Switches and NAND (switches-and-nand.md)"];
+const FALLBACK = ["A part of the circuit, made of smaller parts and gates.", "Looking Inside a Circuit (looking-inside.md)"];
+
+let path = "";
+
+function levelFor(p) {
+  if (p === "") return LEVELS[""];
+  let last = p.split(".").pop().replace(/#\d+$/, "");
+  if (/^bit\d+$/.test(last)) last = "bit";
+  else if (/^(and|or|xor)_bus$/.test(last)) return ["A row of 16 identical gates, one per bit of A and B.", "Logic Gates from NAND (gates.md)"];
+  else if (last === "mux_bus") return ["A row of choosers: each picks one of two wires, steered by an op wire.", "Choosing and Decoding (choosing-and-decoding.md)"];
+  return LEVELS[last] || FALLBACK;
+}
+
+function el(tag, text, cls) {
+  const e = document.createElement(tag);
+  if (text !== undefined) e.textContent = text;
+  if (cls) e.className = cls;
+  return e;
+}
+
+function showError(text) { document.getElementById("error").textContent = text; }
+
+async function load(next) {
+  try {
+    const response = await fetch("/api/view?path=" + encodeURIComponent(next));
+    if (!response.ok) { showError("Could not open " + (next || "the whole circuit") + " (" + response.status + ")"); return; }
+    const view = await response.json();
+    showError("");
+    path = next;
+    draw(view);
+  } catch (e) {
+    showError("Could not reach the Bench");
+  }
+}
+
+function draw(view) {
+  const crumbs = document.getElementById("crumbs");
+  crumbs.replaceChildren();
+  const names = path === "" ? [] : path.split(".");
+  const home = el("button", "whole circuit");
+  home.onclick = () => load("");
+  crumbs.append(home);
+  names.forEach((name, i) => {
+    crumbs.append(el("span", ">", "muted"));
+    const b = el("button", name);
+    b.onclick = () => load(names.slice(0, i + 1).join("."));
+    crumbs.append(b);
+  });
+
+  const [words, page] = levelFor(path);
+  const level = document.getElementById("level");
+  level.replaceChildren(el("div", words), el("div", "Read more: " + page, "muted"));
+  if (view.gates.length > 0) level.append(el("div", GATE_LINE[0] + " (" + GATE_LINE[1] + ")", "muted"));
+
+  const parts = document.getElementById("parts");
+  parts.replaceChildren();
+  view.children.forEach((child) => {
+    const li = el("li");
+    const b = el("button", child.name + " - " + child.gate_count + " gates");
+    b.onclick = () => load(path ? path + "." + child.name : child.name);
+    li.append(b);
+    parts.append(li);
+  });
+  if (view.children.length === 0) parts.append(el("li", "No smaller parts here.", "muted"));
+
+  const gates = document.getElementById("gates");
+  gates.replaceChildren();
+  view.gates.forEach((g) => {
+    const row = el("div", undefined, "gate");
+    row.append(el("strong", "gate " + g.id));
+    const wire = (label, id, value) => el("span", label + " w" + id + " = " + value, "wire" + (value ? " on" : ""));
+    row.append(wire("in", g.a, g.value_a), wire("in", g.b, g.value_b), el("span", "NAND ->"), wire("out", g.out, g.value_out));
+    gates.append(row);
+  });
+  if (view.gates.length === 0) gates.append(el("div", "No gates directly here, look in the parts above.", "muted"));
+}
+
+async function setInputs(event) {
+  event.preventDefault();
+  try {
+    await sendInputs();
+  } catch (e) {
+    showError("Could not reach the Bench");
+  }
+}
+
+async function sendInputs() {
+  const body = { a: Number(document.getElementById("a").value), b: Number(document.getElementById("b").value), op: Number(document.getElementById("op").value) };
+  const response = await fetch("/api/inputs", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+  if (!response.ok) {
+    let message = "The Bench refused those inputs.";
+    try { message = (await response.json()).message || message; } catch (e) { /* keep default */ }
+    showError(message);
+    return;
+  }
+  showError("");
+  const r = await response.json();
+  const answer = document.getElementById("answer");
+  answer.replaceChildren(el("strong", "Result: " + r.result + " (0x" + r.result.toString(16).toUpperCase().padStart(4, "0") + ")"));
+  ["zero", "negative", "carry", "overflow"].forEach((flag) => answer.append(el("span", flag + " " + r[flag], "lamp" + (r[flag] ? " on" : ""))));
+  await load(path);
+}
+
+document.getElementById("inputs").addEventListener("submit", setInputs);
+load("").then(() => setInputs(new Event("submit", { cancelable: true })));
+</script>
+</body>
+</html>

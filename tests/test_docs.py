@@ -23,6 +23,21 @@ OUTPUT_MARKER = "# Output:"
 KEY_IDEAS: dict[str, list[str]] = {
     "index.md": ["nand", "pebble", "cockpit"],
     "from-scratch.md": ["petzold", "nand", "faking", "pebble"],
+    "concepts/bits-and-binary.md": ["bit", "binary", "hex"],
+    "concepts/switches-and-nand.md": ["nand", "wire", "gate", "truth table"],
+    "concepts/simulating-a-circuit.md": ["event", "settle", "oscillat", "netlist"],
+    "concepts/gates.md": ["nand", "truth table", "xor"],
+    "concepts/choosing-and-decoding.md": ["mux", "decoder"],
+    "concepts/looking-inside.md": ["scope", "zoom", "real", "faking"],
+    "concepts/adding.md": ["half adder", "full adder", "carry", "ripple"],
+    "concepts/negative-numbers.md": ["two's complement", "overflow", "wrap", "subtract"],
+    "concepts/the-alu.md": ["alu", "flag", "zero", "carry", "overflow"],
+    "concepts/remembering.md": ["feedback", "latch", "remember"],
+    "concepts/the-clock.md": ["clock", "flip-flop", "rising edge", "two-phase"],
+    "concepts/registers.md": ["register", "load", "counter"],
+    "concepts/ram.md": ["address", "word line", "read", "write"],
+    "concepts/how-big-is-our-memory.md": ["gates", "4k", "measured"],
+    "concepts/the-bench.md": ["bench", "alu", "gate"],
 }
 
 
@@ -72,6 +87,18 @@ def check_sections(text: str, name: str) -> None:
     assert re.search(r"^\|.*\|\s*$", text[: positions[0]], flags=re.MULTILINE), (
         f"{name} needs a table before ## Try It"
     )
+
+
+def check_whats_next(text: str, name: str) -> None:
+    """Fail unless the `## What's Next` section links to another .md page."""
+    start = text.index("## What's Next")
+    assert re.search(r"\]\([^)]*\.md\)", text[start:]), f"{name}'s What's Next links to no page"
+
+
+def _last_nav_page() -> str:
+    """Return the final page listed in mkdocs.yml, the one with nowhere further to climb."""
+    nav = (ROOT / "mkdocs.yml").read_text(encoding="utf-8")
+    return re.findall(r":\s*(\S+\.md)\s*$", nav, flags=re.MULTILINE)[-1]
 
 
 def run_try_it(text: str, name: str) -> None:
@@ -161,6 +188,15 @@ def test_a_block_without_an_output_marker_is_caught() -> None:
         run_try_it(GOOD_PAGE.replace("# Output:\n# 1\n", ""), "bad")
 
 
+def test_a_whats_next_without_a_link_is_caught(tmp_path: Path) -> None:
+    """A page whose What's Next links nowhere fails the climb guard."""
+    check_whats_next("## What's Next\n\nRead [RAM](ram.md).\n", "good")
+    bad = tmp_path / "bad.md"
+    bad.write_text("## What's Next\n\nOn the next page we do RAM.\n", encoding="utf-8")
+    with pytest.raises(AssertionError, match="links to no page"):
+        check_whats_next(bad.read_text(encoding="utf-8"), "bad")
+
+
 def test_the_guards_work_on_a_page_on_disk(tmp_path: Path) -> None:
     """A page read from a temporary file goes through the same guards."""
     page = tmp_path / "page.md"
@@ -172,6 +208,14 @@ def test_the_guards_work_on_a_page_on_disk(tmp_path: Path) -> None:
 def test_every_concept_page_has_every_required_section(page: Path) -> None:
     """Each concept page has the four headings in order, and a table before Try It."""
     check_sections(page.read_text(encoding="utf-8"), _page_id(page))
+
+
+@pytest.mark.parametrize("page", CONCEPT_PAGES, ids=_page_id)
+def test_every_whats_next_links_to_the_next_page(page: Path) -> None:
+    """Every concept page except the last in the nav points on to another page."""
+    if page.relative_to(DOCS).as_posix() == _last_nav_page():
+        pytest.skip("the last page has nowhere further to climb")
+    check_whats_next(page.read_text(encoding="utf-8"), _page_id(page))
 
 
 @pytest.mark.parametrize("page", _all_pages(), ids=_page_id)
