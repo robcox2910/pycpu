@@ -26,6 +26,8 @@ KEY_IDEAS: dict[str, list[str]] = {
     "concepts/bits-and-binary.md": ["bit", "binary", "hex"],
     "concepts/switches-and-nand.md": ["nand", "wire", "gate", "truth table"],
     "concepts/simulating-a-circuit.md": ["event", "settle", "oscillat", "netlist"],
+    "concepts/gates.md": ["nand", "truth table", "xor"],
+    "concepts/choosing-and-decoding.md": ["mux", "decoder"],
 }
 
 

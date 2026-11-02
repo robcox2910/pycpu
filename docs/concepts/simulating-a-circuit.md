@@ -128,4 +128,4 @@ most of its gates sit still at any moment, and the simulator never visits them.
 
 You can now build a circuit from NAND gates and watch it settle. Next, we use
 that machinery to build the other everyday gates: NOT, AND, OR and XOR, each
-made of nothing but NAND. (That page comes next in the climb.)
+made of nothing but NAND. Read on to [Logic Gates from NAND](gates.md).

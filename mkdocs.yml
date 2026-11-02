@@ -46,3 +46,5 @@ nav:
       - Bits and Binary: concepts/bits-and-binary.md
       - Switches and NAND: concepts/switches-and-nand.md
       - Simulating a Circuit: concepts/simulating-a-circuit.md
+      - Logic Gates from NAND: concepts/gates.md
+      - Choosing and Decoding: concepts/choosing-and-decoding.md
