@@ -186,4 +186,5 @@ program, which is why we will need a faster way of running it too.
 The RAM is big enough and quick enough, so 4K words it stays. We have now built
 every part up to memory, but so far we have only seen numbers printed on a
 screen. Next comes [The Bench](the-bench.md): a workbench with the lid off, where you can look
-inside any part we have built and watch its real gates working.
+inside the ALU, and so every adder and gate under it, and watch its real gates
+working. Registers and RAM join the Bench when the CPU does.

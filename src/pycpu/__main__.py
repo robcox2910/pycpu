@@ -15,12 +15,27 @@ HOST = "127.0.0.1"
 PORT = 8765
 
 
+async def open_bench(port: int = PORT) -> AsyncServer:
+    """Switch the Bench on at 127.0.0.1 and return the running server.
+
+    Args:
+        port: The port to listen on. Use 0 to let the computer pick a free one.
+
+    """
+    server = AsyncServer(create_bench())
+    await server.start(HOST, port)
+    return server
+
+
+def banner(server: AsyncServer) -> str:
+    """Return the two lines that tell the user where the Bench is."""
+    return f"The Bench is open at http://{HOST}:{server.port}\nPress Ctrl+C to close it.\n"
+
+
 async def serve() -> None:
     """Serve the Bench until the user presses Ctrl+C."""
-    server = AsyncServer(create_bench())
-    await server.start(HOST, PORT)
-    sys.stdout.write(f"The Bench is open at http://{HOST}:{server.port}\n")
-    sys.stdout.write("Press Ctrl+C to close it.\n")
+    server = await open_bench(PORT)
+    sys.stdout.write(banner(server))
     sys.stdout.flush()
     try:
         await server.serve_forever()

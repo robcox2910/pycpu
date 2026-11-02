@@ -89,7 +89,8 @@ function levelFor(p) {
   if (p === "") return LEVELS[""];
   let last = p.split(".").pop().replace(/#\d+$/, "");
   if (/^bit\d+$/.test(last)) last = "bit";
-  else if (/_bus$/.test(last)) return ["A row of 16 identical gates, one per bit of A and B.", "Logic Gates from NAND (gates.md)"];
+  else if (/^(and|or|xor)_bus$/.test(last)) return ["A row of 16 identical gates, one per bit of A and B.", "Logic Gates from NAND (gates.md)"];
+  else if (last === "mux_bus") return ["A row of choosers: each picks one of two wires, steered by an op wire.", "Choosing and Decoding (choosing-and-decoding.md)"];
   return LEVELS[last] || FALLBACK;
 }
 
@@ -103,11 +104,16 @@ function el(tag, text, cls) {
 function showError(text) { document.getElementById("error").textContent = text; }
 
 async function load(next) {
-  const response = await fetch("/api/view?path=" + encodeURIComponent(next));
-  if (!response.ok) { showError("Could not open " + (next || "the whole circuit") + " (" + response.status + ")"); return; }
-  showError("");
-  path = next;
-  draw(await response.json());
+  try {
+    const response = await fetch("/api/view?path=" + encodeURIComponent(next));
+    if (!response.ok) { showError("Could not open " + (next || "the whole circuit") + " (" + response.status + ")"); return; }
+    const view = await response.json();
+    showError("");
+    path = next;
+    draw(view);
+  } catch (e) {
+    showError("Could not reach the Bench");
+  }
 }
 
 function draw(view) {
@@ -154,6 +160,14 @@ function draw(view) {
 
 async function setInputs(event) {
   event.preventDefault();
+  try {
+    await sendInputs();
+  } catch (e) {
+    showError("Could not reach the Bench");
+  }
+}
+
+async function sendInputs() {
   const body = { a: Number(document.getElementById("a").value), b: Number(document.getElementById("b").value), op: Number(document.getElementById("op").value) };
   const response = await fetch("/api/inputs", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
   if (!response.ok) {

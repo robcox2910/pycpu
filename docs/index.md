@@ -89,8 +89,9 @@ memory now exist and work; the rungs marked "coming later" do not exist yet.
 The bottom of the ladder is built: gates, adders, the ALU, registers and a 4,096-word
 RAM, every bit of it made of real NAND gates. There is also a first piece of the
 Cockpit, called **the Bench**: a page on your own computer where you set two numbers,
-pick what the ALU should do, and then click down from the whole ALU to a single gate,
-watching the real 0s and 1s on its wires. Start it with `uv run python -m pycpu`, or
+pick what the ALU should do, and then click down from the whole ALU, through its
+adders, to a single gate, watching the real 0s and 1s on its wires. Registers and RAM
+join the Bench when the CPU does. Start it with `uv run python -m pycpu`, or
 read [The Bench](concepts/the-bench.md). The processor, assembler and Pebble come next.
 
 ## By the End of the Climb

@@ -33,7 +33,7 @@ sums, and RAM is the computer's big notebook. The docs explain every word.
 The destination is the **Cockpit**, a screen where you can watch a program written in
 Pebble (a small programming language from the same series) run on this computer, pause at any moment, and zoom all the way down to individual gates.
 The Cockpit is not built yet, but its first piece is: the **Bench**, a local page for
-looking inside the ALU gate by gate. Gates, adders, the ALU, registers and RAM exist.
+looking inside the ALU gate by gate (registers and RAM join it with the CPU). Gates, adders, the ALU, registers and RAM exist.
 
 ## Quick start
 

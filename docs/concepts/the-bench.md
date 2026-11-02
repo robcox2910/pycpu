@@ -10,7 +10,9 @@ signal *right now*."
 
 We have built a lot of parts out of NAND gates: gates, adders, an ALU, registers,
 RAM. Until now we could only look at their answers, printed as numbers. The
-**Bench** is a web page on your own computer that takes the lid off. You type in
+**Bench** is a web page on your own computer that takes the lid off the **ALU**,
+and so every adder and gate inside it. (Registers and RAM are not on the Bench yet;
+they join when the CPU does.) You type in
 two numbers, pick what the ALU should do, and then **zoom** (move from a big part
 into the smaller parts it is made of) all the way down to a single **gate**. It
 shows the real circuit, with real wires carrying real 0s and 1s. Nothing on it is
@@ -111,7 +113,8 @@ Let us add 3 and 1 and then hunt for the exact gate that does the carrying. In
 binary 3 is `11` and 1 is `01`. Adding the right-hand column, 1 + 1, gives 2,
 which is `10`: write down 0 and **carry** a 1 to the next column.
 
-1. Open the Bench, set `a` to 3, `b` to 1 and `op` to 0 (that is ADD). The result
+1. Open the Bench, set `a` to 3, `b` to 1 and `op` to 0 (that is ADD), and press the
+   **Set inputs** button. The result
    says 4. Good, the ALU got the sum right. Now to find *how*.
 2. You start at the top. Click **alu**. This is the whole ALU, 896 gates, split
    into parts such as `control`, `adder` and `select`. The sums happen in `adder`.
@@ -123,9 +126,11 @@ which is `10`: write down 0 and **carry** a 1 to the next column.
    the sum digit, and an `and`, which finds the carry.
 5. Click **and**. The two gates here are `74` and `75`. Gate 74 has both inputs at
    1, so a NAND gives 0. Gate 75 takes that 0 on both inputs, and a NAND of two
-   0s gives 1. That 1 is the carry. You have found the gate: it is gate 75, in
-   `alu.adder.bit0.full_adder.half_adder.and`.
-6. Now change `a` to 2 and press the button again, and come back to the same
+   0s gives 1. That 1 is the first half adder's carry. You have found the gate: it
+   is gate 75, in `alu.adder.bit0.full_adder.half_adder.and`. The full adder's `or`
+   then passes that 1 on as the column's carry-out, which closes the loop: the 1
+   leaves `bit0` and goes into `bit1`.
+6. Now change `a` to 2 and press **Set inputs** again, and come back to the same
    place. Gate 74 now has a 0 on one input, so its output is 1, and gate 75
    turns it back into a 0. Nothing carried. The highlight moved because the real
    wires changed.
@@ -172,7 +177,8 @@ code down to the very gates doing the work.
 ## What's Next
 
 That finishes the first climb: from one NAND gate up through gates, adders, the
-ALU, registers and RAM, with a Bench to look inside any of them. What we do not
+ALU, registers and RAM, with a Bench to look inside the ALU and everything under it.
+Registers and RAM join the Bench when the CPU does. What we do not
 have yet is something to *use* all these parts. The next climb builds the
 processor, which fetches an instruction from RAM, hands the sums to the ALU, and
 keeps its answers in registers. The Bench will follow it all the way.

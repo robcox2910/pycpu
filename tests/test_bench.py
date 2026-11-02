@@ -4,9 +4,13 @@ import json
 from collections.abc import Coroutine
 from typing import Any, cast
 
+import pytest
 from pynet.loop import run
+from pyweb.aserver import AsyncServer
 from pyweb.testing import TestClient, TestResponse
 
+from pycpu import __main__ as entry
+from pycpu.__main__ import HOST, banner, open_bench
 from pycpu.bench.app import create_bench
 
 OK = 200
@@ -149,3 +153,48 @@ def test_the_whole_circuit_view_lists_alu() -> None:
     view = _run(body())
     assert [child["name"] for child in view["children"]] == ["alu"]
     json.dumps(view)
+
+
+def test_the_bench_opens_on_this_computer_only() -> None:
+    """open_bench listens on 127.0.0.1, and the banner names the real address."""
+
+    async def body() -> tuple[str, int]:
+        server = await open_bench(0)
+        try:
+            return banner(server), server.port
+        finally:
+            await server.close()
+
+    text, port = _run(body())
+    assert HOST == "127.0.0.1"
+    assert port > 0
+    assert f"http://127.0.0.1:{port}" in text
+    assert "Ctrl+C" in text
+
+
+def test_main_closes_quietly_on_ctrl_c(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Pressing Ctrl+C while serving prints a goodbye instead of a traceback."""
+
+    def interrupted(job: Coroutine[Any, Any, None]) -> None:
+        job.close()
+        raise KeyboardInterrupt
+
+    monkeypatch.setattr(entry, "run", interrupted)
+    entry.main()
+    assert "closed" in capsys.readouterr().out
+
+
+def test_serve_prints_the_banner_and_shuts_the_server_down(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Serve opens the Bench, prints where it is, and closes it when serving ends."""
+
+    async def finish(_self: AsyncServer) -> None:
+        """Stand in for serving forever by returning at once."""
+
+    monkeypatch.setattr(AsyncServer, "serve_forever", finish)
+    monkeypatch.setattr(entry, "PORT", 0)
+    _run(entry.serve())
+    assert "The Bench is open at http://127.0.0.1:" in capsys.readouterr().out
