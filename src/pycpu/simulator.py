@@ -58,6 +58,11 @@ class Simulator:
         self._queued[:] = b"\x01" * self._gate_count
         self.settle()
 
+    @property
+    def circuit(self) -> Circuit:
+        """Return the circuit being simulated."""
+        return self._circuit
+
     def _build_fanout(self) -> tuple[array[int], array[int]]:
         """Return the fanout table: for each wire, the gates that read it.
 
@@ -133,6 +138,21 @@ class Simulator:
         """Read a row of wires as one number, least significant bit first."""
         return sum(self._values[wire] << index for index, wire in enumerate(bus))
 
+    def _part_still_changing(self) -> str:
+        """Describe where in the circuit a gate is still changing, for the error message.
+
+        Looks through the waiting gates for the first one whose answer would
+        differ from its output right now. If none would, the front gate is named.
+        """
+        values, first, second, out = self._values, self._first, self._second, self._out
+        culprit = self._queue[0]
+        for gate in self._queue:
+            if values[out[gate]] != 1 - (values[first[gate]] & values[second[gate]]):
+                culprit = gate
+                break
+        path = self._circuit.scope_of(culprit)
+        return f"still changing in part '{path}'" if path else "still changing at the top level"
+
     def settle(self) -> int:
         """Ripple every pending change through the circuit until all is still.
 
@@ -147,6 +167,7 @@ class Simulator:
 
         Raises:
             OscillationError: If more than `max_events` evaluations are needed.
+                The message names the part of the circuit still changing.
 
         """
         queue, queued, values = self._queue, self._queued, self._values
@@ -155,10 +176,11 @@ class Simulator:
         done = 0
         while queue:
             if done >= limit:
+                part = self._part_still_changing()
                 queue.clear()
                 queued[:] = bytes(self._gate_count)
                 self.events_total += done
-                msg = f"circuit did not settle within {limit} gate evaluations"
+                msg = f"circuit did not settle within {limit} gate evaluations ({part})"
                 raise OscillationError(msg)
             gate = queue.popleft()
             queued[gate] = 0

@@ -65,7 +65,7 @@ except OscillationError as error:
 # gates in the circuit: 1005
 # flip a, gates that thought: 5
 # set a to 1 again, gates that thought: 0
-# the ring never stopped: circuit did not settle within 1000 gate evaluations
+# the ring never stopped: circuit did not settle within 1000 gate evaluations (still changing at the top level)
 ```
 
 A thousand and five gates, yet flipping `a` woke exactly five. The thousand
@@ -108,7 +108,11 @@ it becomes `1`, which makes it `0`, which makes it `1`, and so on, like a
 circle of dominoes that is always falling. A circuit that never rests like
 this **oscillates** (swings back and forth). The simulator counts evaluations
 and, if one `settle()` passes `max_events`, raises `OscillationError` instead
-of hanging forever. By default the fuse is ten million evaluations.
+of hanging forever. By default the fuse is ten million evaluations. The error
+also says *where* the trouble is. Our ring was built in no named part, so it
+says "at the top level". Once circuits are filed into named parts (see
+[Looking Inside a Circuit](looking-inside.md)) it names the part instead, such
+as `'alu.adder'`.
 
 When the `Simulator` is first made it queues every gate once, in order, and
 settles. That gives every circuit the same starting values every time.

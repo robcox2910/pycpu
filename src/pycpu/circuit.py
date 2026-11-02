@@ -8,9 +8,16 @@ and never works out a single value. The `Simulator` is the one who runs trains.
 NAND is the only kind of gate there is. Each gate is stored as three whole
 numbers (first input wire, second input wire, output wire) in compact arrays, so
 a circuit of half a million gates fits comfortably in memory.
+
+Gates can also be filed into named parts, like rooms inside a house inside a
+street. A part is a *scope*, written as a dotted path such as `alu.adder.bit1`,
+and the empty path `""` is the whole circuit. Each gate remembers its scope with
+one more whole number, which costs just 4 bytes a gate.
 """
 
 from array import array
+from collections.abc import Generator
+from contextlib import contextmanager
 
 type Wire = int
 type Bus = tuple[Wire, ...]
@@ -39,6 +46,13 @@ class Circuit:
         self._driven = bytearray(b"\x01\x01")  # 1 when something already sets this wire
         self._is_input = bytearray(_FIRST_FREE_WIRE)  # 1 for wires made by `input`
         self._input_names: dict[str, Wire] = {}
+        self._scope_of = array("i")  # the scope id of each gate, 4 bytes apiece
+        self._scope_paths: list[str] = [""]  # scope id -> dotted path; id 0 is the root
+        self._scope_ids: dict[str, int] = {"": 0}
+        self._scope_children: dict[str, list[str]] = {"": []}
+        self._scope_gates = [0]  # scope id -> number of gates directly in it
+        self._scope_uses: dict[tuple[int, str], int] = {}
+        self._current_scope = 0
 
     @property
     def gate_count(self) -> int:
@@ -138,7 +152,96 @@ class Circuit:
         self._first.append(a)
         self._second.append(b)
         self._out.append(out)
+        self._scope_of.append(self._current_scope)
+        self._scope_gates[self._current_scope] += 1
 
     def is_input(self, wire: Wire) -> bool:
         """Return True if `wire` is one made by `input` or `bus_input`."""
         return 0 <= wire < self._wire_count and bool(self._is_input[wire])
+
+    @contextmanager
+    def scope(self, name: str) -> Generator[None]:
+        """Label every gate made inside the `with` block as a named part.
+
+        Scopes nest, so the parts of a part get dotted paths like `alu.adder`.
+        Using the same name again under the same parent numbers the repeat:
+        the first is `xor`, the second `xor#1`, the third `xor#2`.
+
+        Args:
+            name: The part's name. It must not be empty or contain a dot.
+
+        Raises:
+            ValueError: If the name is empty or contains a dot.
+
+        """
+        if not name or "." in name:
+            msg = f"a scope name must be non-empty and have no dots: {name!r}"
+            raise ValueError(msg)
+        parent = self._current_scope
+        uses = self._scope_uses.get((parent, name), 0)
+        self._scope_uses[parent, name] = uses + 1
+        unique = name if uses == 0 else f"{name}#{uses}"
+        parent_path = self._scope_paths[parent]
+        path = f"{parent_path}.{unique}" if parent_path else unique
+        scope_id = len(self._scope_paths)
+        self._scope_paths.append(path)
+        self._scope_gates.append(0)
+        self._scope_ids[path] = scope_id
+        self._scope_children[path] = []
+        self._scope_children[parent_path].append(unique)
+        self._current_scope = scope_id
+        try:
+            yield
+        finally:
+            self._current_scope = parent
+
+    def has_scope(self, path: str) -> bool:
+        """Return True if `path` names a part of the circuit (`""` is the whole)."""
+        return path in self._scope_ids
+
+    def _scope_id(self, path: str) -> int:
+        """Return the id of a scope, or raise `KeyError` naming the missing path."""
+        try:
+            return self._scope_ids[path]
+        except KeyError:
+            msg = f"no such scope: {path!r}"
+            raise KeyError(msg) from None
+
+    def children(self, path: str) -> list[str]:
+        """Return the names of the parts directly inside `path`, in the order made.
+
+        Raises:
+            KeyError: If `path` is not a scope.
+
+        """
+        self._scope_id(path)
+        return list(self._scope_children[path])
+
+    def gates_in(self, path: str) -> list[int]:
+        """Return the gates that sit directly in `path`, not those in its sub-parts.
+
+        Raises:
+            KeyError: If `path` is not a scope.
+
+        """
+        scope_id = self._scope_id(path)
+        return [gate for gate, owner in enumerate(self._scope_of) if owner == scope_id]
+
+    def gate_count_in(self, path: str) -> int:
+        """Return how many gates are in `path`, counting every part nested inside it.
+
+        Raises:
+            KeyError: If `path` is not a scope.
+
+        """
+        self._scope_id(path)
+        prefix = f"{path}." if path else ""
+        return sum(
+            self._scope_gates[scope_id]
+            for scope_id, other in enumerate(self._scope_paths)
+            if other == path or other.startswith(prefix)
+        )
+
+    def scope_of(self, gate: int) -> str:
+        """Return the dotted path of the part that gate number `gate` belongs to."""
+        return self._scope_paths[self._scope_of[gate]]

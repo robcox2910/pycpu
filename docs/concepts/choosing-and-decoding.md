@@ -151,6 +151,8 @@ but never choose and never find anything.
 
 ## What's Next
 
-You now have every everyday gate, the chooser and the decoder. Next, we
-start doing arithmetic: wiring XOR and AND together into an adder that can add
-two numbers. (That page comes next in the climb.)
+You now have every everyday gate, the chooser and the decoder. Before we build
+bigger things from them, we learn to look inside: how to give groups of gates
+names and zoom from a whole circuit down to one gate. Read on to
+[Looking Inside a Circuit](looking-inside.md). After that, we start doing
+arithmetic.

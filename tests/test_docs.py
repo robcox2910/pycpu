@@ -28,6 +28,7 @@ KEY_IDEAS: dict[str, list[str]] = {
     "concepts/simulating-a-circuit.md": ["event", "settle", "oscillat", "netlist"],
     "concepts/gates.md": ["nand", "truth table", "xor"],
     "concepts/choosing-and-decoding.md": ["mux", "decoder"],
+    "concepts/looking-inside.md": ["scope", "zoom", "real", "faking"],
 }
 
 

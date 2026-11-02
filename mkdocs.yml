@@ -48,3 +48,4 @@ nav:
       - Simulating a Circuit: concepts/simulating-a-circuit.md
       - Logic Gates from NAND: concepts/gates.md
       - Choosing and Decoding: concepts/choosing-and-decoding.md
+      - Looking Inside a Circuit: concepts/looking-inside.md
