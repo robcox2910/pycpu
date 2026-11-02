@@ -64,17 +64,114 @@ def _expected_output(block: str) -> list[str] | None:
     return expected
 
 
+def check_sections(text: str, name: str) -> None:
+    """Fail unless the page has the four headings in order and a table before Try It."""
+    positions = [text.find(heading) for heading in REQUIRED_SECTIONS]
+    assert all(p >= 0 for p in positions), f"{name} is missing a required section"
+    assert positions == sorted(positions), f"{name} has its sections out of order"
+    assert re.search(r"^\|.*\|\s*$", text[: positions[0]], flags=re.MULTILINE), (
+        f"{name} needs a table before ## Try It"
+    )
+
+
+def run_try_it(text: str, name: str) -> None:
+    """Run every Try It block; each must exist, carry an Output marker, and match it."""
+    blocks = _python_blocks(_try_it_section(text))
+    assert blocks, f"{name} has no python block under ## Try It"
+    for block in blocks:
+        expected = _expected_output(block)
+        assert expected is not None, f"{name} has a Try It block with no '# Output:' marker"
+        buffer = io.StringIO()
+        with contextlib.redirect_stdout(buffer):
+            exec(compile(block, name, "exec"), {"__name__": "__try_it__"})  # noqa: S102
+        actual = [line.rstrip() for line in buffer.getvalue().splitlines()]
+        assert actual == expected, f"{name} printed {actual}, expected {expected}"
+
+
+GOOD_PAGE = """# Title
+
+## An Analogy
+
+| thing | real thing |
+|-------|------------|
+| a | b |
+
+## Try It
+
+```python
+print(1)
+# Output:
+# 1
+```
+
+## How It Works
+
+## Why Does This Matter?
+
+## What's Next
+"""
+
+
+def test_a_well_formed_page_passes_both_guards() -> None:
+    """The guards accept a page that has everything."""
+    check_sections(GOOD_PAGE, "good")
+    run_try_it(GOOD_PAGE, "good")
+
+
+def test_a_missing_section_is_caught() -> None:
+    """Dropping a required heading fails the section guard."""
+    with pytest.raises(AssertionError, match="missing"):
+        check_sections(GOOD_PAGE.replace("## How It Works\n", ""), "bad")
+
+
+def test_sections_in_the_wrong_order_are_caught() -> None:
+    """Swapping two headings fails the section guard."""
+    swapped = (
+        GOOD_PAGE.replace("## How It Works", "## TMP")
+        .replace("## Why Does This Matter?", "## How It Works")
+        .replace("## TMP", "## Why Does This Matter?")
+    )
+    with pytest.raises(AssertionError, match="order"):
+        check_sections(swapped, "bad")
+
+
+def test_a_page_without_a_table_is_caught() -> None:
+    """A page with no analogy table before Try It fails the section guard."""
+    table = "| thing | real thing |\n|-------|------------|\n| a | b |\n"
+    assert table in GOOD_PAGE
+    with pytest.raises(AssertionError, match="table"):
+        check_sections(GOOD_PAGE.replace(table, ""), "bad")
+
+
+def test_wrong_output_is_caught() -> None:
+    """A Try It whose real output differs from its comment fails."""
+    with pytest.raises(AssertionError, match="expected"):
+        run_try_it(GOOD_PAGE.replace("# 1\n", "# 2\n"), "bad")
+
+
+def test_a_try_it_with_no_python_block_is_caught() -> None:
+    """An empty Try It section fails."""
+    with pytest.raises(AssertionError, match="no python block"):
+        run_try_it(GOOD_PAGE.replace("```python", "```text"), "bad")
+
+
+def test_a_block_without_an_output_marker_is_caught() -> None:
+    """A Try It block that never says what it prints fails."""
+    with pytest.raises(AssertionError, match="Output"):
+        run_try_it(GOOD_PAGE.replace("# Output:\n# 1\n", ""), "bad")
+
+
+def test_the_guards_work_on_a_page_on_disk(tmp_path: Path) -> None:
+    """A page read from a temporary file goes through the same guards."""
+    page = tmp_path / "page.md"
+    page.write_text(GOOD_PAGE, encoding="utf-8")
+    check_sections(page.read_text(encoding="utf-8"), "disk")
+
+
 @pytest.mark.parametrize("page", CONCEPT_PAGES, ids=_page_id)
 def test_every_concept_page_has_every_required_section(page: Path) -> None:
     """Each concept page has the four headings in order, and a table before Try It."""
-    text = page.read_text(encoding="utf-8")
-    positions = [text.find(heading) for heading in REQUIRED_SECTIONS]
-    assert all(p >= 0 for p in positions), f"{_page_id(page)} is missing a required section"
-    assert positions == sorted(positions), f"{_page_id(page)} has its sections out of order"
-    before_try_it = text[: positions[0]]
-    assert re.search(r"^\|.*\|\s*$", before_try_it, flags=re.MULTILINE), (
-        f"{_page_id(page)} needs a table before ## Try It"
-    )
+    check_sections(page.read_text(encoding="utf-8"), _page_id(page))
 
 
 @pytest.mark.parametrize("page", _all_pages(), ids=_page_id)
@@ -86,16 +183,8 @@ def test_every_page_is_in_the_nav(page: Path) -> None:
 
 @pytest.mark.parametrize("page", CONCEPT_PAGES, ids=_page_id)
 def test_try_it_examples_run(page: Path) -> None:
-    """Each Try It block runs, and prints exactly what its `# Output:` comment says."""
-    section = _try_it_section(page.read_text(encoding="utf-8"))
-    for block in _python_blocks(section):
-        buffer = io.StringIO()
-        with contextlib.redirect_stdout(buffer):
-            exec(compile(block, str(page), "exec"), {"__name__": "__try_it__"})  # noqa: S102
-        expected = _expected_output(block)
-        if expected is not None:
-            actual = [line.rstrip() for line in buffer.getvalue().splitlines()]
-            assert actual == expected
+    """Each Try It has python blocks, and each prints exactly what its `# Output:` says."""
+    run_try_it(page.read_text(encoding="utf-8"), _page_id(page))
 
 
 @pytest.mark.parametrize(("page", "words"), sorted(KEY_IDEAS.items()), ids=lambda v: str(v))

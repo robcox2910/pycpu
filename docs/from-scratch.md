@@ -35,7 +35,7 @@ decision.
 We could buy a bag of chips and a soldering iron, and people do, happily. But a
 simulation has gifts that a pile of wire does not:
 
-- **You can pause time.** A real circuit runs millions of times a second. A simulated
+- **You can pause time.** A real circuit runs very fast. A simulated
   one can stop, and you can look at every wire.
 - **You can look inside.** You never need a microscope. Any part can be opened up and
   shown, and a mistake costs nothing.
