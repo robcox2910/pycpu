@@ -67,4 +67,5 @@ nav:
       - Fetch, Decode, Execute: concepts/fetch-decode-execute.md
       - The Stack: concepts/the-stack.md
       - Calling and Returning: concepts/calling-and-returning.md
+      - Two Engines: concepts/two-engines.md
       - The Bench: concepts/the-bench.md

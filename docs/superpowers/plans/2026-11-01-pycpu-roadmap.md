@@ -51,6 +51,39 @@ forecast. A write is costly (median about 43,270 gate evaluations against 1,745 
 each changed data wire wakes one gate per word. Two reads and a write take about 0.026 s, which
 suits gate stepping and is why long runs need Plan 2's fast engine.
 
+## Engine result
+
+**Both engines meet every limit at full size, with the 4K RAM unchanged and no engine changes
+needed.** The fast engine's handler table is still rebuilt on every step; it clears its floor
+more than three times over, so that deferred item stays deferred.
+
+Measured 2026-11-02 with `scripts/measure_engines.py` (`measure_engines` in
+`src/pycpu/proof.py`), fresh process, on an Intel Core i7-9750H at 2.60 GHz with 16 GB, macOS
+26.5, Python 3.14.3. Both engines run one looping program (ALU, LOAD/STORE, PUSH/POP,
+CALL/RET, BR, JMP) from the same state, with the rest of RAM random words from seed 2026. The
+gate engine's state after its 60 timed instructions must equal the fast engine's after 60 steps.
+
+| Measure | Result | Limit |
+|---|---|---|
+| `cpu_gates` (outside the RAM) | 6,023 | none |
+| `total_gates` | 613,477 | none |
+| `build_seconds` | 2.83 | under 30 |
+| `memory_mib` | 113 | under 1024 |
+| `pause_seconds` (median of 5 `load_state`) | 0.106 | under 2 |
+| `read_state_seconds` (median of 5 `state()`) | 0.013 | under 2 |
+| `gate_instruction_seconds` (median of 60 `step()`) | 0.0236 | under 0.5 |
+| `fast_instructions_per_second` (one run of 300,000) | 176,811 | over 50,000 |
+
+Ranges seen across five fresh runs, not bounds: build 2.65 to 2.92 s, memory 112 to 115 MiB,
+pause 0.099 to 0.108 s, read state 0.012 to 0.014 s, gate instruction 0.0233 to 0.0251 s,
+fast 153,618 to 176,811 instructions per second. The fast engine is about 4,000 times quicker
+than the gate engine (about 42 instructions per second on gates).
+
+Lockstep (`tests/test_lockstep.py`, 64-word machine): 200 random whole states and 200 random
+assembled programs, each compared after every step for up to 30 steps, plus a pinned
+self-modifying-code case. No disagreement was found. A deliberately broken fast `shr` carry
+was caught by the random-state test.
+
 ## Notes for Plan 2
 
 - Start by adding slow tests for the combined stack: full RAM + ALU + registers in one

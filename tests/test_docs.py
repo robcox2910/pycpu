@@ -44,6 +44,7 @@ KEY_IDEAS: dict[str, list[str]] = {
     "concepts/fetch-decode-execute.md": ["fetch", "execute", "instruction register"],
     "concepts/the-stack.md": ["stack", "push", "pop", "stack pointer"],
     "concepts/calling-and-returning.md": ["call", "return", "return address"],
+    "concepts/two-engines.md": ["fast engine", "gate engine", "lockstep"],
     "concepts/the-bench.md": ["bench", "alu", "gate"],
 }
 

@@ -174,5 +174,6 @@ out of room.
 
 ## What's Next
 
-The computer can now run real programs with functions in them. To look inside the parts
-we have built, gate by gate, continue with [The Bench](the-bench.md).
+The computer can now run real programs with functions in them, but on gates it runs them
+slowly. Read [Two Engines](two-engines.md) to meet the quick engine that runs the same
+programs with plain arithmetic, and to see how we prove the two always agree.
