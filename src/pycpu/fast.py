@@ -111,7 +111,7 @@ class FastMachine:
                 not 0 or 1. The machine is left unchanged.
 
         """
-        _validate(state, self.words)
+        validate_state(state, self.words)
         self._pc = state.pc
         self._sp = state.sp
         self._registers = list(state.registers)
@@ -302,7 +302,7 @@ class FastMachine:
         self._halt_code = i.imm
 
 
-def _validate(state: MachineState, words: int) -> None:
+def validate_state(state: MachineState, words: int) -> None:
     """Raise a ValueError unless `state` is a state a machine of `words` words could hold."""
     if len(state.memory) != words:
         msg = f"memory has {len(state.memory)} words, but this machine has {words}"

@@ -173,6 +173,6 @@ next page uses these parts to wire up a whole CPU.
 
 ## What's Next
 
-You now have every part the CPU needs, built from gates. To see them for yourself,
-continue with [The Bench](the-bench.md), a workbench where you can look inside the
-parts we have built.
+You now have every part the CPU needs, built from gates. On the next page we wire them
+to the RAM and a clock and watch the computer run a program by itself: read
+[Fetch, Decode, Execute](fetch-decode-execute.md).

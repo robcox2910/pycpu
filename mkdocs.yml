@@ -64,4 +64,5 @@ nav:
       - Machine Code: concepts/machine-code.md
       - Assembly Language: concepts/assembly-language.md
       - The Control Unit: concepts/the-control-unit.md
+      - Fetch, Decode, Execute: concepts/fetch-decode-execute.md
       - The Bench: concepts/the-bench.md

@@ -41,6 +41,7 @@ KEY_IDEAS: dict[str, list[str]] = {
     "concepts/machine-code.md": ["opcode", "flag", "fault"],
     "concepts/assembly-language.md": ["assembler", "label", "mnemonic"],
     "concepts/the-control-unit.md": ["control unit", "decode", "register file"],
+    "concepts/fetch-decode-execute.md": ["fetch", "execute", "instruction register"],
     "concepts/the-bench.md": ["bench", "alu", "gate"],
 }
 
