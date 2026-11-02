@@ -1,18 +1,22 @@
 """Tests for the RAM: real gates, checked against a plain Python list."""
 
+import random
+
 import pytest
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
 from pycpu.circuit import Bus, Circuit, Clock, Wire
-from pycpu.memory import RAM_ADDRESS_BITS, RAM_WORDS, WORD_BITS, Ram, make_clock
+from pycpu.memory import RAM_ADDRESS_BITS, RAM_WORDS, WORD_BITS, Ram, Register, make_clock
 from pycpu.simulator import Simulator
 
 SMALL_BITS = 4
 SMALL_WORDS = 1 << SMALL_BITS
 BYTE_BITS = 8
 BYTE_WORDS = 1 << BYTE_BITS
-GATE_BUDGET = 300
+STEP_BUDGET = 300
+JUMPS = 300
+JUMP_BUDGET = 10_000
 MAX_WORD = 0xFFFF
 SOME_VALUE = 0xBEEF
 OTHER_VALUE = 0x1234
@@ -44,7 +48,6 @@ class Rig:
         self.sim.set_bus(self.address, address)
         self.sim.set_bus(self.data, value)
         self.sim.set(self.write_enable, 1)
-        self.sim.settle()  # the address must be steady before the write pulse
         self.sim.tick(self.clock)
         self.sim.set(self.write_enable, 0)
         self.sim.settle()
@@ -124,6 +127,8 @@ def test_ram_behaves_like_a_list(writes: list[tuple[int, int]]) -> None:
         assert [rig.read(a) for a in range(SMALL_WORDS)] == model
 
 
+# Hypothesis runs the test body many times, and building a RAM per example would be slow
+# (and a function-scoped fixture is refused), so one RAM is built once and reset each time.
 _SHARED: list[Rig] = []
 
 
@@ -185,17 +190,86 @@ def test_cells_live_in_word_and_bit_scopes(small: Rig) -> None:
     assert len(c.gates_in("ram.word3.bit0")) > 0
 
 
-def test_changing_address_touches_few_gates(byte: Rig) -> None:
-    """In a 256-word RAM, stepping to the next address costs under 300 gate evaluations.
+def test_inputs_still_moving_do_not_corrupt_other_words(byte: Rig) -> None:
+    """Setting address, data and write_enable together, then ticking, writes only the target."""
+    byte.ram.load(byte.sim, list(range(BYTE_WORDS)))
+    byte.sim.set_bus(byte.address, BYTE_WORDS - 1)
+    byte.sim.set_bus(byte.data, SOME_VALUE)
+    byte.sim.set(byte.write_enable, 1)
+    byte.sim.tick(byte.clock)
+    byte.sim.set(byte.write_enable, 0)
+    expected = [*range(BYTE_WORDS - 1), SOME_VALUE]
+    assert [byte.ram.peek(byte.sim, a) for a in range(BYTE_WORDS)] == expected
 
-    Every word holds ones, so a woken word line shows up as real work. (A jump
-    that flips every address bit costs more, because the decoder flickers.)
-    """
-    byte.reset()
+
+def test_sweeping_the_address_with_write_enable_high_changes_nothing(byte: Rig) -> None:
+    """Without a write pulse, moving the address around never alters a word."""
+    byte.ram.load(byte.sim, list(range(BYTE_WORDS)))
+    byte.sim.set(byte.write_enable, 1)
+    byte.sim.set_bus(byte.data, SOME_VALUE)
+    for address in (0, BYTE_WORDS - 1, 85, 170, 1, 254):
+        byte.sim.set_bus(byte.address, address)
+        byte.sim.settle()
+    byte.sim.set(byte.write_enable, 0)
+    assert [byte.ram.peek(byte.sim, a) for a in range(BYTE_WORDS)] == list(range(BYTE_WORDS))
+
+
+def test_a_register_can_drive_the_address_and_write() -> None:
+    """Load an address into a register on one beat, write on the next, neighbours stay."""
+    c = Circuit()
+    clock = make_clock(c)
+    new_address = c.bus_input("new_address", BYTE_BITS)
+    load = c.input("load")
+    data = c.bus_input("data", WORD_BITS)
+    write_enable = c.input("write_enable")
+    pointer = Register(c, BYTE_BITS, new_address, load, clock, "pointer")
+    ram = Ram(c, pointer.q, data, write_enable, clock)
+    sim = Simulator(c)
+    ram.load(sim, list(range(BYTE_WORDS)))
+    sim.set_bus(new_address, 200)
+    sim.set(load, 1)
+    sim.tick(clock)
+    sim.set(load, 0)
+    sim.set_bus(data, SOME_VALUE)
+    sim.set(write_enable, 1)
+    sim.tick(clock)
+    sim.set(write_enable, 0)
+    sim.settle()
+    expected = list(range(BYTE_WORDS))
+    expected[200] = SOME_VALUE
+    assert [ram.peek(sim, a) for a in range(BYTE_WORDS)] == expected
+    assert sim.get_bus(ram.out) == SOME_VALUE
+
+
+def test_a_write_leaves_non_adjacent_words_alone(byte: Rig) -> None:
+    """Writing one word of a loaded 8-bit RAM leaves words far from it as they were."""
+    byte.ram.load(byte.sim, list(range(BYTE_WORDS)))
+    byte.write(100, SOME_VALUE)
+    for other in (0, 1, 99, 101, 16, 255):
+        assert byte.ram.peek(byte.sim, other) == other
+    assert byte.ram.peek(byte.sim, 100) == SOME_VALUE
+
+
+def test_stepping_to_the_next_address_costs_under_300_evaluations(byte: Rig) -> None:
+    """In a 256-word RAM full of ones, stepping from address 0 to 1 costs under 300."""
     byte.ram.load(byte.sim, [MAX_WORD] * BYTE_WORDS)
     byte.sim.set_bus(byte.address, 0)
     byte.sim.settle()
     byte.sim.set_bus(byte.address, 1)
     cost = byte.sim.settle()
-    assert 0 < cost < GATE_BUDGET
+    assert 0 < cost < STEP_BUDGET
     assert byte.sim.get_bus(byte.ram.out) == MAX_WORD
+
+
+def test_random_jumps_touch_a_small_part_of_the_circuit(byte: Rig) -> None:
+    """Jumping to a random address costs more (the decoder flickers) but stays a sliver."""
+    byte.ram.load(byte.sim, [MAX_WORD] * BYTE_WORDS)
+    byte.sim.set_bus(byte.address, 0)
+    byte.sim.settle()
+    rng = random.Random(7)  # noqa: S311 - fixed seed, not for secrets
+    costs: list[int] = []
+    for _ in range(JUMPS):
+        byte.sim.set_bus(byte.address, rng.randrange(BYTE_WORDS))
+        costs.append(byte.sim.settle())
+    assert max(costs) < JUMP_BUDGET
+    assert max(costs) * 4 < byte.c.gate_count  # even the worst jump leaves most gates still

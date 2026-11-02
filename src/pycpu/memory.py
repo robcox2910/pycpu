@@ -8,8 +8,8 @@ smoke, by sending a gate's answer back round to listen to itself.
 A latch holds one bit. A flip-flop holds one bit and changes only on the beat of
 the clock. A register is a row of flip-flops holding one whole number. RAM is a
 wall of numbered lockers, each a row of latches, with an address to pick one.
-Every piece is made of NAND gates and nothing else; the one thing outside the gates is
-`Register.poke`, which writes a starting value straight into the storage wires.
+Every piece is made of NAND gates and nothing else; the one thing outside the
+gates is `poke`, which writes a starting value straight into the storage wires.
 """
 
 from collections.abc import Sequence

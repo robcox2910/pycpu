@@ -175,12 +175,18 @@ class Simulator:
                     self._wake(wire)
 
     def tick(self, clock: Clock) -> None:
-        """Play one beat: pulse `write` up and down, then `clk` up and down.
+        """Play one beat: let the inputs finish moving, then pulse `write` and `clk`.
+
+        First everything already changed is settled, so no pulse meets a wire
+        that is still on its way to its final value (a real computer does this
+        by making its clock slower than its slowest path). Then `write` pulses
+        up and down, then `clk`.
 
         The `write` pulse comes first and is over before `clk` rises, so memory
         copies in values while every register still holds this beat's. Each
         change is settled before the next.
         """
+        self.settle()
         for wire in (clock.write, clock.clk):
             self.set(wire, 1)
             self.settle()
