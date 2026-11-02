@@ -63,4 +63,5 @@ nav:
       - What Is a CPU?: concepts/what-is-a-cpu.md
       - Machine Code: concepts/machine-code.md
       - Assembly Language: concepts/assembly-language.md
+      - The Control Unit: concepts/the-control-unit.md
       - The Bench: concepts/the-bench.md

@@ -184,6 +184,6 @@ you just met.
 ## What's Next
 
 You can now write programs in words and the machine can run them, but so far the machine
-is the plain-Python fast engine. Next we start building the real thing out of gates. For
-now, continue with [The Bench](the-bench.md), a workbench where you can look inside the
-parts we have built.
+is the plain-Python fast engine. Next we start building the real thing out of gates,
+beginning with the control unit: the part that reads an instruction and lights the right
+wires. Continue with [The Control Unit](the-control-unit.md).
