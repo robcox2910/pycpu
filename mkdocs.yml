@@ -57,4 +57,9 @@ nav:
       - Registers: concepts/registers.md
       - RAM: concepts/ram.md
       - How Big Is Our Memory?: concepts/how-big-is-our-memory.md
+  - Reference:
+      - Instruction Set: reference/instruction-set.md
+  - The Computer:
+      - What Is a CPU?: concepts/what-is-a-cpu.md
+      - Machine Code: concepts/machine-code.md
       - The Bench: concepts/the-bench.md
