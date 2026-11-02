@@ -26,7 +26,8 @@ def _in_own_scope[**P, R](
 
     The scope is a child of whatever part is being built when `build` is
     called, so `xor` called inside `with c.scope("alu")` lands in `alu.xor`.
-    Underscores at the end of a name are dropped (`and_` becomes `and`).
+    Underscores at the end of a name are dropped (`and_` becomes `and`). A
+    single NAND (`not_`) is too small to be worth a part and is not wrapped.
     """
     name = build.__name__.strip("_")
 
@@ -39,7 +40,6 @@ def _in_own_scope[**P, R](
     return wrapper
 
 
-@_in_own_scope
 def not_(c: Circuit, a: Wire) -> Wire:
     """Add a NOT gate: the output is 1 when `a` is 0, and 0 when `a` is 1.
 

@@ -110,9 +110,8 @@ this **oscillates** (swings back and forth). The simulator counts evaluations
 and, if one `settle()` passes `max_events`, raises `OscillationError` instead
 of hanging forever. By default the fuse is ten million evaluations. The error
 also says *where* the trouble is. Our ring was built in no named part, so it
-says "at the top level". Once circuits are filed into named parts (see
-[Looking Inside a Circuit](looking-inside.md)) it names the part instead, such
-as `'alu.adder'`.
+says "at the top level". Later in the climb, circuits are filed into named
+parts, and then the error names the part instead.
 
 When the `Simulator` is first made it queues every gate once, in order, and
 settles. That gives every circuit the same starting values every time.

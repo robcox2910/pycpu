@@ -60,11 +60,13 @@ for gate in zoomed["gates"]:
     print(gate)
 print("the xor answer wire", total, "holds", sim.get(total))
 
-# A ring that never settles, built inside two nested parts:
+# A ring that never settles, built inside two nested parts. A gate cannot read a
+# wire that does not exist yet, so we make the wire first (`wire_placeholder`)
+# and then connect the gate that drives it (`nand_into`).
 ring = Circuit()
 with ring.scope("clock"), ring.scope("ring"):
     loop = ring.wire_placeholder()
-    ring.nand_into(loop, loop, loop)
+    ring.nand_into(loop, loop, loop)  # a NOT gate that feeds itself
 try:
     Simulator(ring, max_events=1000)
 except OscillationError as error:
@@ -96,16 +98,24 @@ look.
 Two files do the work: `src/pycpu/circuit.py` remembers the names, and
 `src/pycpu/view.py` shows them.
 
-**1. Every gate remembers which part it belongs to.** The circuit keeps a
-list of scope paths, and a gate stores just the number of its scope. That is
-one whole number per gate (4 bytes), so even half a million gates pay almost
-nothing for their labels. A `with c.scope("half_adder"):` block says "every
+**1. Every gate remembers which part it belongs to.** Each part gets a number,
+and a gate stores just the number of its part: one whole number, 4 bytes. The
+parts themselves cost more, because each one has a name, a parent and counts of
+its gates, about 200 bytes a part. We measured a circuit of 500,010 gates (a
+12-bit decoder plus a few thousand 16-bit XOR, AND, chooser and zero-check
+units) that held 197,229 parts. The whole circuit took about 59 MB, and the
+parts' bookkeeping was under 40 MB of that. Each part also keeps its total
+gate count up to date as gates are added, so asking "how big is this part?"
+is instant however big it is. A `with c.scope("half_adder"):` block says "every
 gate made until the block ends goes in this part". Blocks can sit inside
 blocks, which gives the dotted paths.
 
 **2. The gate functions label themselves.** Every function in `logic.py`
-(`xor`, `mux`, `decoder` and the rest) opens a scope named after itself. That
-is why `xor` made a part called `xor` all by itself. If one part uses the same
+that builds more than one gate (`xor`, `mux`, `decoder` and the rest) opens a
+scope named after itself. That is why `xor` made a part called `xor` all by
+itself. The exception is `not_`, which is a single NAND: a part holding one
+gate would cost more than it tells you, so its gate just sits in whatever part
+called it. If one part uses the same
 gate twice, the repeats are numbered: `xor`, `xor#1`, `xor#2`. The gate counts
 do not change; the labels are extra, not extra gates.
 

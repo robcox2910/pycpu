@@ -1,15 +1,19 @@
 """Tests for named scopes and the live circuit view."""
 
+import time
 from typing import cast
 
 import pytest
 
 from pycpu.circuit import Circuit
-from pycpu.logic import and_, is_zero, xor
+from pycpu.logic import and_, decoder, is_zero, not_, xor
 from pycpu.simulator import OscillationError, Simulator
 from pycpu.view import circuit_view
 
 XOR_GATES = 4
+MANY_CHILDREN = 3000
+DECODER_BITS = 12
+VIEW_SECONDS = 1.0
 ZERO_GATES_16 = 46
 
 
@@ -152,3 +156,64 @@ def test_oscillation_error_in_the_root_reads_sensibly() -> None:
     c.nand_into(loop, loop, loop)
     with pytest.raises(OscillationError, match=r"\(still changing at the top level\)"):
         Simulator(c, max_events=1000)
+
+
+def test_not_gate_opens_no_scope_of_its_own() -> None:
+    """A NOT is a single NAND, so its gate sits in the calling part."""
+    c = Circuit()
+    a = c.input("a")
+    with c.scope("part"):
+        not_(c, a)
+    assert c.children("part") == []
+    assert len(c.gates_in("part")) == 1
+
+
+def test_gate_count_in_is_right_at_every_depth() -> None:
+    """A part counts its own gates plus those of every part nested inside."""
+    c = Circuit()
+    a = c.input("a")
+    with c.scope("top"):
+        c.nand(a, a)
+        with c.scope("mid"):
+            c.nand(a, a)
+            c.nand(a, a)
+            with c.scope("low"):
+                c.nand(a, a)
+    assert c.gate_count_in("top.mid.low") == 1
+    assert c.gate_count_in("top.mid") == 3  # noqa: PLR2004
+    assert c.gate_count_in("top") == 4  # noqa: PLR2004
+    assert c.gate_count_in("") == 4  # noqa: PLR2004
+    assert len(c.gates_in("top.mid")) == 2  # noqa: PLR2004
+
+
+def test_a_parent_with_thousands_of_children_counts_correctly() -> None:
+    """Three thousand sibling parts are all listed and all counted."""
+    c = Circuit()
+    a = c.input("a")
+    with c.scope("parent"):
+        for _ in range(MANY_CHILDREN):
+            with c.scope("kid"):
+                c.nand(a, a)
+                c.nand(a, a)
+    names = c.children("parent")
+    assert len(names) == MANY_CHILDREN
+    assert names[:2] == ["kid", "kid#1"]
+    assert names[-1] == f"kid#{MANY_CHILDREN - 1}"
+    assert c.gate_count_in("parent") == 2 * MANY_CHILDREN
+    assert c.gate_count_in(f"parent.kid#{MANY_CHILDREN - 1}") == 2  # noqa: PLR2004
+
+
+def test_viewing_a_real_decoder_with_thousands_of_children_is_fast() -> None:
+    """Zooming into a 12-bit decoder (over 4,000 parts) takes well under a second."""
+    c = Circuit()
+    decoder(c, c.bus_input("sel", DECODER_BITS))
+    sim = Simulator(c)
+    started = time.perf_counter()
+    view = circuit_view(sim, "decoder")
+    elapsed = time.perf_counter() - started
+    assert len(_children(view)) > 2**DECODER_BITS
+    assert (
+        sum(cast("int", child["gate_count"]) for child in _children(view)) + len(_gates(view))
+        == c.gate_count
+    )
+    assert elapsed < VIEW_SECONDS
