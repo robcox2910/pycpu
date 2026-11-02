@@ -35,6 +35,7 @@ KEY_IDEAS: dict[str, list[str]] = {
     "concepts/remembering.md": ["feedback", "latch", "remember"],
     "concepts/the-clock.md": ["clock", "flip-flop", "rising edge", "two-phase"],
     "concepts/registers.md": ["register", "load", "counter"],
+    "concepts/ram.md": ["address", "word line", "read", "write"],
 }
 
 

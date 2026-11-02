@@ -55,3 +55,4 @@ nav:
       - Remembering: concepts/remembering.md
       - The Clock: concepts/the-clock.md
       - Registers: concepts/registers.md
+      - RAM: concepts/ram.md

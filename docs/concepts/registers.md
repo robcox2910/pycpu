@@ -133,6 +133,5 @@ lives in the next page's big grid of the same bits.
 
 ## What's Next
 
-A register holds one number. A computer needs thousands. In the next part of
-the climb we stack up many words and add an address to choose between them:
-memory. (That page comes next.)
+A register holds one number. A computer needs thousands. On the next page we
+stack up thousands of words and add an address to choose between them: RAM.
