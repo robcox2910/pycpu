@@ -28,7 +28,7 @@ into one locker.
 | Signals for one route lighting up | `opcode_lines(c, opcode)`: 16 wires, exactly one high |
 | A signaller's question, "may the train go?" | `condition_met(c, cond, zero, negative, carry, overflow)` |
 | The row of eight lockers | `RegisterFile`, with eight `Register`s named `r0` to `r7` |
-| The two read windows | `file.a` and `file.b` |
+| The two read windows | `bank.a` and `bank.b` |
 | The slot and the locker number | `write` and `write_select` |
 | A short number stretched to a long one | `sign_extend(c, bits, width)` |
 | "Is this address off the end of the map?" | `outside_ram(c, address, ram_bits)` |
@@ -77,7 +77,7 @@ print("condition gates:", c.gate_count)
 
 c = Circuit()
 clock = make_clock(c)
-file = RegisterFile(
+bank = RegisterFile(
     c,
     data=c.bus_input("data", 16),
     write=c.input("write_enable"),
@@ -123,6 +123,12 @@ answers and let the lowest bit of `cond` flip the result when it is 1. The flipp
 done by an **XOR** gate, which gives 1 when its two inputs differ (see
 [Logic Gates from NAND](gates.md)): XOR with 0 changes nothing, XOR with 1 flips.
 
+Picking one of the four answers is a job for a **mux** (short for multiplexer): a
+**chooser** that passes one of two inputs along, depending on a select wire (see
+[Choosing and Decoding](choosing-and-decoding.md)). Two layers of muxes, a *chooser
+tree*, pick one of four, steered by the top two bits of `cond`. It is the same kind of
+tree the ALU uses to pick its answer.
+
 ```
  zero ────────────────────────┐
  negative XOR overflow (LT) ──┤  chooser tree      ┌─────┐
@@ -132,11 +138,8 @@ done by an **XOR** gate, which gives 1 when its two inputs differ (see
                                                   cond bit 0
 ```
 
-The chooser tree is made of **muxes** (a mux, short for multiplexer, is a chooser that
-passes one of two inputs along, depending on a select wire; see
-[Choosing and Decoding](choosing-and-decoding.md)). It is the same kind of tree that the ALU uses to pick its
-answer. "Less than" for signed numbers is `negative XOR overflow`: the answer is
-negative, unless the sum overflowed and lied. It lives in the part `condition`.
+"Less than" for signed numbers is `negative XOR overflow`: the answer is negative,
+unless the sum overflowed and lied. It lives in the part `condition`.
 
 **3. The register file.** `RegisterFile` makes eight `Register`s, named `r0` to `r7`,
 all sharing one data bus. A register needs its `load` wire high to take the data. We
@@ -150,8 +153,8 @@ level uses bit 1, and the last uses bit 2, leaving one register's value. We coul
 used a decoder with an AND per bit and a big OR, but the tree is the same shape the ALU
 already uses, so there is less new to learn, and it needs only 7 choosers per bit.
 Both windows work at once because they are two separate trees. They live in the parts
-`registers.read_a` and `registers.read_b`. The whole register file, measured by the Try It
-above, is 2161 NAND gates.
+`registers.read_a` and `registers.read_b`. The whole register file, measured by the
+Try It above, is 2161 NAND gates.
 
 **4. Two tiny helpers.** `sign_extend` stretches a short signed number (like the 6-bit
 offset in `LOAD`) to 16 bits by copying its top bit into the new places, exactly the
