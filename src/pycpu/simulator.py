@@ -54,7 +54,11 @@ class Simulator:
                 if undriven == 1
                 else "wires have no gate driving them"
             )
-            msg = f"{undriven} {noun}: finish each wire_placeholder with nand_into"
+            first = circuit.first_undriven
+            msg = (
+                f"{undriven} {noun} (the first is wire {first}): "
+                "finish each wire_placeholder with nand_into"
+            )
             raise ValueError(msg)
         self._circuit = circuit
         self._max_events = max_events

@@ -109,6 +109,11 @@ class Circuit:
         return len(self._driven) - sum(self._driven)
 
     @property
+    def first_undriven(self) -> Wire:
+        """Return the lowest-numbered undriven wire, or -1 if every wire is driven."""
+        return self._driven.find(0)
+
+    @property
     def state_pairs(self) -> tuple[tuple[str, Wire, Wire], ...]:
         """Return every registered storage cell as `(name, q, q_n)`, in the order made."""
         return tuple(self._state_pairs)

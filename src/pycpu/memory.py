@@ -29,7 +29,8 @@ def _latch_into(c: Circuit, data: Wire, enable: Wire, q: Wire, qn: Wire) -> None
 
     Two NANDs gate `data` with `enable`; two more are the cross-coupled loop.
     The loop gate for `qn` is added first, so with quiet inputs the cell powers
-    on holding 0.
+    on holding 0. That guarantee holds only if `enable` is low at power-on; with
+    `enable` high the latch follows `data` instead.
     """
     set_n = c.nand(data, enable)
     reset_n = c.nand(set_n, enable)
@@ -49,11 +50,14 @@ def d_latch(c: Circuit, data: Wire, enable: Wire) -> tuple[Wire, Wire]:
     return q, qn
 
 
-def _flip_flop_into(c: Circuit, data: Wire, clk: Wire, not_clk: Wire, q: Wire) -> None:
+def _flip_flop_into(
+    c: Circuit, data: Wire, clk: Wire, not_clk: Wire, q: Wire
+) -> tuple[tuple[Wire, Wire], tuple[Wire, Wire]]:
     """Build a master-slave flip-flop that drives the existing wire `q`.
 
     The master is open while `clk` is low; the slave is open while it is high.
-    Both cells are registered as state pairs so they can be poked.
+    Both cells are registered as state pairs so they can be poked, and returned
+    as `(master, slave)`, each a `(q, q_n)` pair.
     """
     m_q, m_qn = c.wire_placeholder(), c.wire_placeholder()
     s_qn = c.wire_placeholder()
@@ -63,13 +67,16 @@ def _flip_flop_into(c: Circuit, data: Wire, clk: Wire, not_clk: Wire, q: Wire) -
         _latch_into(c, m_q, clk, q, s_qn)
     c.state_pair("master", m_q, m_qn)
     c.state_pair("slave", q, s_qn)
+    return (m_q, m_qn), (q, s_qn)
 
 
 @in_own_scope
 def d_flip_flop(c: Circuit, data: Wire, clk: Wire) -> Wire:
     """Add a bit that copies `data` only as `clk` rises, and holds it otherwise.
 
-    Two latches (master and slave) and one NOT: nine NAND gates.
+    Two latches (master and slave) and one NOT: nine NAND gates. `clk` must be
+    a primary clock wire (an input), because the flip-flop relies on its NOT being
+    exactly one gate away from it.
     """
     q = c.wire_placeholder()
     _flip_flop_into(c, data, clk, not_(c, clk), q)
@@ -105,16 +112,13 @@ class Register:
             msg = f"bus width mismatch: register of {width} bits given {len(data)} wires"
             raise ValueError(msg)
         self.q: Bus = tuple(c.wire_placeholder() for _ in range(width))
-        first_pair = len(c.state_pairs)
+        self._cells: list[tuple[tuple[Wire, Wire], tuple[Wire, Wire]]] = []
         with c.scope(name):
             chosen = mux_bus(c, load, self.q, data)  # load 0 keeps q, load 1 takes data
             not_clk = not_(c, clock.clk)
             for i in range(width):
                 with c.scope(f"bit{i}"):
-                    _flip_flop_into(c, chosen[i], clock.clk, not_clk, self.q[i])
-        pairs = c.state_pairs[first_pair:]
-        # Each bit registered its master then its slave, in bit order.
-        self._cells = [(pairs[2 * i][1:], pairs[2 * i + 1][1:]) for i in range(width)]
+                    self._cells.append(_flip_flop_into(c, chosen[i], clock.clk, not_clk, self.q[i]))
 
     def peek(self, sim: Simulator) -> int:
         """Read the number the register holds, from its output wires."""

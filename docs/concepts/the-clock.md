@@ -74,6 +74,18 @@ sim.tick(clock)
 print("tick 1: r =", sim.get(r), "snap =", sim.get(snap))
 sim.tick(clock)
 print("tick 2: r =", sim.get(r), "snap =", sim.get(snap))
+
+# The harm: photograph with `clk` instead of `write`, and the picture is wrong.
+c = Circuit()
+clock = make_clock(c)
+data = c.input("data")
+r = d_flip_flop(c, data, clock.clk)
+good, _ = d_latch(c, r, clock.write)  # opens on write, before clk
+bad, _ = d_latch(c, r, clock.clk)  # opens on clk, as r is changing
+sim = Simulator(c)
+sim.set(data, 1)
+sim.tick(clock)
+print("r =", sim.get(r), "| photo on write =", sim.get(good), "| photo on clk =", sim.get(bad))
 # Output:
 # data goes to 1, clk is 0     data=1 clk=0 r=0
 # clk rises: r takes data      data=1 clk=1 r=1
@@ -82,6 +94,7 @@ print("tick 2: r =", sim.get(r), "snap =", sim.get(snap))
 # clk rises again              data=1 clk=1 r=1
 # tick 1: r = 0 snap = 1
 # tick 2: r = 0 snap = 0
+# r = 1 | photo on write = 0 | photo on clk = 1
 ```
 
 ## How It Works
@@ -132,6 +145,13 @@ beat's numbers. `write` is back to 0 *before* `clk` rises. Only then does
 is a writer: it takes its photo of `r` just before `r` changes, which is why
 `snap` always shows one beat behind. Early computers used the same trick, and
 called it a two-phase clock.
+
+To see the harm, the last part of the Try It builds a second photographer that
+opens on `clk` instead of `write`. It opens at the same moment `r` changes, so it
+photographs the *new* value, not the one the beat started with. Here the
+register has just taken a 1, and the `clk` photographer shows 1 where the
+`write` photographer correctly shows the old 0. In a real machine that would
+mean writing the wrong number into memory.
 
 **4. The Clock itself.** `Clock` is a tiny record of two input wires, `clk`
 and `write`, defined in `src/pycpu/circuit.py`. `make_clock` adds the two wires

@@ -10,6 +10,7 @@ from pycpu.circuit import Bus, Circuit, Wire
 from pycpu.logic import (
     and_,
     and_bus,
+    buffer_into,
     decoder,
     is_zero,
     mux,
@@ -29,6 +30,7 @@ WORD_MAX = (1 << WORD) - 1
 SELECT_WIDTH = 3
 XOR_GATES = 4
 SEVEN = 7
+BUFFER_GATES = 2
 words = st.integers(min_value=0, max_value=WORD_MAX)
 
 TWO_INPUT: dict[str, tuple[Callable[[Circuit, Wire, Wire], Wire], Callable[[int, int], int]]] = {
@@ -206,3 +208,17 @@ def test_gates_are_built_only_from_nand() -> None:
     c = Circuit()
     xor(c, c.input("a"), c.input("b"))
     assert c.gate_count == XOR_GATES
+
+
+def test_buffer_into_copies_its_source_with_two_gates() -> None:
+    """A buffer drives a placeholder with the same value as its source."""
+    c = Circuit()
+    a = c.input("a")
+    target = c.wire_placeholder()
+    buffer_into(c, a, target)
+    sim = Simulator(c)
+    assert c.gate_count == BUFFER_GATES
+    for value in (0, 1):
+        sim.set(a, value)
+        sim.settle()
+        assert sim.get(target) == value

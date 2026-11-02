@@ -32,7 +32,12 @@ is the smallest thing in this whole project that can **remember**.
 
 First the bare loop: two NAND gates. `set_n` and `reset_n` are "active low",
 meaning they do their job when they are **0** and are quiet when they are 1.
-After each step we print the two wires. Then we build the friendlier version,
+One warning: a new circuit starts with every input at 0, which here means
+"set" and "reset" are both being shouted at once. That is the **forbidden
+state**: both gates are forced to answer 1, so `q` and `q_n` agree instead of
+being opposites, and the loop means nothing. The very first thing we do is
+move both inputs to their quiet position, 1. After each step we print the two
+wires. Then we build the friendlier version,
 `d_latch`, with one `data` wire to say what to remember and one `enable` wire
 to say "listen now".
 
@@ -58,6 +63,7 @@ def step(label, set_value, reset_value):
     print(f"{label:<22} q={sim.get(q)} q_n={sim.get(q_n)}")
 
 
+step("quiet (both inputs 1)", 1, 1)
 step("set (set_n to 0)", 0, 1)
 step("let go, it remembers", 1, 1)
 step("reset (reset_n to 0)", 1, 0)
@@ -82,6 +88,7 @@ for label, d, e in [
     print(f"{label:<22} q={sim2.get(latch_q)}")
 print("d_latch gates:", c2.gate_count)
 # Output:
+# quiet (both inputs 1)  q=0 q_n=1
 # set (set_n to 0)       q=1 q_n=0
 # let go, it remembers   q=1 q_n=0
 # reset (reset_n to 0)   q=0 q_n=1
@@ -102,14 +109,16 @@ The code is in `src/pycpu/memory.py`, and it is made of nothing but NAND gates.
 the *other* gate's output; gate B reads `reset_n` and gate A's output.
 
 ```
-   set_n ──►┌────────┐
-            │ NAND A ├────┬──────► q
-      ┌────►└────────┘    │
-      │                   │
-      │     ┌────────┐◄───┘
-      └─────┤ NAND B │◄──── reset_n
-            └───┬────┘
-                └──────────────► q_n   (also back up into NAND A)
+  set_n ───►┌────────┐
+            │ NAND A ├───────┬───────► q
+     ┌─────►└────────┘       │
+     │                       │ q goes down into B
+     │                       ▼
+     │     reset_n ───►┌────────┐
+     │                 │ NAND B ├───┬──► q_n
+     │                 └────────┘   │
+     │                              │
+     └──────────────────────────────┘ q_n goes up into A
 ```
 
 In words: A's output `q` goes into B, and B's output `q_n` goes into A.
@@ -147,9 +156,14 @@ a set (when data is 1) or a reset (when data is 0), so `q` simply follows
 `data`. Four NAND gates in all, and one bit of memory.
 
 **5. Power-on.** When a simulation starts, every gate is looked at once, in the
-order it was added. For a loop that matters: with both inputs 1, the gate added
-first answers first, and wins. So the same circuit always powers on to the same
-bit, never a random one. A test in the repository pins this down.
+order it was added, and every input is 0. For a bare loop that means the
+forbidden state from the Try It (both gates forced to 1), and as soon as the
+inputs move to 1 the two gates race and the one looked at first wins. Which one
+that is depends only on the order the gates were added, so the same circuit
+always powers on to the same bit, never a random one. A test in the repository
+pins this down. `d_latch` avoids the forbidden state altogether: with `enable`
+at 0 its front gates keep the loop quiet, and its gates are added so that it
+powers on holding 0. (That promise only holds if `enable` starts low.)
 
 ## Why Does This Matter?
 

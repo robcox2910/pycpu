@@ -48,6 +48,18 @@ def not_(c: Circuit, a: Wire) -> Wire:
     return c.nand(a, a)
 
 
+def buffer_into(c: Circuit, source: Wire, target: Wire) -> None:
+    """Make `target` a copy of `source`, using two NOT gates in a row.
+
+    Flip a wire, then flip it back, and you hold the same value you started
+    with. Use this to close a loop when `target` is a placeholder made earlier
+    (see `Circuit.wire_placeholder`): a placeholder can only be driven by a gate,
+    and a gate that copies is two NANDs. The first NOT lives in the calling part.
+    """
+    flipped = not_(c, source)
+    c.nand_into(flipped, flipped, target)
+
+
 @in_own_scope
 def and_(c: Circuit, a: Wire, b: Wire) -> Wire:
     """Add an AND gate: the output is 1 only when both `a` and `b` are 1.

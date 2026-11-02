@@ -29,13 +29,13 @@ as the click-counter a doorman holds in his hand.
 A register with `load` and 16 data wires: it holds, then loads. Then the
 counter, which is a register whose data is "my own value, plus one". A wire
 cannot be both a gate's output and an input to something built earlier, so we
-make the data wires first, then connect them with two NOTs in a row (a NOT of
-a NOT is the same value).
+make the data wires first, then connect them with `buffer_into`, which is two NOTs in a row (a NOT of
+a NOT is the same value as the one you started with).
 
 ```python
 from pycpu.arithmetic import ripple_adder
 from pycpu.circuit import Circuit
-from pycpu.logic import not_
+from pycpu.logic import buffer_into
 from pycpu.memory import Register, make_clock
 from pycpu.simulator import Simulator
 
@@ -64,7 +64,7 @@ counter = Register(c, 8, next_value, c.high, clock, "counter")
 one = (c.high, *([c.low] * 7))
 total, _ = ripple_adder(c, counter.q, one, c.low)
 for wire, bit in zip(next_value, total, strict=True):
-    c.nand_into(not_(c, bit), not_(c, bit), wire)
+    buffer_into(c, bit, wire)
 sim = Simulator(c)
 for beat in range(1, 301):
     sim.tick(clock)

@@ -7,7 +7,7 @@ import pytest
 
 from pycpu.arithmetic import ripple_adder
 from pycpu.circuit import Circuit
-from pycpu.logic import not_
+from pycpu.logic import buffer_into
 from pycpu.memory import Register, d_flip_flop, d_latch, make_clock
 from pycpu.simulator import Simulator
 
@@ -20,6 +20,7 @@ MANY_TICKS = 10
 COUNT_BEATS = 300
 BYTE_RANGE = 256
 LATCH_GATES = 4
+SHIFT_VALUE = 0x5A
 TWO_BITS_OF_CELLS = 4
 FLIP_FLOP_GATES = 9
 
@@ -173,8 +174,7 @@ def test_a_counter_built_from_register_and_adder_counts() -> None:
     one = (c.high, *([c.low] * (LOW_BYTE - 1)))
     total, _ = ripple_adder(c, counter.q, one, c.low)
     for wire, bit in zip(nxt, total, strict=True):
-        flipped = not_(c, bit)
-        c.nand_into(flipped, flipped, wire)
+        buffer_into(c, bit, wire)
     sim = Simulator(c)
     for beat in range(1, COUNT_BEATS + 1):
         sim.tick(clock)
@@ -204,3 +204,21 @@ def test_poke_pairs_refuses_a_value_that_is_not_a_bit() -> None:
     sim = Simulator(c)
     with pytest.raises(ValueError, match="0 or 1"):
         sim.poke_pairs([(q, q_n)], 2)
+
+
+def test_chained_registers_shift_one_step_per_tick() -> None:
+    """Each register copies the one before it, so a value moves one place a tick."""
+    c = Circuit()
+    clock = make_clock(c)
+    data = c.bus_input("d", LOW_BYTE)
+    first = Register(c, LOW_BYTE, data, c.high, clock, "first")
+    second = Register(c, LOW_BYTE, first.q, c.high, clock, "second")
+    third = Register(c, LOW_BYTE, second.q, c.high, clock, "third")
+    sim = Simulator(c)
+    sim.set_bus(data, SHIFT_VALUE)
+    sim.tick(clock)
+    assert (first.peek(sim), second.peek(sim), third.peek(sim)) == (SHIFT_VALUE, 0, 0)
+    sim.tick(clock)
+    assert (first.peek(sim), second.peek(sim), third.peek(sim)) == (SHIFT_VALUE,) * 2 + (0,)
+    sim.tick(clock)
+    assert (first.peek(sim), second.peek(sim), third.peek(sim)) == (SHIFT_VALUE,) * 3

@@ -223,7 +223,9 @@ def test_a_wire_nothing_drives_stops_the_simulator_with_a_clear_error() -> None:
     done = c.wire_placeholder()
     c.nand_into(c.high, c.high, done)
     assert c.undriven_count == TWO_UNDRIVEN
-    with pytest.raises(ValueError, match=r"2 wires have no gate driving them"):
+    with pytest.raises(
+        ValueError, match=r"2 wires have no gate driving them \(the first is wire 2\)"
+    ):
         Simulator(c)
 
 
