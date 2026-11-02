@@ -21,6 +21,10 @@ ordinary counting (called *decimal*) the places are ones, tens, hundreds,
 each worth ten times the one before. In binary each place is worth **two
 times** the one before: 1, 2, 4, 8, 16, and so on.
 
+To pass a bit from one place to another we use a **wire**: a path that carries
+one on-or-off signal from one place to another, like the cable from a switch
+to a lamp. A row of wires that together hold one number is called a **bus**.
+
 | In everyday life | In PyCPU |
 |------------------|----------|
 | A light switch, up or down | A **bit**, `1` or `0` |
@@ -31,8 +35,7 @@ times** the one before: 1, 2, 4, 8, 16, and so on.
 
 Notice the order. PyCPU always lists the **ones switch first**, then the twos,
 then the fours. "Least significant bit first" is just the grown-up way of
-saying that. (A bus is a row of wires treated as one number; you will meet wires on the
-next page.)
+saying that. (You will build real wires on the next page.)
 
 ## Try It
 
