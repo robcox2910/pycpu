@@ -35,7 +35,7 @@ def li_hi(rd: int, value: int) -> list[int]:
     ]
 
 
-# Every pinned fast-engine program from Task 2 that uses no stack opcode.
+# Every pinned fast-engine program from Task 2 that starts from power-on.
 PROGRAMS: dict[str, list[int]] = {
     "countdown": COUNTDOWN,
     "li then lhi": [*li_hi(1, 0x3412), encode(Opcode.HALT)],
@@ -108,6 +108,25 @@ PROGRAMS: dict[str, list[int]] = {
         *(encode(Opcode.BR, rd=cond, imm=1) for cond in Condition),
         encode(Opcode.HALT),
     ],
+    "push and pop": [
+        encode(Opcode.LI, rd=1, imm=42),
+        encode(Opcode.PUSH, rd=1),
+        encode(Opcode.GETSP, rd=2),
+        encode(Opcode.POP, rd=3),
+        encode(Opcode.LI, rd=4, imm=10),
+        encode(Opcode.SETSP, rd=4),
+        encode(Opcode.PUSH, rd=3),
+        encode(Opcode.HALT),
+    ],
+    "call and ret": [
+        encode(Opcode.LI, rd=1, imm=7),
+        encode(Opcode.CALL, imm=3),
+        encode(Opcode.HALT),
+        encode(Opcode.ALU, rd=1, ra=1, rb=1, fn=AluOp.ADD),
+        encode(Opcode.RET),
+    ],
+    "pop with nothing on the stack faults": [encode(Opcode.POP, rd=1)],
+    "ret with nothing on the stack faults": [encode(Opcode.RET)],
     "hello": list(
         assemble(
             """
@@ -301,20 +320,131 @@ def test_a_halted_machine_does_nothing(machine: GateMachine) -> None:
     assert machine.run(10) == 0
 
 
-def test_stack_opcodes_do_nothing_yet(machine: GateMachine) -> None:
-    """Until the stack arrives, PUSH, POP, CALL and RET change nothing but pc."""
-    program = [
-        encode(Opcode.PUSH, rd=1),
-        encode(Opcode.POP, rd=2),
-        encode(Opcode.CALL, imm=5),
-        encode(Opcode.RET),
-    ]
-    start = replace(
-        program_state(program), registers=LOADED_REGISTERS, flags=Flags(1, 0, 1, 0), sp=SMALL // 2
+NESTED_CALLS = """
+    set r7, 0xFFFF
+    li r1, 'A'
+    store r1, [r7]
+    call second
+    li r1, 'a'
+    store r1, [r7]
+    halt
+second:
+    li r1, 'B'
+    store r1, [r7]
+    call third
+    li r1, 'b'
+    store r1, [r7]
+    ret
+third:
+    li r1, 'C'
+    store r1, [r7]
+    li r1, 'c'
+    store r1, [r7]
+    ret
+"""
+CORRUPTED_TARGET = 40
+CORRUPTED_HALT_CODE = 5
+FAR_OUTSIDE = 0x8000
+
+
+def stack_start(program: list[int], sp: int) -> MachineState:
+    """Return `program` at address 0 with loaded registers, two flags on, and `sp` set."""
+    return replace(
+        program_state(program), registers=LOADED_REGISTERS, flags=Flags(1, 0, 1, 0), sp=sp
     )
+
+
+# Stack cases that need a loaded stack pointer, registers or memory.
+STACK_CASES: dict[str, MachineState] = {
+    "push with sp at zero faults": stack_start([encode(Opcode.PUSH, rd=1)], 0),
+    "call with sp at zero faults": stack_start([encode(Opcode.CALL, imm=5)], 0),
+    "pop with sp at the end faults": stack_start([encode(Opcode.POP, rd=1)], SMALL),
+    "ret with sp at the end faults": stack_start([encode(Opcode.RET)], SMALL),
+    "pop from the output port faults": stack_start([encode(Opcode.POP, rd=1)], 0xFFFF),
+    "ret from the output port faults": stack_start([encode(Opcode.RET)], 0xFFFF),
+    "push far outside memory faults": stack_start([encode(Opcode.PUSH, rd=1)], FAR_OUTSIDE),
+    "pop far outside memory faults": stack_start([encode(Opcode.POP, rd=1)], FAR_OUTSIDE),
+    "push into word zero overwrites the program": stack_start(
+        [encode(Opcode.LI, rd=0, imm=1), encode(Opcode.PUSH, rd=4)], 1
+    ),
+    "pop and ret from the top word": replace(
+        stack_start(
+            [encode(Opcode.POP, rd=5), encode(Opcode.SETSP, rd=6), encode(Opcode.RET)],
+            SMALL - 1,
+        ),
+        registers=(*LOADED_REGISTERS[:6], SMALL - 1, LOADED_REGISTERS[7]),
+        memory=(
+            encode(Opcode.POP, rd=5),
+            encode(Opcode.SETSP, rd=6),
+            encode(Opcode.RET),
+            encode(Opcode.HALT, imm=9),
+            *([0] * (SMALL - 5)),
+            3,
+        ),
+    ),
+    "call pushes onto a stack in the middle of memory": stack_start(
+        [encode(Opcode.CALL, imm=3), encode(Opcode.HALT), 0, encode(Opcode.RET)], SMALL // 2
+    ),
+    "ret to a corrupted return address": stack_start(
+        [
+            encode(Opcode.CALL, imm=2),
+            encode(Opcode.HALT),
+            encode(Opcode.LI, rd=2, imm=CORRUPTED_TARGET),
+            encode(Opcode.PUSH, rd=2),  # pushed, never popped
+            encode(Opcode.RET),
+            *([0] * (CORRUPTED_TARGET - 5)),
+            encode(Opcode.HALT, imm=CORRUPTED_HALT_CODE),
+        ],
+        SMALL,
+    ),
+    "ret to an address outside memory faults at the next fetch": stack_start(
+        [encode(Opcode.PUSH, rd=3), encode(Opcode.RET)], SMALL
+    ),
+    "nested calls three deep": program_state(list(assemble(NESTED_CALLS, words=SMALL).words)),
+}
+
+
+@pytest.mark.parametrize("name", list(STACK_CASES))
+def test_each_stack_case_ends_the_same_on_gates(machine: GateMachine, name: str) -> None:
+    """PUSH, POP, CALL and RET give the fast engine's state after every instruction."""
+    run_side_by_side(machine, STACK_CASES[name])
+
+
+def test_push_with_sp_at_zero_changes_nothing_but_halted(machine: GateMachine) -> None:
+    """A push to 0xFFFF is a fault, not output, and leaves sp, registers and memory alone."""
+    start = STACK_CASES["push with sp at zero faults"]
     machine.load_state(start)
-    assert machine.run(len(program)) == len(program)
-    assert machine.state() == replace(start, pc=len(program))
+    machine.step()
+    assert machine.state() == replace(start, pc=1, halted=True, halt_code=Fault.BAD_ADDRESS)
+
+
+def test_pop_with_sp_past_the_end_changes_nothing_but_halted(machine: GateMachine) -> None:
+    """A pop from address 64 of a 64-word memory faults and leaves r1 and sp alone."""
+    start = STACK_CASES["pop with sp at the end faults"]
+    machine.load_state(start)
+    machine.step()
+    assert machine.state() == replace(start, pc=1, halted=True, halt_code=Fault.BAD_ADDRESS)
+
+
+def test_nested_calls_return_in_order(machine: GateMachine) -> None:
+    """Three calls deep, each return lands back in its caller, and sp ends where it began."""
+    state = run_side_by_side(machine, STACK_CASES["nested calls three deep"])
+    assert state.output_text == "ABCcba"
+    assert (state.sp, state.halted, state.halt_code) == (SMALL, True, 0)
+
+
+def test_ret_jumps_to_a_corrupted_return_address(machine: GateMachine) -> None:
+    """RET trusts the stack: a pushed 40 sends it to address 40, as on the fast engine."""
+    state = run_side_by_side(machine, STACK_CASES["ret to a corrupted return address"])
+    assert (state.halted, state.halt_code) == (True, CORRUPTED_HALT_CODE)
+    assert state.memory[SMALL - 1] == 1  # the real return address, never used
+    assert state.sp == SMALL - 1
+
+
+def test_call_then_ret_restores_the_stack(machine: GateMachine) -> None:
+    """The pinned call program doubles r1 and leaves sp back at the top of memory."""
+    state = run_side_by_side(machine, program_state(PROGRAMS["call and ret"]))
+    assert (state.registers[1], state.sp, state.halted) == (14, SMALL, True)
 
 
 def test_load_state_refuses_a_state_that_does_not_fit(machine: GateMachine) -> None:
@@ -346,6 +476,10 @@ def test_the_cpu_is_zoomable(machine: GateMachine) -> None:
         "condition",
         "alu",
         "address_check",
+        "sp_minus_1",
+        "sp_plus_1",
+        "next_sp",
+        "ram_data",
     ):
         assert name in children
     assert "ram" in machine.circuit.children("")

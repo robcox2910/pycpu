@@ -77,7 +77,7 @@ print("gates in the RAM:", machine.circuit.gate_count_in("ram"))
 # after two beats: next is FETCH, pc = 1, r1 = 3
 # instructions run: 8
 # r1 = 0, pc = 4, halted: True
-# gates in the CPU: 5219
+# gates in the CPU: 6029
 # gates in the RAM: 9496
 ```
 
@@ -131,8 +131,8 @@ the part `halt`, holding `halted` (1 bit) and `halt_code` (8 bits). Next to them
 the parts from [The Control Unit](the-control-unit.md) (`registers`, `decode`,
 `condition`, `address_check`) and the [ALU](the-alu.md).
 
-The Try It measured 5,219 gates in the CPU. The full-size machine, with 4,096 words,
-has 5,213 gates in its CPU (its `address_check` has fewer high address bits to watch)
+The Try It measured 6,029 gates in the CPU. The full-size machine, with 4,096 words,
+has 6,023 gates in its CPU (its `address_check` has fewer high address bits to watch)
 and 607,454 in its RAM: the thinking part of the computer is less than one gate in a
 hundred. Almost all of a computer is memory.
 
@@ -143,9 +143,9 @@ that name inside `cpu`, and every arrow is a bus of real wires.
 ```
                 ┌────────┐        ┌────────┐  one lit line per opcode:
    ram.out ───► │   ir   ├───────►│ decode ├──► steers every chooser below
-   (fetch)      └───┬────┘        └────────┘    (control, operand, next_pc,
-                    │ fields: rd ra rb fn imm    write_back, fault, port)
-                    ▼
+   (fetch)      └───┬────┘        └────────┘    (control, operand, address_mux,
+                    │ fields: rd ra rb fn imm    next_pc, next_sp, ram_data,
+                    ▼                            write_back, fault, port)
  ┌──────┐  pc + 1  ┌───────────────┐
  │  pc  ├─────────►│ pc_plus_1     ├──┐   ┌─────────┐
  │      ├─────────►│ branch_target ├──┴──►│ next_pc ├──► new pc
@@ -153,9 +153,10 @@ that name inside `cpu`, and every arrow is a bus of real wires.
     │ fetch: pc
     ▼                                 ┌────────────┐
  ┌─────────────┐   address            │    RAM     │  ram.out
- │ address_mux ├─────────────────────►│ (part ram) ├───► ir (fetch), write_back (LOAD)
- └─────▲───────┘                      └─────▲──────┘
-       │ execute: ALU answer                │ data ◄── window b (STORE)
+ │ address_mux ├─────────────────────►│ (part ram) ├───► ir (fetch), write_back (LOAD,
+ └─────▲───────┘                      └─────▲──────┘     POP), next_pc (RET)
+       │ execute: ALU answer,               │ data ◄── ram_data: window b (STORE,
+       │ or sp - 1 / sp (stack)             │          PUSH) or pc (CALL)
        │
        │      new rd ┌───────────────────────────────────────┐
        │             ▼                                       │
@@ -224,6 +225,11 @@ picks what each chooser lets through:
   need it. The register file writes for `ALU`, `LI`, `LHI`, `LOAD`, `GETSP` and `ADDI`;
   `flags` load for `ALU`, `CMP` and `ADDI`; `sp` loads for `SETSP`; the RAM writes for
   `STORE`.
+- Four instructions, `PUSH`, `POP`, `CALL` and `RET`, use a pile of words at the top of
+  memory called the stack. They add a few more choices to these choosers (the little
+  notes about `sp` and `pc` in the diagram), and the next two pages,
+  [The Stack](the-stack.md) and [Calling and Returning](calling-and-returning.md),
+  build them.
 - `pc` loads a new value for `JMP` (the 12-bit address in `ir`) or for `BR` when the
   `condition` part says the condition holds. A branch target comes from a second
   adder, `branch_target`, which adds the sign-extended 9-bit offset to `pc`. Because
@@ -285,5 +291,6 @@ goes through fetch, decode and execute.
 
 ## What's Next
 
-You can now watch the CPU run, beat by beat. To look inside the parts we have built,
-gate by gate, continue with [The Bench](the-bench.md).
+You can now watch the CPU run, beat by beat. Four instructions, `PUSH`, `POP`, `CALL`
+and `RET`, need one more idea: a pile of words kept at the top of memory. Continue with
+[The Stack](the-stack.md).

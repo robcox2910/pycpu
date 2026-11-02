@@ -42,6 +42,8 @@ KEY_IDEAS: dict[str, list[str]] = {
     "concepts/assembly-language.md": ["assembler", "label", "mnemonic"],
     "concepts/the-control-unit.md": ["control unit", "decode", "register file"],
     "concepts/fetch-decode-execute.md": ["fetch", "execute", "instruction register"],
+    "concepts/the-stack.md": ["stack", "push", "pop", "stack pointer"],
+    "concepts/calling-and-returning.md": ["call", "return", "return address"],
     "concepts/the-bench.md": ["bench", "alu", "gate"],
 }
 

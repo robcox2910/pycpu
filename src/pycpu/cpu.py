@@ -31,6 +31,7 @@ from pycpu.isa import (
     RA_SHIFT,
     RB_SHIFT,
     RD_SHIFT,
+    WORD_MASK,
     Fault,
     Opcode,
 )
@@ -121,11 +122,16 @@ class _Wires:
     register_write: Wire
     out: AluOutput
     met: Wire
+    sp_down: Bus
+    sp_up: Bus
+    pushes: Wire
+    pops: Wire
     address: Bus
     outside: Wire = -1
     go: Wire = -1
     act: Wire = -1
     ram_write: Wire = -1
+    ram_data: Bus = ()
 
 
 class GateMachine:
@@ -210,7 +216,7 @@ class GateMachine:
         if self._pending:
             msg = f"registers left with undriven inputs: {sorted(self._pending)}"
             raise RuntimeError(msg)
-        return w.address, w.bank.b, w.ram_write
+        return w.address, w.ram_data, w.ram_write
 
     def _register(self, c: Circuit, name: str, width: int, data: Bus | None = None) -> Register:
         """Build a register whose `load` (and, unless given, data) wires are filled in later."""
@@ -233,7 +239,9 @@ class GateMachine:
 
         The register file's windows read `ra` and `rb`, or `rd` where an
         instruction needs it. The ALU's second input and its job dial are
-        chosen by the opcode lines.
+        chosen by the opcode lines. Two adders keep `sp - 1` and `sp + 1`
+        ready for the stack, and the address chooser picks `pc`, the ALU's
+        answer, `sp - 1` (a push) or `sp` (a pop).
         """
         ir = self._ir.q
         rd = _field(ir, RD_SHIFT, FIELD_BITS)
@@ -264,8 +272,18 @@ class GateMachine:
         out = alu(c, bank.a, b, op)
         flags = self._flags.q
         met = condition_met(c, rd, flags[0], flags[1], flags[2], flags[3])
+        sp = self._sp.q
+        with c.scope("sp_minus_1"):
+            # Adding 0xFFFF is adding -1 in two's complement: the finger moves down.
+            sp_down, _ = ripple_adder(c, sp, _constant(c, WORD_MASK, WORD_BITS), c.low)
+        with c.scope("sp_plus_1"):
+            sp_up, _ = ripple_adder(c, sp, _constant(c, 0, WORD_BITS), c.high)
         with c.scope("address_mux"):
-            address = mux_bus(c, execute, self._pc.q, out.result)
+            pushes = or_(c, line[Opcode.PUSH], line[Opcode.CALL])
+            pops = or_(c, line[Opcode.POP], line[Opcode.RET])
+            stack_spot = mux_bus(c, pops, sp_down, sp)
+            execute_address = mux_bus(c, or_(c, pushes, pops), out.result, stack_spot)
+            address = mux_bus(c, execute, self._pc.q, execute_address)
         return _Wires(
             line=line,
             imm8=imm8,
@@ -278,6 +296,10 @@ class GateMachine:
             register_write=register_write,
             out=out,
             met=met,
+            sp_down=sp_down,
+            sp_up=sp_up,
+            pushes=pushes,
+            pops=pops,
             address=address,
         )
 
@@ -286,6 +308,7 @@ class GateMachine:
 
         A bad address (outside RAM, except a STORE to the port) or a HALT
         instruction stops the machine and blocks every other load that beat.
+        The stack opcodes need RAM too, so for them even `0xFFFF` is bad.
         """
         w.outside = outside_ram(c, w.address, address_bits)
         with c.scope("port"):
@@ -293,7 +316,8 @@ class GateMachine:
             self.port_write: Wire = and_(c, and_(c, w.execute, port_store), w.running)
             self.port_data: Bus = w.bank.b
         with c.scope("fault"):
-            needs_ram = or_(c, w.fetch, and_(c, w.memory_op, not_(c, port_store)))
+            uses_memory = or_many(c, [and_(c, w.memory_op, not_(c, port_store)), w.pushes, w.pops])
+            needs_ram = or_(c, w.fetch, uses_memory)
             bad = and_(c, w.outside, needs_ram)
             stop = or_(c, bad, and_(c, w.execute, w.line[Opcode.HALT]))
             w.go = and_(c, w.running, not_(c, stop))  # nothing else may load after a stop
@@ -304,7 +328,12 @@ class GateMachine:
             self._feed(c, "halt_code", halt_load, mux_bus(c, bad, w.imm8, fault_code))
 
     def _build_next_pc(self, c: Circuit, w: _Wires) -> None:
-        """Add the two adders and the choosers that decide `pc`, `ir` and `phase`."""
+        """Add the two adders and the choosers that decide `pc`, `ir` and `phase`.
+
+        `JMP` and `CALL` take the 12-bit address from `ir`; `RET` takes the
+        return address from `ram.out`, which is safe because `pc` is a
+        register and nothing writes the RAM on a `RET` beat.
+        """
         ir, pc = self._ir.q, self._pc.q
         with c.scope("pc_plus_1"):
             plus_one, _ = ripple_adder(c, pc, _constant(c, 0, WORD_BITS), c.high)
@@ -312,31 +341,51 @@ class GateMachine:
             target, _ = ripple_adder(c, pc, sign_extend(c, _field(ir, 0, OFF9_BITS)), c.low)
         with c.scope("next_pc"):
             jump_to = (*_field(ir, 0, ADDR12_BITS), *_constant(c, 0, WORD_BITS - ADDR12_BITS))
-            elsewhere = mux_bus(c, w.line[Opcode.JMP], target, jump_to)
-            moves = or_(c, w.line[Opcode.JMP], and_(c, w.line[Opcode.BR], w.met))
+            line = w.line
+            jumps = or_(c, line[Opcode.JMP], line[Opcode.CALL])
+            elsewhere = mux_bus(c, jumps, target, jump_to)
+            elsewhere = mux_bus(c, line[Opcode.RET], elsewhere, self._ram.out)
+            moves = or_many(c, [jumps, line[Opcode.RET], and_(c, line[Opcode.BR], w.met)])
             pc_load = and_(c, w.go, or_(c, w.fetch, moves))
             self._feed(c, "pc", pc_load, mux_bus(c, w.execute, plus_one, elsewhere))
             self._feed(c, "ir", and_(c, w.go, w.fetch))
             self._feed(c, "phase", w.go, (w.fetch,))
 
     def _build_write_back(self, c: Circuit, w: _Wires) -> None:
-        """Add the choosers for what goes into `rd`, and the execute beat's load wires."""
+        """Add the choosers for what goes into `rd`, `sp` and the RAM, and their load wires."""
         line = w.line
         with c.scope("write_back"):
-            value = mux_bus(c, line[Opcode.LOAD], w.out.result, self._ram.out)
+            from_ram = or_(c, line[Opcode.LOAD], line[Opcode.POP])
+            value = mux_bus(c, from_ram, w.out.result, self._ram.out)
             value = mux_bus(c, line[Opcode.LI], value, (*w.imm8, *_constant(c, 0, IMM8_BITS)))
             value = mux_bus(c, line[Opcode.LHI], value, (*w.bank.a[:IMM8_BITS], *w.imm8))
             value = mux_bus(c, line[Opcode.GETSP], value, self._sp.q)
             _drive(c, value, w.write_back)
-            writers = [Opcode.ALU, Opcode.LI, Opcode.LHI, Opcode.LOAD, Opcode.GETSP, Opcode.ADDI]
+            writers = [
+                Opcode.ALU,
+                Opcode.LI,
+                Opcode.LHI,
+                Opcode.LOAD,
+                Opcode.POP,
+                Opcode.GETSP,
+                Opcode.ADDI,
+            ]
             loads_rd = or_many(c, [line[o] for o in writers])
             _drive(c, (and_(c, w.act, loads_rd),), (w.register_write,))
             sets_flags = or_many(c, [line[Opcode.ALU], line[Opcode.CMP], line[Opcode.ADDI]])
             out = w.out
             flags = (out.zero, out.negative, out.carry, out.overflow)
             self._feed(c, "flags", and_(c, w.act, sets_flags), flags)
-            self._feed(c, "sp", and_(c, w.act, line[Opcode.SETSP]), w.bank.b)
-            w.ram_write = and_(c, w.act, and_(c, line[Opcode.STORE], not_(c, w.outside)))
+        with c.scope("next_sp"):
+            moved = mux_bus(c, w.pops, w.sp_down, w.sp_up)
+            sp_value = mux_bus(c, line[Opcode.SETSP], moved, w.bank.b)
+            sp_load = or_many(c, [w.pushes, w.pops, line[Opcode.SETSP]])
+            self._feed(c, "sp", and_(c, w.act, sp_load), sp_value)
+        with c.scope("ram_data"):
+            # CALL writes the return address (pc); STORE and PUSH write window b.
+            w.ram_data = mux_bus(c, line[Opcode.CALL], w.bank.b, self._pc.q)
+            writes = or_(c, line[Opcode.STORE], w.pushes)
+            w.ram_write = and_(c, w.act, and_(c, writes, not_(c, w.outside)))
 
     @property
     def phase(self) -> Phase:

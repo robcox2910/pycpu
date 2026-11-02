@@ -65,4 +65,6 @@ nav:
       - Assembly Language: concepts/assembly-language.md
       - The Control Unit: concepts/the-control-unit.md
       - Fetch, Decode, Execute: concepts/fetch-decode-execute.md
+      - The Stack: concepts/the-stack.md
+      - Calling and Returning: concepts/calling-and-returning.md
       - The Bench: concepts/the-bench.md
