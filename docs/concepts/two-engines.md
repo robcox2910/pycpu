@@ -164,6 +164,10 @@ Measured on 2 November 2026, on one laptop: an Intel Core i7-9750H at 2.60 GHz w
 | One instruction on the gate engine | 0.0236 seconds | under 0.5 | yes |
 | Instructions per second on the fast engine | 176,811 | over 50,000 | yes |
 
+Peak memory is the most of the laptop's own memory the program used at once, counted
+in **MiB** (say "mebibyte"): 1,048,576 bytes, about a million, where a byte is eight
+bits. [How Big Is Our Memory?](how-big-is-our-memory.md) explains it.
+
 The times for loading, reading and one instruction are **medians** (line the times up
 from fastest to slowest and take the middle one), of 5, 5 and 60 tries. The fast
 engine's figure comes from one run of 300,000 instructions. Five fresh runs on the same
@@ -201,6 +205,5 @@ which let a laptop pretend to be an old games machine, are fast engines of the s
 ## What's Next
 
 The fast engine runs and the gate engine shows. Next we want to switch between them in
-the middle of a program: run quickly, freeze, look at the gates, then carry on. The
-page for that is still being written. For now, look inside the parts we have built,
-gate by gate, with [The Bench](the-bench.md).
+the middle of a program: run quickly, freeze, look at the gates, then carry on. Read
+[Pausing and Rewinding](pausing-and-rewinding.md) to see how.

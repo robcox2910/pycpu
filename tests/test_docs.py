@@ -45,6 +45,7 @@ KEY_IDEAS: dict[str, list[str]] = {
     "concepts/the-stack.md": ["stack", "push", "pop", "stack pointer"],
     "concepts/calling-and-returning.md": ["call", "return", "return address"],
     "concepts/two-engines.md": ["fast engine", "gate engine", "lockstep"],
+    "concepts/pausing-and-rewinding.md": ["pause", "rewind", "resume"],
     "concepts/the-bench.md": ["bench", "alu", "gate"],
 }
 

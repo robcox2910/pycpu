@@ -68,4 +68,5 @@ nav:
       - The Stack: concepts/the-stack.md
       - Calling and Returning: concepts/calling-and-returning.md
       - Two Engines: concepts/two-engines.md
+      - Pausing and Rewinding: concepts/pausing-and-rewinding.md
       - The Bench: concepts/the-bench.md
