@@ -88,7 +88,7 @@ did not fit. That is **overflow**.
 ## How It Works
 
 The code that does this lives in `src/pycpu/arithmetic.py` (the adder) and
-`src/pycpu/logic.py` (`not_bus`). Three ideas make it work.
+`src/pycpu/logic.py` (`not_bus`). Six small ideas, numbered 0 to 5, make it work.
 
 **0. A small circle first.** The idea is easiest to see with 4 bits, which
 have only 16 readings. We agree that readings 0 to 7 mean themselves, and

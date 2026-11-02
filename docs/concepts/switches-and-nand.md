@@ -107,8 +107,9 @@ which the next page explains.
 
 Every computer you have ever used, from a pocket calculator to the biggest
 supercomputer, is at the bottom a huge collection of tiny switches that obey
-rules like this one. Chip makers really do build whole processors from a
-single repeated kind of gate. Understanding that one humble gate is the key
+rules like this one. The Apollo Guidance Computer that helped steer
+spacecraft to the Moon had its logic built from a single repeated kind of gate
+(NOR, NAND's twin). Understanding that one humble gate is the key
 that unlocks the rest of this project: if NAND is enough to build everything,
 then there is no magic anywhere, only more NAND.
 

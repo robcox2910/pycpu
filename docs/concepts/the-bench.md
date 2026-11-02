@@ -36,6 +36,12 @@ Python has a pretend browser for this, called `TestClient` (it sends requests
 straight to the app, with no network). We ask the Bench to add 3 and 1, and then
 to show us the part of the ALU where the addition of the very first column happens.
 
+Three small words appear that you may not have met. A web request is a message that
+has to wait for its reply, so the code that sends one is written as `async def` ("this
+function may wait"), and each wait is marked `await` ("pause here until the answer
+arrives"). `run(...)` is the starter button: it starts the waiting machinery and runs
+our function to the end.
+
 ```python
 from pynet.loop import run
 from pyweb.testing import TestClient
@@ -157,7 +163,9 @@ at every level you visit.
 | `adder` | Sixteen columns that add, one after the other | [Adding](adding.md) |
 | `bit0`, `bit1`, ... | One column of the sum | [Adding](adding.md) |
 | `full_adder`, `half_adder` | Adds bits and a carry | [Adding](adding.md) |
-| `xor`, `and`, `or`, `not` | A gate built from NANDs | [Logic Gates from NAND](gates.md) |
+| `mux`, `choose` | A chooser that picks one of two wires | [Choosing and Decoding](choosing-and-decoding.md) |
+| `or_many`, `is_zero` | An OR over many wires, and the check that a result is all 0s | [The ALU](the-alu.md) |
+| `xor`, `and`, `or` | A gate built from NANDs | [Logic Gates from NAND](gates.md) |
 | A gate | One NAND: its output is 0 only if both inputs are 1 | [Switches and NAND](switches-and-nand.md) |
 
 ## Why Does This Matter?

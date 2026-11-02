@@ -158,10 +158,12 @@ a set (when data is 1) or a reset (when data is 0), so `q` simply follows
 **5. Power-on.** When a simulation starts, every gate is looked at once, in the
 order it was added, and every input is 0. For a bare loop that means the
 forbidden state from the Try It (both gates forced to 1), and as soon as the
-inputs move to 1 the two gates race and the one looked at first wins. Which one
-that is depends only on the order the gates were added, so the same circuit
-always powers on to the same bit, never a random one. A test in the repository
-pins this down. `d_latch` avoids the forbidden state altogether: with `enable`
+inputs move to 1 the two gates race, and the gate looked at first decides which
+bit the loop settles on. Which gate is looked at first is decided by the order
+things happen (which gates were added first, and which input moves first), so
+the same steps always give the same bit, never a random one. A test in the
+repository (`tests/test_simulator.py`, the one about cross-coupled NANDs) pins
+this down for loops whose inputs are tied high at power-on. `d_latch` avoids the forbidden state altogether: with `enable`
 at 0 its front gates keep the loop quiet, and its gates are added so that it
 powers on holding 0. (That promise only holds if `enable` starts low.)
 

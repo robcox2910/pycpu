@@ -114,7 +114,7 @@ the loop on the [Remembering](remembering.md) page.
 **3. The counter.** Add 1 to `q`, send the answer back to the data wires, and
 keep `load` at 1: each beat the register becomes its old value plus 1. An
 8-bit counter has only 256 values, so after 255 it wraps round to 0, just like
-the car odometer rolling over.
+the mileage counter in a car rolling over.
 
 **4. Poke and peek.** `peek` reads the sixteen wires as a number. `poke` writes a
 number straight into the flip-flops, with no beat, which is useful for setting
@@ -134,4 +134,5 @@ lives in the next page's big grid of the same bits.
 ## What's Next
 
 A register holds one number. A computer needs thousands. On the next page we
-stack up thousands of words and add an address to choose between them: RAM.
+stack up thousands of words and add an address to choose between them. Read on
+to [RAM](ram.md).

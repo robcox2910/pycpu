@@ -73,12 +73,15 @@ const LEVELS = {
   "xor": ["An XOR gate, made of 4 NANDs: on when its inputs differ.", "Logic Gates from NAND (gates.md)"],
   "and": ["An AND gate, made of 2 NANDs: on only when both inputs are on.", "Logic Gates from NAND (gates.md)"],
   "or": ["An OR gate, made of 3 NANDs: on when either input is on.", "Logic Gates from NAND (gates.md)"],
-  "not": ["A NOT gate: flips its input.", "Logic Gates from NAND (gates.md)"],
+  "mux": ["A chooser: picks one of two wires, steered by a select wire.", "Choosing and Decoding (choosing-and-decoding.md)"],
+  "choose": ["The inside of a chooser: gates that let one of the two wires through.", "Choosing and Decoding (choosing-and-decoding.md)"],
+  "or_many": ["An OR over many wires: on if any one of them is on.", "Logic Gates from NAND (gates.md)"],
+  "is_zero": ["The zero check: on only when every wire of the result is off.", "The ALU (the-alu.md)"],
   "control": ["The control: works out from the op dial whether this is a subtraction.", "The ALU (the-alu.md)"],
   "operand": ["The operand: flips the bits of B when subtracting.", "Negative Numbers (negative-numbers.md)"],
   "overflow": ["The overflow check: spots a signed answer that does not fit.", "Negative Numbers (negative-numbers.md)"],
   "select": ["The select: choosers steered by the op dial pick the answer.", "Choosing and Decoding (choosing-and-decoding.md)"],
-  "flags": ["The flags: the four lamps that describe the result.", "The ALU (the-alu.md)"],
+  "flags": ["The flags part: it holds the zero check, which lights up when the result is all 0s.", "The ALU (the-alu.md)"],
 };
 const GATE_LINE = ["One NAND gate: its output is 0 only when both inputs are 1. Every part above is built from these.", "Switches and NAND (switches-and-nand.md)"];
 const FALLBACK = ["A part of the circuit, made of smaller parts and gates.", "Looking Inside a Circuit (looking-inside.md)"];

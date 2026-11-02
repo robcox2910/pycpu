@@ -171,7 +171,7 @@ lockers hurt this way.) The safe rule is: **let everything settle, then pulse**.
 same effect by making its clock slower than its slowest path, so every signal has
 arrived before the beat comes.
 
-**4. Reading.** Every bit of every word has one more NAND that checks "am I
+**4. Reading.** Every bit of every word has two more gates (a NAND and a NOT) that check "am I
 chosen, and am I holding a 1?". Because only one word line is ever up, only one
 word can say yes. For each of the 16 output bits, all the words' answers are
 joined by a tree of ORs (`or_many`), which is why a change only has to travel
@@ -182,12 +182,21 @@ bit on thousands of gates. With word lines, an address change only wakes the
 word lines that change. Measured on a 256-word RAM (38,042 gates) with every
 locker full of ones: stepping from address 0 to 1 costs 183 gate evaluations.
 Jumping to a random address costs more, because the decoder flickers on the way
-and each flicker wakes a few gates: over 300 random jumps the average was 885
-evaluations and the worst 4,897. Even the worst is about an eighth of the
+and each flicker wakes a few gates: over 300 random jumps (seed 7, in the test
+`test_random_jumps_touch_a_small_part_of_the_circuit` in `tests/test_ram.py`) the
+average was 885 evaluations and the worst 4,897. Even the worst is about an eighth of the
 circuit, so most of the gates sit still while the answer arrives. The full
 4,096-word RAM has 607,454 gates; the next page times it.
 
-**6. Poke and peek.** `poke` writes a number straight into a word's latches and
+**6. One rule for wiring a RAM.** Each bit is a latch that follows `data` for as
+long as its word's write line is up, so `data` and `address` must not depend on
+`ram.out` while a write happens. If they do, the RAM chases its own tail: in a
+test, `data = ram.out + 1` never settled (the simulator gave up with an
+`OscillationError`), and an address taken straight from `ram.out` can send the
+write to the wrong lockers. The cure is to pass the value through a register
+first: the register holds it steady for the whole beat.
+
+**7. Poke and peek.** `poke` writes a number straight into a word's latches and
 `load` writes a whole list and settles once. They are for setting up
 experiments; `peek` reads the latches directly. The gates do all the real work.
 

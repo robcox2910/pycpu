@@ -130,10 +130,13 @@ Three of those words need explaining.
 
 A median can hide a bad day, so we also looked at the slowest. The script
 `scripts/ram_tails.py` makes a longer run of 2,000 reads and 500 writes, with the
-seed 2026, on the same laptop. The slowest read took 0.0047 seconds and the
-slowest write took 0.036 seconds. Even a write that flipped all 16 data wires
-took 0.047 seconds at most. All of those are under the limit too. Run it yourself
-and your times will differ, but the gate evaluations below will not.
+seed 2026, on the same laptop. In one run the slowest read took 0.0047
+seconds, the slowest write took 0.0477 seconds, and a write that flipped all 16
+data wires took 0.065 seconds. That is one run's snapshot, not a promise: on a
+busy machine another run saw the all-16-flip write take 0.179 seconds, which is
+over the 0.1 second figure. The limits are for medians, and a single slow moment
+is allowed to break them. Run it yourself and your times will differ, but the
+gate evaluations below (1,745 for a read and about 43,270 for a write) will not.
 
 **How it grows.** Each extra address wire doubles the lockers. Most of these
 figures double as well, more or less, but a read barely moves:

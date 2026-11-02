@@ -81,7 +81,7 @@ sit *on top* of a computer, and PyCPU is the one that sits underneath.
 |---------|----------------|----------------|
 | [Pebble](https://robcox2910.github.io/pebble-lang/) | A small programming language | The language we plan to run on the PyCPU computer |
 | [PyOS](https://robcox2910.github.io/py-os/) | An operating system | Software that runs on a computer like this one |
-| [PyWeb](https://robcox2910.github.io/pyweb/) | A web server | Will serve the Cockpit screen |
+| [PyWeb](https://robcox2910.github.io/pyweb/) | A web server | Already serves the Bench, and will serve the Cockpit screen |
 | [The series home](https://robcox2910.github.io/) | All of them | Where to find the rest |
 
 Pebble, PyOS and the others all quietly assume a computer exists. PyCPU is the project
@@ -99,8 +99,10 @@ that asks: what if we built that computer too?
 4. **Trust the numbers.** Any figure in these docs was measured by running the code,
    never invented.
 
-One more honest note. The climb is only just beginning, so for now there are just
-these opening pages. Each time a new rung is built, a new page joins them.
+One more honest note. The first climb is built: it runs from a single gate up to
+adders, a calculator part called the ALU, memory that remembers, and the Bench for
+looking inside. The processor, assembler and Pebble come on later climbs, and each
+time a new rung is built, a new page joins these.
 
 Ready? Go back to the [home page](index.md) to see the whole ladder again, or start
 climbing with [Bits and Binary](concepts/bits-and-binary.md).

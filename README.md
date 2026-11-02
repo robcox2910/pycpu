@@ -18,7 +18,8 @@ that is the real circuit, doing the real work.
 ## The ladder
 
 Each rung is built only from the rung beneath it. An ALU is the part that does the
-sums, and RAM is the computer's big notebook. The docs explain every word.
+sums, RAM is the computer's big notebook, the CPU is the processor that follows instructions,
+and the Assembler turns readable instructions into the numbers the CPU understands. The docs explain every word.
 
 ```
   Pebble programs           <- coming later in the climb

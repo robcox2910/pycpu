@@ -11,8 +11,8 @@ you wire the switches, the lamp answers a different yes-or-no question:
 - "Are the two switches **different** from each other?"
 
 Each of those questions is a **logic gate**. They have names: **NOT**, **AND**,
-**OR** and **XOR** (say "ex-or", short for "exclusive or"). On the last page
-you met NAND, the lamp that is on unless *both* buttons are pressed. Here is
+**OR** and **XOR** (say "ex-or", short for "exclusive or"). On the last page,
+[Switches and NAND](switches-and-nand.md), you met NAND, the lamp that is on unless *both* buttons are pressed. Here is
 the big surprise: you do not need to buy four more kinds of part. You can make
 all four from NAND alone, just by wiring NANDs together in clever ways. That
 is why NAND is called a **universal gate**.
@@ -184,8 +184,9 @@ This is the moment the project's big promise becomes real. A processor does
 arithmetic, compares numbers and makes decisions, and every one of those is
 built from AND, OR, NOT and XOR. Now you have seen each of them made of
 nothing but NAND. There is no hidden trick: later pages that add numbers or
-store them are just more wiring of the same one brick. Real chip makers also
-love universal gates, because one repeated shape is easy to make well.
+store them are just more wiring of the same one brick. This has been done for
+real: the Apollo Guidance Computer, which helped steer the Apollo spacecraft to
+the Moon, had its logic built from one type of gate (NOR, NAND's twin).
 
 ## What's Next
 

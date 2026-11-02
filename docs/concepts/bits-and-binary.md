@@ -41,7 +41,7 @@ saying that. (You will build real wires on the next page.)
 
 Here is a row of four switches, ones switch first, turned into a number, and
 then shown three ways. The last line uses a 16-switch row, the size of every
-word in PyCPU.
+word in PyCPU. (A **word** is the chunk of bits a computer handles together as one number.)
 
 ```python
 switches = [1, 1, 0, 1]  # the ones, twos, fours and eights switches

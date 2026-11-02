@@ -42,13 +42,30 @@ build 2.49 to 2.71 s, memory 111 to 115 MiB, load 0.091 to 0.102 s, read 0.0009 
 write 0.023 to 0.027 s.
 
 `scripts/ram_tails.py` (seed 2026; 2,000 reads, 500 writes) gives the tails on the same laptop.
-Slowest seen in one run: read 0.0047 s, write 0.036 s, and a write flipping all 16 data wires
-0.047 s. Plain list read about 2.7e-08 s. Gate evaluations do not vary between runs.
+Slowest seen in one run: read 0.0047 s, write 0.0477 s, and a write flipping all 16 data wires
+0.065 s. Outlier: another run, on a busy machine, saw the all-16-flip write take 0.179 s, so
+tails are a snapshot and only the medians carry limits. Plain list read about 2.7e-08 s. Gate evaluations do not vary between runs.
 
 **This is the RAM alone.** The CPU adds gates in Plan 2, so these figures are a floor, not a
 forecast. A write is costly (median about 43,270 gate evaluations against 1,745 for a read, from the same script) because
 each changed data wire wakes one gate per word. Two reads and a write take about 0.026 s, which
 suits gate stepping and is why long runs need Plan 2's fast engine.
+
+## Notes for Plan 2
+
+- Start by adding slow tests for the combined stack: full RAM + ALU + registers in one
+  circuit, cloning into a second `Simulator`, and rewinding via state pairs. A scratch
+  experiment at 608,954 gates measured: build 2.07 s, 109 MiB, 50 ticks 0.72 s, rewind 0.05 s
+  with 0 wire diffs, clone 0.10 s.
+- `settle` cannot step one gate at a time, which the spec's pause needs.
+- Rewinding from mid-tick must drop the clock wires and settle before poking.
+- A bare `d_latch` registers no state pair, so CPU state held in one would escape cloning.
+- After an `OscillationError` the simulator is inconsistent; treat it as dead.
+- RAM cells are level-sensitive latches, so `data` and `address` must not depend on `ram.out`
+  during a write; latch the value through a register first (`data = ram.out + 1` oscillates).
+- `pynet` is imported directly but arrives only through `pyweb`; declare it when pins change.
+- Add a full-size test touching address 4095.
+- Make the Bench "Read more" entries real links once a site exists.
 
 ## Rule #1: docs ship with the code
 

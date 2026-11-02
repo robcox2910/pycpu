@@ -159,6 +159,12 @@ class Ram:
     and a word's line is one row line AND one column line, so changing the
     address stirs only a few gates. Word `N` lives in part `word<N>`, its bits in
     `bit<M>` inside it, all inside a part named after the RAM.
+
+    Each cell is a level-sensitive latch: it follows `data` for as long as its
+    word's write line is up. So `data` and `address` must not depend on
+    `ram.out` while a write happens (for example `data = ram.out + 1` never
+    settles, and an address taken straight from `ram.out` can send the write to
+    the wrong words). Pass such a value through a `Register` first.
     """
 
     def __init__(
