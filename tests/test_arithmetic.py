@@ -152,18 +152,21 @@ def test_ripple_adder_refuses_buses_of_different_widths() -> None:
         ripple_adder(c, c.bus_input("a", 4), c.bus_input("b", 3), c.low)
 
 
-def test_a_carry_really_ripples() -> None:
-    """Adding 1 to all ones makes every column change its mind, one after another."""
+def test_a_long_carry_makes_the_simulator_do_more_work_than_a_quiet_add() -> None:
+    """Adding 1 to all ones keeps many more gates busy than adding 1 to zero."""
     c = Circuit()
     a, b = c.bus_input("a", WORD), c.bus_input("b", WORD)
     total, carry = ripple_adder(c, a, b, c.low)
-    sim = Simulator(c)
-    sim.set_bus(a, WORD_MAX)
-    sim.settle()
-    sim.set_bus(b, 1)
-    sim.settle()
-    assert sim.get_bus(total) == 0
-    assert sim.get(carry) == 1
+    quiet, rippling = Simulator(c), Simulator(c)
+    quiet.settle()
+    rippling.set_bus(a, WORD_MAX)
+    rippling.settle()
+    quiet.set_bus(b, 1)
+    rippling.set_bus(b, 1)
+    quiet_work, rippling_work = quiet.settle(), rippling.settle()
+    assert rippling.get_bus(total) == 0
+    assert rippling.get(carry) == 1
+    assert rippling_work > 2 * quiet_work
 
 
 @given(op=ops, a=words, b=words)

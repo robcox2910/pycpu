@@ -90,6 +90,25 @@ did not fit. That is **overflow**.
 The code that does this lives in `src/pycpu/arithmetic.py` (the adder) and
 `src/pycpu/logic.py` (`not_bus`). Three ideas make it work.
 
+**0. A small circle first.** The idea is easiest to see with 4 bits, which
+have only 16 readings. We agree that readings 0 to 7 mean themselves, and
+readings 8 to 15 mean -8 to -1:
+
+```
+ reading:  0  1  2  3  4  5  6  7 | 8  9 10 11 12 13 14 15
+ means:    0  1  2  3  4  5  6  7 |-8 -7 -6 -5 -4 -3 -2 -1
+                                  ^ the sign bit (the leftmost bit) is 1 from here
+```
+
+Reading 15 is one step before 0, so it means -1; and 15 + 1 wraps to 0. To
+read a reading as a signed number you subtract the size of the circle (16)
+from any reading in the top half: 13 - 16 = -3. For our 16-bit circle the size
+is 65,536, so `signed` in the Try It does `reading - 65536` for readings of
+32768 and up. It works because going all the way round the circle lands you
+back where you started, so `reading` and `reading - 65536` are the same spot.
+Now the recipe. To make -3 from 3, flip the bits of `0011` to get `1100` (12)
+and add one to get `1101` (13), which is -3.
+
 **1. Flip the bits and add one.** To get the negative of a number in two's
 complement, flip every bit (a NOT gate on each wire, `not_bus`) and add 1.
 Take 5, which is `0000 0000 0000 0101`:
@@ -102,9 +121,10 @@ Take 5, which is `0000 0000 0000 0101`:
     1111 1111 1111 1011      0xFFFB, which reads as -5
 ```
 
-**2. Why that works.** Flipping every bit of a 16-bit number `b` gives
-`65535 - b`, because each bit is either `1 - bit` or the other way round and
-65535 is sixteen 1s. Add one and you have `65536 - b`. But 65536 is one full
+**2. Why that works.** Take `b` away from 65535, which is sixteen 1s. In
+each column you are doing `1 - bit`, and that never needs a borrow, so each bit
+simply flips: 0 becomes 1 and 1 becomes 0. So flipping every bit of `b` gives
+exactly `65535 - b`. Add one and you have `65536 - b`. But 65536 is one full
 trip round the circle, which is the same place as 0. So `65536 - b` sits at
 the same spot as `-b`. The circle does the maths for us.
 
@@ -121,10 +141,11 @@ one row of NOT gates in front of the adder we already own:
                    carry in ───── high (always 1)
 ```
 
-**4. The carry tells you about borrowing.** When you subtract by adding like
-this, the carry out of the top is 1 when *no* borrow was needed (`5 - 3`) and
-0 when the answer had to go below zero (`0 - 1`). It looks backwards, but it
-is just the wrap again: staying on the circle means no carry out.
+**4. The carry tells you about borrowing.** Subtracting by adding computes
+`a + (65536 - b)`. That reaches 65536, which is a carry out of the top column,
+exactly when `a` is at least `b`. So the carry out is 1 when no borrow was
+needed (`5 - 3`) and 0 when `a` was smaller and the sum fell short (`0 - 1`).
+It looks backwards, but it is just the borrow, turned upside down.
 
 **5. Detecting overflow.** If you add two numbers that are both on the same
 side of the circle, say two positives, and the answer lands on the other side,

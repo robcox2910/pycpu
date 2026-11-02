@@ -135,7 +135,6 @@ def alu(c: Circuit, a: Bus, b: Bus, op: Bus) -> AluOutput:
         with c.scope("control"):
             not_o1, not_o2 = not_(c, op[1]), not_(c, op[2])
             subtract = and_(c, and_(c, op[0], not_o1), not_o2)  # op == SUB
-            arithmetic = and_(c, not_o1, not_o2)  # op is ADD or SUB
         with c.scope("operand"):
             b_in = xor_bus(c, b, (subtract,) * len(b))
         with c.scope("adder"):
@@ -143,8 +142,10 @@ def alu(c: Circuit, a: Bus, b: Bus, op: Bus) -> AluOutput:
         with c.scope("overflow"):
             same_sign = not_(c, xor(c, a[top], b_in[top]))
             changed_sign = xor(c, a[top], total[top])
-            overflow = and_(c, arithmetic, and_(c, same_sign, changed_sign))
+            overflow = and_(c, same_sign, changed_sign)
         low = c.low
+        # Only ADD and SUB carry the real overflow wire; every other candidate
+        # holds `low` in that slot, so the flag is 0 for them without extra gates.
         # Each candidate is the 16 result wires, then carry, then overflow.
         candidates = [
             (*total, carry_out, overflow),  # ADD
@@ -152,8 +153,8 @@ def alu(c: Circuit, a: Bus, b: Bus, op: Bus) -> AluOutput:
             (*and_bus(c, a, b), low, low),  # AND
             (*or_bus(c, a, b), low, low),  # OR
             (*xor_bus(c, a, b), low, low),  # XOR
-            (low, *a[:top], a[top], low),  # SHL: 0 then a0..a14, carry is a15
-            (*a[1:], low, a[0], low),  # SHR: a1..a15 then 0, carry is a0
+            (low, *a[:top], a[top], low),  # SHL: result = 0, a0..a14; carry = a15; overflow = 0
+            (*a[1:], low, a[0], low),  # SHR: result = a1..a15, 0; carry = a0; overflow = 0
             (*b, low, low),  # PASS_B
         ]
         with c.scope("select"):

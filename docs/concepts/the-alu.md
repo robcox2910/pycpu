@@ -72,15 +72,28 @@ for setting in AluOp:
         sim.get(out.overflow),
     )
 
-# The flags tell stories. 5 - 5 is zero; 0 - 1 wraps and is negative.
-for x, y in [(5, 5), (0, 1)]:
+# The flags tell stories: each case below lights a different lamp.
+cases = [
+    (AluOp.ADD, 0xFFFF, 1),  # wraps to 0: zero and carry
+    (AluOp.ADD, 0x7FFF, 1),  # 32767 + 1 does not fit: negative and overflow
+    (AluOp.SUB, 5, 5),  # equal numbers: zero, and no borrow so carry
+    (AluOp.SUB, 0, 1),  # had to borrow: negative, and carry is 0
+]
+for setting, x, y in cases:
     sim.set_bus(a, x)
     sim.set_bus(b, y)
-    sim.set_bus(op, AluOp.SUB)
+    sim.set_bus(op, setting)
     sim.settle()
     print(
-        f"{x} - {y} = {sim.get_bus(out.result)}, zero {sim.get(out.zero)},",
-        f"negative {sim.get(out.negative)}",
+        f"{setting.name} {x:#06x}, {y:#06x} -> {sim.get_bus(out.result):#06x}:",
+        "zero",
+        sim.get(out.zero),
+        "negative",
+        sim.get(out.negative),
+        "carry",
+        sim.get(out.carry),
+        "overflow",
+        sim.get(out.overflow),
     )
 
 # Zoom in on the real thing.
@@ -97,11 +110,13 @@ print("the adder alone costs", c.gate_count_in("alu.adder"), "of them")
 # SHL    result    24 zero 0 negative 0 carry 0 overflow 0
 # SHR    result     6 zero 0 negative 0 carry 0 overflow 0
 # PASS_B result     5 zero 0 negative 0 carry 0 overflow 0
-# 5 - 5 = 0, zero 1, negative 0
-# 0 - 1 = 65535, zero 0, negative 1
+# ADD 0xffff, 0x0001 -> 0x0000: zero 1 negative 0 carry 1 overflow 0
+# ADD 0x7fff, 0x0001 -> 0x8000: zero 0 negative 1 carry 0 overflow 1
+# SUB 0x0005, 0x0005 -> 0x0000: zero 1 negative 0 carry 1 overflow 0
+# SUB 0x0000, 0x0001 -> 0xffff: zero 0 negative 1 carry 0 overflow 0
 # the ALU holds ['control', 'operand', 'adder', 'overflow', 'and_bus', 'or_bus', 'xor_bus', 'select', 'flags']
 # the adder holds ['bit0', 'bit1', 'bit2'] ...
-# the whole ALU costs 900 NAND gates
+# the whole ALU costs 896 NAND gates
 # the adder alone costs 240 of them
 ```
 
@@ -156,19 +171,22 @@ gate counts measured on the real circuit:
 
 | Part | Gates | What it does |
 |------|-------|--------------|
-| `control` | 8 | Works out "is the dial on SUB?" and "is it ADD or SUB?" |
+| `control` | 6 | Works out "is the dial on SUB?" |
 | `operand` | 64 | Flips `b` when subtracting (16 XORs) |
 | `adder` | 240 | The one ripple adder, columns `bit0` to `bit15` |
-| `overflow` | 13 | The overflow check |
+| `overflow` | 11 | The overflow check |
 | `and_bus`, `or_bus`, `xor_bus` | 32, 48, 64 | The logic settings |
 | `select` | 385 | The tree of choosers |
 | `flags` | 46 | The zero check |
 
-All together that is 900 NAND gates.
+All together that is 896 NAND gates.
 
 **5. The flags are small circuits on the result.** `zero` is `is_zero` from
-`logic.py`, which is a NOR of every bit. `negative` is simply bit 15, with no
-gates. `carry` is chosen as above. `overflow` fires when the two numbers
+`logic.py`, which ORs every bit together and then flips the answer (an OR followed by a
+NOT is called a **NOR**, "not or"), so it is 1 only when no bit is on.
+`negative` is simply bit 15 of the *wrapped* 16-bit result, with no gates,
+so it is the sign of what the wires hold, not of the true answer. For a sum
+that overflowed, the two can disagree, which is what the overflow lamp is for. `carry` is chosen as above. `overflow` fires when the two numbers
 being added (after the flip for SUB) had the same sign bit and the answer has
 a different one. Remember: two numbers on the same side of the circle landed
 on the other side.
@@ -177,9 +195,19 @@ on the other side.
 
 Every arithmetic or logic step a computer ever takes goes through an ALU: adding
 a score, comparing two numbers, masking bits, moving a position. The flags are
-how programs make decisions. A comparison like "is `a` smaller than `b`?" is
-really `a - b` followed by looking at the flags, which is why the carry and
-overflow lamps matter. And you have just seen what it is: 900 NAND gates, of which
+how programs make decisions. After `SUB a b`, the flags answer every question about how `a` and `b` compare:
+
+| The question | The flags to read |
+|--------------|-------------------|
+| Is `a` equal to `b`? | `zero` is 1 |
+| Is `a` smaller than `b`, as plain counting numbers? | `carry` is 0 (a borrow was needed) |
+| Is `a` smaller than `b`, as numbers that may be negative? | `negative` differs from `overflow` |
+
+The last row is because `negative` is the sign of the wrapped answer. If the
+subtraction did not overflow, that sign is the truth. If it did overflow, the
+sign is wrong, so we flip it.
+
+And you have just seen what it is: 896 NAND gates, of which
 240 are the one shared adder and 385 are the choosers that pick the answer.
 
 ## What's Next

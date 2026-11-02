@@ -140,6 +140,8 @@ print("its columns are named", c.children("")[:3], "...")
 quiet = Simulator(c)
 quiet.settle()
 quiet.set_bus(b, 1)
+# `settle` runs the circuit until nothing changes and counts how many times a
+# gate had to work out its answer: a "gate evaluation", our measure of effort.
 print("a quiet add took", quiet.settle(), "gate evaluations")
 rippling = Simulator(c)
 rippling.set_bus(a, 0xFFFF)
@@ -237,8 +239,7 @@ Adding is the one piece of arithmetic a computer cannot live without. The
 next page shows that subtracting is just adding with a trick, and the page
 after builds the part of a processor, the ALU, that does the sums. Counting
 which instruction to run next is addition. Working out which memory address
-to fetch is addition. Even the circuit that draws this page for you leans on
-adders. And you have just seen that the whole tower, sum and carry and all,
+to fetch is addition. And you have just seen that the whole tower, sum and carry and all,
 rests on a pile of NAND gates and nothing else.
 
 ## What's Next
