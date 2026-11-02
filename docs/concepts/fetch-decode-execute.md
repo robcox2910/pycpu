@@ -223,8 +223,9 @@ picks what each chooser lets through:
   glued on top of `rd`'s low byte (`LHI`), or `sp` (`GETSP`).
 - Each `load` wire is an AND of "this is the execute beat" and the opcode lines that
   need it. The register file writes for `ALU`, `LI`, `LHI`, `LOAD`, `GETSP` and `ADDI`;
-  `flags` load for `ALU`, `CMP` and `ADDI`; `sp` loads for `SETSP`; the RAM writes for
-  `STORE`.
+  `flags` load for `ALU`, `CMP` and `ADDI`; `sp` loads for `SETSP` and the stack
+  instructions `PUSH`, `POP`, `CALL` and `RET`; the RAM writes for `STORE`, `PUSH` and
+  `CALL` (see [The Stack](the-stack.md)). The register file also writes for `POP`.
 - Four instructions, `PUSH`, `POP`, `CALL` and `RET`, use a pile of words at the top of
   memory called the stack. They add a few more choices to these choosers (the little
   notes about `sp` and `pc` in the diagram), and the next two pages,

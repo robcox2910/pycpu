@@ -106,14 +106,21 @@ machine.run(10)
 state = machine.state()
 print(f"halted: {state.halted}, code: {state.halt_code}, sp = {state.sp}, pc = {state.pc}")
 print("output:", state.output)
+print("gates in sp_minus_1:", machine.circuit.gate_count_in("cpu.sp_minus_1"))
+print("gates in sp_plus_1:", machine.circuit.gate_count_in("cpu.sp_plus_1"))
+print("gates in the CPU:", machine.circuit.gate_count_in("cpu"))
 # Output:
 # halted: True, code: 1, sp = 0, pc = 3
 # output: ()
+# gates in sp_minus_1: 240
+# gates in sp_plus_1: 240
+# gates in the CPU: 6029
 ```
 
 Code 1 is `Fault.BAD_ADDRESS`. Nothing else changed: `sp` is still 0 and nothing went
 out of the port. Popping with `sp` at 64 (an empty pile) faults the same way, because
-address 64 is past the end of memory.
+address 64 is past the end of memory. The last three lines count gates; How It Works
+explains them.
 
 ## How It Works
 
@@ -179,10 +186,11 @@ into a register, and `SETSP rd` puts the finger wherever `rd` says, which is how
 program could give its stack a different home. `SETSP` is the third input to the
 `next_sp` chooser.
 
-How much does the stack cost? Each adder is 240 gates (16 full adders, as on
-[Adding](adding.md)). With the choosers and the extra opcode wiring, the CPU in the
-Try It grew from 5,219 gates to 6,029 when the stack and the calls on the next page
-were added: 810 gates, measured with `machine.circuit.gate_count_in("cpu")`.
+How much does the stack cost? The second Try It counted it: each adder is 240 gates
+(16 full adders of 15 gates, as on [Adding](adding.md)), so the two together are 480
+of the CPU's 6,029 gates, about one gate in twelve. The choosers that steer `sp`, the
+address and the RAM's data add a few hundred more. Not bad for a whole new way of
+using memory.
 
 Notice the rule from [RAM](ram.md) at work: the address and the data going into the
 RAM come only from registers (`sp`, `rd`) or adders working on registers, never from

@@ -164,11 +164,13 @@ almost entirely out of functions calling functions.
 
 Because each bookmark sits on a pile, a function can even call itself, so long as it
 stops eventually: each call gets its own bookmark. That trick, called *recursion*, is
-how many programs search mazes, sort lists and draw fractals. The chips in most
-laptops (called x86) have `CALL` and `RET` instructions that use the stack just like
-ours. The chips in most phones (called ARM) keep the newest bookmark in a register
-first, and push it onto the stack when a function calls another. And the "stack overflow" error that programmers know so well usually means
-a function called itself so many times that the pile of bookmarks ran out of room.
+how many programs search mazes, sort lists and draw fractals (pictures made of smaller
+copies of themselves). The chips in most laptops (called x86) have `CALL` and `RET`
+instructions that use the stack just like ours. The chips in most phones (called ARM)
+keep the newest bookmark in a register first, and push it onto the stack when a
+function calls another. And the "stack overflow" error that programmers know so well
+usually means a function called itself so many times that the pile of bookmarks ran
+out of room.
 
 ## What's Next
 
