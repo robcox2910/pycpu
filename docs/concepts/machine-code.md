@@ -185,6 +185,5 @@ what, the rest to say with what" is the same everywhere from toys to supercomput
 ## What's Next
 
 Writing `0xE2FF` by hand is miserable, and you will not remember which number means
-`ADDI`. Assembly language, where you write `addi r1, -1` and a program turns it into
-numbers for you, comes next in the climb, once it exists. For now, continue with
-[The Bench](the-bench.md), a workbench where you can look inside the parts we have built.
+`ADDI`. Continue with [Assembly Language](assembly-language.md), where you write
+`addi r1, -1` and a helper program turns it into numbers for you.

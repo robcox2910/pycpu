@@ -49,11 +49,11 @@ The last column is a worked example: the instruction written out, then its word.
 | 1 | `CMP` | ra rb | Set flags from `ra - rb`; no register changes | set | `cmp r1, r2` = `0x1050` |
 | 2 | `LI` | rd imm8 | `rd = imm8` (0 to 255) | kept | `li r1, 5` = `0x2205` |
 | 3 | `LHI` | rd imm8 | `rd = (imm8 << 8) \| (rd & 0xFF)` | kept | `lhi r1, 0x12` = `0x3212` |
-| 4 | `LOAD` | rd ra off6 | `rd = mem[ra + off6]` | kept | `load r1, [r2 - 1]` = `0x42BF` |
-| 5 | `STORE` | rd ra off6 | `mem[ra + off6] = rd` | kept | `store r1, [r2 + 1]` = `0x5281` |
+| 4 | `LOAD` | rd ra off6 | `rd = mem[ra + off6]` | kept | `load r1, [r2-1]` = `0x42BF` |
+| 5 | `STORE` | rd ra off6 | `mem[ra + off6] = rd` | kept | `store r1, [r2+1]` = `0x5281` |
 | 6 | `JMP` | addr12 | `pc = addr12` | kept | `jmp 100` = `0x6064` |
 | 7 | `CALL` | addr12 | Push `pc`, then `pc = addr12` | kept | `call 100` = `0x7064` |
-| 8 | `BR` | cond off9 | If `cond` holds, `pc = pc + off9` | kept | `br ne, -2` = `0x83FE` |
+| 8 | `BR` | cond off9 | If `cond` holds, `pc = pc + off9` | kept | `br ne, 0` = `0x83FF` |
 | 9 | `RET` | none | Pop into `pc` | kept | `ret` = `0x9000` |
 | 10 | `PUSH` | rd | `sp = sp - 1`, then `mem[sp] = rd` | kept | `push r1` = `0xA200` |
 | 11 | `POP` | rd | `rd = mem[sp]`, then `sp = sp + 1` | kept | `pop r1` = `0xB200` |
@@ -61,6 +61,11 @@ The last column is a worked example: the instruction written out, then its word.
 | 13 | `SETSP` | rd | `sp = rd` | kept | `setsp r1` = `0xD200` |
 | 14 | `ADDI` | rd imm8 | `rd = rd + imm8`, signed (-128 to 127) | set | `addi r1, -1` = `0xE2FF` |
 | 15 | `HALT` | imm8 | Stop, with `halt_code = imm8` (0 means finished normally) | kept | `halt 3` = `0xF003` |
+
+In assembly, `jmp`, `call` and `br` are written with a target: a label or an absolute
+address. For `br` the assembler works out `off9` itself (the target minus the address
+after the `br`), so `br ne, 0` placed at address 0 jumps back to address 0, an offset of
+-1. The rules are on [Assembly Language](../concepts/assembly-language.md).
 
 ## The ALU operations (`fn`)
 

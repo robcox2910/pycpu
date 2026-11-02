@@ -12,6 +12,7 @@ from hypothesis import given
 from hypothesis import strategies as st
 
 from pycpu.arithmetic import AluOp
+from pycpu.assembler import assemble
 from pycpu.fast import alu_model
 from pycpu.isa import Condition, Instruction, Opcode, condition_holds, decode, encode
 
@@ -183,38 +184,10 @@ def test_conditions_agree_with_python_comparisons_after_a_subtraction(a: int, b:
         assert condition_holds(condition, flags) == expected[condition], condition.name
 
 
-def _assemble_example(text: str) -> int:
-    """Turn a reference-page example like `br ne, -2` into a word, using `encode`."""
-    name, _, rest = text.partition(" ")
-    operands = [part.strip() for part in rest.split(",") if part.strip()]
-    if name in {"add", "sub", "and", "or", "xor"}:
-        rd, ra, rb = (int(o.removeprefix("r")) for o in operands)
-        return encode(Opcode.ALU, rd=rd, ra=ra, rb=rb, fn=AluOp[name.upper()])
-    opcode = Opcode[name.upper()]
-    fields: dict[str, int] = {}
-    registers_read = [int(o.removeprefix("r")) for o in operands if re.fullmatch(r"r\d", o)]
-    if opcode is Opcode.CMP:
-        fields = {"ra": registers_read[0], "rb": registers_read[1]}
-    elif registers_read:
-        fields = {"rd": registers_read[0]}
-    memory_operand = [o for o in operands if o.startswith("[")]
-    if memory_operand:
-        base, _, offset = memory_operand[0].strip("[]").partition(" ")
-        fields["ra"] = int(base.removeprefix("r"))
-        fields["imm"] = int(offset.replace(" ", "") or 0)
-    elif opcode is Opcode.BR:
-        fields = {"rd": Condition[operands[0].upper()], "imm": int(operands[1])}
-    elif operands and not registers_read:
-        fields["imm"] = int(operands[0], 0)
-    elif len(operands) > 1 and opcode is not Opcode.CMP:
-        fields["imm"] = int(operands[1], 0)
-    return encode(opcode, **fields)
-
-
-def test_every_worked_example_on_the_reference_page_matches_encode() -> None:
-    """Each `instruction` = `0xWORD` example in the table is what `encode` really gives."""
+def test_every_worked_example_on_the_reference_page_matches_the_assembler() -> None:
+    """Each `instruction` = `0xWORD` example in the table is what `assemble` really gives."""
     text = REFERENCE_PAGE.read_text(encoding="utf-8")
     examples = re.findall(r"`([a-z][^`]*)` = `0x([0-9A-Fa-f]{4})`", text)
     assert len(examples) == len(Opcode)
     for source, word in examples:
-        assert _assemble_example(source) == int(word, 16), source
+        assert assemble(source).words == (int(word, 16),), source

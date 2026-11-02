@@ -39,6 +39,7 @@ KEY_IDEAS: dict[str, list[str]] = {
     "concepts/how-big-is-our-memory.md": ["gates", "4k", "measured"],
     "concepts/what-is-a-cpu.md": ["instruction", "register", "program counter"],
     "concepts/machine-code.md": ["opcode", "flag", "fault"],
+    "concepts/assembly-language.md": ["assembler", "label", "mnemonic"],
     "concepts/the-bench.md": ["bench", "alu", "gate"],
 }
 

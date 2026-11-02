@@ -62,4 +62,5 @@ nav:
   - The Computer:
       - What Is a CPU?: concepts/what-is-a-cpu.md
       - Machine Code: concepts/machine-code.md
+      - Assembly Language: concepts/assembly-language.md
       - The Bench: concepts/the-bench.md
