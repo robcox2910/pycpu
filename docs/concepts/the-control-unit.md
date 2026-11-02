@@ -35,14 +35,18 @@ into one locker.
 
 ## Try It
 
-(`sim.settle()` after changing inputs lets the signals finish travelling before we look.) We build a decoder and a "may we branch?" checker, then feed them. Each opcode lights
+Signals take a moment to travel through gates, so after we change an input we call
+`sim.settle()`, which lets them finish travelling before we look at the answer.
+
+We build a decoder and a "may we branch?" checker, then feed them. Each opcode lights
 its own line, and each condition answers yes or no for the flags left behind by
 `3 - 5` (negative, no carry, not zero).
 
 ```python
 from pycpu.circuit import Circuit
-from pycpu.cpu_parts import condition_met, opcode_lines
+from pycpu.cpu_parts import RegisterFile, condition_met, opcode_lines
 from pycpu.isa import Condition, Opcode
+from pycpu.memory import make_clock
 from pycpu.simulator import Simulator
 
 c = Circuit()
@@ -70,6 +74,19 @@ for condition in Condition:
         holding.append(condition.name)
 print("after 3 - 5 these hold:", ", ".join(holding))
 print("condition gates:", c.gate_count)
+
+c = Circuit()
+clock = make_clock(c)
+file = RegisterFile(
+    c,
+    data=c.bus_input("data", 16),
+    write=c.input("write_enable"),
+    write_select=c.bus_input("write_select", 3),
+    read_a=c.bus_input("read_a", 3),
+    read_b=c.bus_input("read_b", 3),
+    clock=clock,
+)
+print("register file gates:", c.gate_count)
 # Output:
 # ALU   lights line [0]
 # LOAD  lights line [4]
@@ -78,6 +95,7 @@ print("condition gates:", c.gate_count)
 # decoder gates: 100
 # after 3 - 5 these hold: NE, LT, LE, LTU
 # condition gates: 24
+# register file gates: 2161
 ```
 
 ## How It Works
@@ -101,7 +119,9 @@ that line is the lit signal for "this is a branch". It lives in the part `decode
 questions about the four flag lamps. Look at the table of conditions on the
 [instruction set](../reference/instruction-set.md) page: they come in pairs that are
 opposites. `EQ`/`NE`, `LT`/`GE`, `LE`/`GT`, `LTU`/`GEU`. So we build only four
-answers and let the lowest bit of `cond` flip the result when it is 1:
+answers and let the lowest bit of `cond` flip the result when it is 1. The flipping is
+done by an **XOR** gate, which gives 1 when its two inputs differ (see
+[Logic Gates from NAND](gates.md)): XOR with 0 changes nothing, XOR with 1 flips.
 
 ```
  zero ────────────────────────┐
@@ -112,7 +132,9 @@ answers and let the lowest bit of `cond` flip the result when it is 1:
                                                   cond bit 0
 ```
 
-The chooser tree is the same kind of tree of muxes that the ALU uses to pick its
+The chooser tree is made of **muxes** (a mux, short for multiplexer, is a chooser that
+passes one of two inputs along, depending on a select wire; see
+[Choosing and Decoding](choosing-and-decoding.md)). It is the same kind of tree that the ALU uses to pick its
 answer. "Less than" for signed numbers is `negative XOR overflow`: the answer is
 negative, unless the sum overflowed and lied. It lives in the part `condition`.
 
@@ -128,7 +150,8 @@ level uses bit 1, and the last uses bit 2, leaving one register's value. We coul
 used a decoder with an AND per bit and a big OR, but the tree is the same shape the ALU
 already uses, so there is less new to learn, and it needs only 7 choosers per bit.
 Both windows work at once because they are two separate trees. They live in the parts
-`registers.read_a` and `registers.read_b`. The whole register file, measured, is 2161 NAND gates.
+`registers.read_a` and `registers.read_b`. The whole register file, measured by the Try It
+above, is 2161 NAND gates.
 
 **4. Two tiny helpers.** `sign_extend` stretches a short signed number (like the 6-bit
 offset in `LOAD`) to 16 bits by copying its top bit into the new places, exactly the

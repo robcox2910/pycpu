@@ -186,3 +186,18 @@ def test_sign_extend_refuses_to_shrink_a_bus() -> None:
     c = Circuit()
     with pytest.raises(ValueError, match="narrower"):
         sign_extend(c, c.bus_input("bits", BRANCH_BITS), BRANCH_BITS - 1)
+
+
+@pytest.mark.parametrize("ram_bits", [WORD, WORD + 1])
+@given(address=words)
+def test_outside_ram_is_never_one_when_ram_covers_every_address_bit(
+    ram_bits: int, address: int
+) -> None:
+    """A RAM as wide as the address bus can never be overrun, so the check stays 0."""
+    c = Circuit()
+    bus = c.bus_input("address", WORD)
+    flag = outside_ram(c, bus, ram_bits)
+    sim = Simulator(c)
+    sim.set_bus(bus, address)
+    sim.settle()
+    assert sim.get(flag) == 0
