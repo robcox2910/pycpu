@@ -120,8 +120,9 @@ them are doing nothing. A simulator that re-checked every gate on every step
 would be hopelessly slow. By waking only the gates whose inputs changed, the
 cost of a step grows with how much *happens*, not with how much *exists*.
 Real chip designers use this very idea, called *event-driven simulation*,
-when they test chips before building them. Without it, the 4K-word memory we
-build at the top of this part of the climb would be too slow to run.
+when they test chips before building them. It is also what lets
+us simulate the big memory we build at the top of this part of the climb:
+most of its gates sit still at any moment, and the simulator never visits them.
 
 ## What's Next
 

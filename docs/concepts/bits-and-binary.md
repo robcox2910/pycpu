@@ -24,15 +24,15 @@ times** the one before: 1, 2, 4, 8, 16, and so on.
 | In everyday life | In PyCPU |
 |------------------|----------|
 | A light switch, up or down | A **bit**, `1` or `0` |
-| A row of switches | A **bus**: a tuple of wires, one per bit |
+| A row of switches | A **bus**: a row of wires, one per bit |
 | The first switch, worth 1 | Bit 0, the *least significant* bit |
 | Each next switch, worth double | Bit 1 is worth 2, bit 2 is worth 4, bit 3 is worth 8 |
 | A short way to write a long pattern | **Hex**, base sixteen, like `0xBEEF` |
 
 Notice the order. PyCPU always lists the **ones switch first**, then the twos,
 then the fours. "Least significant bit first" is just the grown-up way of
-saying that. (We wrote the bus idea down already: a bus is simply a row of
-wires you treat as one number. You will meet real wires on the next page.)
+saying that. (A bus is a row of wires treated as one number; you will meet wires on the
+next page.)
 
 ## Try It
 

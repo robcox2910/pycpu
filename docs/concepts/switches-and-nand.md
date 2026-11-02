@@ -52,12 +52,12 @@ lamp = circuit.nand(left, right)
 
 sim = Simulator(circuit)
 print("left right lamp")
-for l in (0, 1):
-    for r in (0, 1):
-        sim.set(left, l)
-        sim.set(right, r)
+for left_value in (0, 1):
+    for right_value in (0, 1):
+        sim.set(left, left_value)
+        sim.set(right, right_value)
         sim.settle()
-        print(f"  {l}     {r}     {sim.get(lamp)}")
+        print(f"  {left_value}     {right_value}     {sim.get(lamp)}")
 print("gates:", circuit.gate_count, "wires:", circuit.wire_count)
 # Output:
 # left right lamp
