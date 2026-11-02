@@ -159,7 +159,7 @@ disassembling a word and assembling the text again gives the same word back.
 line number and says what is wrong and what would be right, for example
 `line 2: r8 is not a register. The registers are r0, r1, r2, r3, r4, r5, r6 and r7.`
 Nothing the assembler is given, however silly, should crash it with some other error.
-A test throws thousands of random scraps of text at it to check.
+A test throws many random scraps of text at it to check.
 
 ## Why Does This Matter?
 
