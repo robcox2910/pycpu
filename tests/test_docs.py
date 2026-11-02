@@ -23,6 +23,9 @@ OUTPUT_MARKER = "# Output:"
 KEY_IDEAS: dict[str, list[str]] = {
     "index.md": ["nand", "pebble", "cockpit"],
     "from-scratch.md": ["petzold", "nand", "faking", "pebble"],
+    "concepts/bits-and-binary.md": ["bit", "binary", "hex"],
+    "concepts/switches-and-nand.md": ["nand", "wire", "gate", "truth table"],
+    "concepts/simulating-a-circuit.md": ["event", "settle", "oscillat", "netlist"],
 }
 
 

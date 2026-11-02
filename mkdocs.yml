@@ -42,3 +42,7 @@ markdown_extensions:
 nav:
   - Home: index.md
   - From Scratch: from-scratch.md
+  - The Basics:
+      - Bits and Binary: concepts/bits-and-binary.md
+      - Switches and NAND: concepts/switches-and-nand.md
+      - Simulating a Circuit: concepts/simulating-a-circuit.md

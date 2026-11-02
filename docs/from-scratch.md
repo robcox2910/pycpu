@@ -102,4 +102,5 @@ that asks: what if we built that computer too?
 One more honest note. The climb is only just beginning, so for now there are just
 these opening pages. Each time a new rung is built, a new page joins them.
 
-Ready? Go back to the [home page](index.md) to see the whole ladder again.
+Ready? Go back to the [home page](index.md) to see the whole ladder again, or start
+climbing with [Bits and Binary](concepts/bits-and-binary.md).
