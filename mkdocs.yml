@@ -57,3 +57,4 @@ nav:
       - Registers: concepts/registers.md
       - RAM: concepts/ram.md
       - How Big Is Our Memory?: concepts/how-big-is-our-memory.md
+      - The Bench: concepts/the-bench.md

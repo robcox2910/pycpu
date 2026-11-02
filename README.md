@@ -24,15 +24,16 @@ sums, and RAM is the computer's big notebook. The docs explain every word.
   Pebble programs           <- coming later in the climb
   Assembler                 <- coming later in the climb
   The CPU                   <- coming later in the climb
-  Memory (RAM)              <- next up in the climb
-  Arithmetic (adders, ALU)  <- next up in the climb
-  Gates (AND, OR, ...)      <- next up in the climb
-  NAND                      <- where it all starts
+  Memory (RAM)              <- built
+  Arithmetic (adders, ALU)  <- built
+  Gates (AND, OR, ...)      <- built
+  NAND                      <- built, where it all starts
 ```
 
 The destination is the **Cockpit**, a screen where you can watch a program written in
 Pebble (a small programming language from the same series) run on this computer, pause at any moment, and zoom all the way down to individual gates.
-The Cockpit is not built yet. Right now the project is the scaffold and the story.
+The Cockpit is not built yet, but its first piece is: the **Bench**, a local page for
+looking inside the ALU gate by gate. Gates, adders, the ALU, registers and RAM exist.
 
 ## Quick start
 
@@ -42,6 +43,7 @@ You need Python 3.14 and [uv](https://docs.astral.sh/uv/).
 uv sync --all-extras
 uv run pytest
 uv run mkdocs serve   # read the docs at http://127.0.0.1:8000
+uv run python -m pycpu   # open the Bench at http://127.0.0.1:8765
 ```
 
 ## Read the docs
