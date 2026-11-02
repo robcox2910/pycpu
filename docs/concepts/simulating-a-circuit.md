@@ -79,7 +79,15 @@ of the gate it just thought about (every gate gets a number, counting up from
 0 in the order it was added), or `-1` if no gate is waiting. Here is a *half
 adder*, a tiny circuit that adds two single bits and gives a sum and a carry,
 with both inputs switched on. We step through it and print each gate, the wire
-it drives (wires are numbered too), and the value that wire holds afterwards:
+it drives (wires are numbered too), and the value that wire holds afterwards.
+
+Two things to know first. The half adder is built from six gates, numbered 0
+to 5 in the order they were added: gates 0 to 3 work out the **sum** (this is
+called an XOR, "one or the other but not both") and gates 4 and 5 work out the
+**carry** (an AND, "both at once"). And `circuit.gate_wires` hands back three
+lists, one entry per gate: the wire each gate reads first, the wire it reads
+second, and the wire it drives. We only want the last list, the driven wires,
+so the other two are thrown away with `_`:
 
 ```python
 from pycpu.arithmetic import half_adder
@@ -100,7 +108,8 @@ steps = 0
 while (gate := sim.step()) != -1:
     steps += 1
     wire = gate_outputs[gate]
-    print(f"step {steps}: gate {gate} drives wire {wire}, which now holds {sim.get(wire)}")
+    held = sim.get(wire)
+    print(f"step {steps}: gate {gate} drives wire {wire}, which now holds {held}")
 print("sum:", sim.get(total), "carry:", sim.get(carry))
 # Output:
 # gates waiting: 4
@@ -112,11 +121,18 @@ print("sum:", sim.get(total), "carry:", sim.get(carry))
 # sum: 0 carry: 1
 ```
 
-Watch the dominoes: four gates were waiting at the start, but there were five
-steps. The fifth, gate 5, was woken part way through because gate 4 changed
-its wire. Some steps changed nothing at all (wire 5 held 1 before and after
-gate 1 looked at it), so the ripple stopped there. One push, a little ripple,
-then stillness. Once the queue is empty the circuit is exactly where `settle()` would have
+Watch the dominoes. Four gates were waiting at the start, but there were five
+steps, because gate 4 changed its wire and so woke gate 5 (the carry's second
+gate), which had not been waiting. Some steps changed nothing: wire 5 held 1
+before gate 1 looked at it and 1 after, so the ripple stopped there.
+
+Now look for gate 3, the last gate of the sum. It never ran at all! It reads
+wires 5 and 6, and neither of them changed (both held 1 all along), so
+nothing ever woke it. That is the whole idea of this page in one picture: a
+gate only thinks when something it listens to changes. One push, a little
+ripple, then stillness.
+
+Once the queue is empty the circuit is exactly where `settle()` would have
 left it, and `step()` took exactly as many steps as `settle()` would have
 counted.
 
