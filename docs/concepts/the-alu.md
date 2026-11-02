@@ -185,5 +185,6 @@ overflow lamps matter. And you have just seen what it is: 900 NAND gates, of whi
 ## What's Next
 
 We can now calculate, but we cannot *remember*. Every answer vanishes the
-moment the inputs change. In the next part of the climb we make gates that
-hold on to a value: memory. (That page comes next.)
+moment the inputs change. The next page, [Remembering](remembering.md), shows
+how two gates that listen to each other can hold on to a bit, and from there
+the climb goes to [The Clock](the-clock.md) and [Registers](registers.md).

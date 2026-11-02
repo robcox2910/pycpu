@@ -12,8 +12,9 @@ to run them.
 
 from array import array
 from collections import deque
+from collections.abc import Sequence
 
-from pycpu.circuit import Bus, Circuit, Wire
+from pycpu.circuit import Bus, Circuit, Clock, Wire
 
 DEFAULT_MAX_EVENTS = 10_000_000
 
@@ -41,9 +42,20 @@ class Simulator:
                 more gate evaluations than this.
 
         Raises:
+            ValueError: If some wire has no gate driving it. That would read as
+                0 without a word, so it is refused. The message gives the count.
             OscillationError: If the circuit never settles at power-on.
 
         """
+        undriven = circuit.undriven_count
+        if undriven:
+            noun = (
+                "wire has no gate driving it"
+                if undriven == 1
+                else "wires have no gate driving them"
+            )
+            msg = f"{undriven} {noun}: finish each wire_placeholder with nand_into"
+            raise ValueError(msg)
         self._circuit = circuit
         self._max_events = max_events
         self._first, self._second, self._out = circuit.gate_wires
@@ -137,6 +149,39 @@ class Simulator:
     def get_bus(self, bus: Bus) -> int:
         """Read a row of wires as one number, least significant bit first."""
         return sum(self._values[wire] << index for index, wire in enumerate(bus))
+
+    def poke_pairs(self, pairs: Sequence[tuple[Wire, Wire]], value: int) -> None:
+        """Write a bit straight into storage cells: `q` becomes `value`, `qn` its opposite.
+
+        Nothing settles here, so many cells can be written and then settled once.
+        The gates reading the changed wires are queued.
+
+        Raises:
+            ValueError: If `value` is not 0 or 1.
+
+        """
+        if value not in (0, 1):
+            msg = f"a wire holds 0 or 1, not {value}"
+            raise ValueError(msg)
+        values = self._values
+        for q, qn in pairs:
+            for wire, new in ((q, value), (qn, 1 - value)):
+                if values[wire] != new:
+                    values[wire] = new
+                    self._wake(wire)
+
+    def tick(self, clock: Clock) -> None:
+        """Play one beat: pulse `write` up and down, then `clk` up and down.
+
+        The `write` pulse comes first and is over before `clk` rises, so memory
+        copies in values while every register still holds this beat's. Each
+        change is settled before the next.
+        """
+        for wire in (clock.write, clock.clk):
+            self.set(wire, 1)
+            self.settle()
+            self.set(wire, 0)
+            self.settle()
 
     def _part_still_changing(self) -> str:
         """Describe where in the circuit a gate is still changing, for the error message.

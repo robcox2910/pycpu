@@ -32,6 +32,9 @@ KEY_IDEAS: dict[str, list[str]] = {
     "concepts/adding.md": ["half adder", "full adder", "carry", "ripple"],
     "concepts/negative-numbers.md": ["two's complement", "overflow", "wrap", "subtract"],
     "concepts/the-alu.md": ["alu", "flag", "zero", "carry", "overflow"],
+    "concepts/remembering.md": ["feedback", "latch", "remember"],
+    "concepts/the-clock.md": ["clock", "flip-flop", "rising edge", "two-phase"],
+    "concepts/registers.md": ["register", "load", "counter"],
 }
 
 

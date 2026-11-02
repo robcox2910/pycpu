@@ -52,3 +52,6 @@ nav:
       - Adding: concepts/adding.md
       - Negative Numbers: concepts/negative-numbers.md
       - The ALU: concepts/the-alu.md
+      - Remembering: concepts/remembering.md
+      - The Clock: concepts/the-clock.md
+      - Registers: concepts/registers.md

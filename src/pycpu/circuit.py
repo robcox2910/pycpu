@@ -21,6 +21,7 @@ asking how big a part is takes no searching.
 from array import array
 from collections.abc import Generator
 from contextlib import contextmanager
+from dataclasses import dataclass
 
 type Wire = int
 type Bus = tuple[Wire, ...]
@@ -28,6 +29,19 @@ type Bus = tuple[Wire, ...]
 LOW: Wire = 0
 HIGH: Wire = 1
 _FIRST_FREE_WIRE = 2
+
+
+@dataclass(frozen=True)
+class Clock:
+    """The two beat wires of the machine: `write` first, then `clk`.
+
+    Registers step when `clk` rises. Memory copies a value in while `write` is
+    high. `Simulator.tick` pulses `write` and then `clk`, so memory always
+    writes while every register still holds this beat's address and data.
+    """
+
+    clk: Wire
+    write: Wire
 
 
 class Circuit:
@@ -49,6 +63,7 @@ class Circuit:
         self._driven = bytearray(b"\x01\x01")  # 1 when something already sets this wire
         self._is_input = bytearray(_FIRST_FREE_WIRE)  # 1 for wires made by `input`
         self._input_names: dict[str, Wire] = {}
+        self._state_pairs: list[tuple[str, Wire, Wire]] = []
         # Scope tables: arrays indexed by scope id, with id 0 the root. A path
         # is only stored once, as a key of `_scope_ids`.
         self._scope_of = array("i")  # the scope id of each gate
@@ -84,6 +99,37 @@ class Circuit:
         are the circuit's own, shared for speed, so treat them as read-only.
         """
         return self._first, self._second, self._out
+
+    @property
+    def undriven_count(self) -> int:
+        """Return how many wires have no input, constant or gate driving them.
+
+        These are `wire_placeholder` wires still waiting for their `nand_into`.
+        """
+        return len(self._driven) - sum(self._driven)
+
+    @property
+    def state_pairs(self) -> tuple[tuple[str, Wire, Wire], ...]:
+        """Return every registered storage cell as `(name, q, q_n)`, in the order made."""
+        return tuple(self._state_pairs)
+
+    def state_pair(self, name: str, q: Wire, qn: Wire) -> None:
+        """Register a storage cell: two wires that hold a bit and its opposite.
+
+        `Simulator.poke_pairs` can then write the cell directly, which is how a
+        saved state is loaded without ticking the clock. The cell is filed under
+        the path of the part being built, such as `r.bit0.master`.
+
+        Args:
+            name: A label for the cell, unique within the current part.
+            q: The wire that holds the bit.
+            qn: The wire that holds the opposite of the bit.
+
+        """
+        for wire in (q, qn):
+            self._check(wire)
+        path = self.scope_path(self._current_scope)
+        self._state_pairs.append((f"{path}.{name}" if path else name, q, qn))
 
     def _new_wire(self, *, driven: bool, is_input: bool = False) -> Wire:
         """Add one wire; `driven` says whether an input or constant already owns it."""

@@ -7,6 +7,7 @@ from pycpu.simulator import OscillationError, Simulator
 
 WORD = 16
 BEEF = 0xBEEF
+TWO_UNDRIVEN = 2
 
 
 def test_nand_truth_table() -> None:
@@ -195,3 +196,40 @@ def test_input_names_must_be_unique() -> None:
     c.input("a")
     with pytest.raises(ValueError, match="already"):
         c.input("a")
+
+
+def test_cross_coupled_nands_power_on_by_the_order_gates_were_added() -> None:
+    """With both inputs high, the loop gate added first wins and ends up at 1."""
+    first = Circuit()
+    q_n = first.wire_placeholder()
+    q = first.nand(first.high, q_n)  # q's gate is added first
+    first.nand_into(first.high, q, q_n)
+    sim = Simulator(first)
+    assert (sim.get(q), sim.get(q_n)) == (1, 0)
+
+    second = Circuit()
+    q = second.wire_placeholder()
+    q_n = second.nand(second.high, q)  # q_n's gate is added first, so q's is second
+    second.nand_into(second.high, q_n, q)
+    sim = Simulator(second)
+    assert (sim.get(q), sim.get(q_n)) == (0, 1)
+
+
+def test_a_wire_nothing_drives_stops_the_simulator_with_a_clear_error() -> None:
+    """A placeholder that never gets its gate is reported, with a count."""
+    c = Circuit()
+    c.wire_placeholder()
+    c.wire_placeholder()
+    done = c.wire_placeholder()
+    c.nand_into(c.high, c.high, done)
+    assert c.undriven_count == TWO_UNDRIVEN
+    with pytest.raises(ValueError, match=r"2 wires have no gate driving them"):
+        Simulator(c)
+
+
+def test_one_undriven_wire_is_reported_in_the_singular() -> None:
+    """The message reads naturally for a single wire."""
+    c = Circuit()
+    c.wire_placeholder()
+    with pytest.raises(ValueError, match=r"1 wire has no gate driving it"):
+        Simulator(c)
