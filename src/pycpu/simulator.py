@@ -19,6 +19,12 @@ from pycpu.circuit import Bus, Circuit, Clock, Wire
 DEFAULT_MAX_EVENTS = 10_000_000
 
 
+NOTHING_WAITING = -1
+DEAD_MESSAGE = (
+    "this simulator stopped after an oscillation and cannot be used again; build a new Simulator"
+)
+
+
 class OscillationError(Exception):
     """Raised when a circuit keeps changing and never settles, like a swinging pendulum."""
 
@@ -70,6 +76,7 @@ class Simulator:
         self._queued = bytearray(self._gate_count)
         self._offsets, self._fanout = self._build_fanout()
         self.events_total = 0
+        self._dead = False
         self._queue.extend(range(self._gate_count))
         self._queued[:] = b"\x01" * self._gate_count
         self.settle()
@@ -78,6 +85,25 @@ class Simulator:
     def circuit(self) -> Circuit:
         """Return the circuit being simulated."""
         return self._circuit
+
+    @property
+    def pending(self) -> int:
+        """Return how many gates are waiting in the queue to think again."""
+        return len(self._queue)
+
+    def _check_alive(self) -> None:
+        """Refuse to go on if an oscillation has already stopped this simulator.
+
+        After `OscillationError` the queue was thrown away half way through a
+        ripple, so the wire values no longer agree with the gates. Nothing
+        trustworthy can be done with them.
+
+        Raises:
+            RuntimeError: If the simulator stopped after an oscillation.
+
+        """
+        if self._dead:
+            raise RuntimeError(DEAD_MESSAGE)
 
     def _build_fanout(self) -> tuple[array[int], array[int]]:
         """Return the fanout table: for each wire, the gates that read it.
@@ -123,6 +149,7 @@ class Simulator:
             ValueError: If `wire` is not an input, or `value` is not 0 or 1.
 
         """
+        self._check_alive()
         if not self._circuit.is_input(wire):
             msg = f"wire {wire} is not an input"
             raise ValueError(msg)
@@ -164,6 +191,7 @@ class Simulator:
             ValueError: If `value` is not 0 or 1.
 
         """
+        self._check_alive()
         if value not in (0, 1):
             msg = f"a wire holds 0 or 1, not {value}"
             raise ValueError(msg)
@@ -186,6 +214,7 @@ class Simulator:
         copies in values while every register still holds this beat's. Each
         change is settled before the next.
         """
+        self._check_alive()
         self.settle()
         for wire in (clock.write, clock.clk):
             self.set(wire, 1)
@@ -208,6 +237,85 @@ class Simulator:
         path = self._circuit.scope_of(culprit)
         return f"still changing in part '{path}'" if path else "still changing at the top level"
 
+    def step(self) -> int:
+        """Think about just one gate: the one at the front of the queue.
+
+        This is `settle` in slow motion. It follows the very same rule (take
+        the front gate, work out its NAND from the wires right now, write the
+        answer at once, and queue the gates listening if it changed), but
+        stops after one gate so you can look at the circuit between gates.
+        Stepping until it returns -1 ends with the same wire values as
+        `settle`, in the same number of steps. `settle` keeps its own copy of
+        the loop only because it must be as fast as possible.
+
+        Returns:
+            The id of the gate just evaluated, or -1 if nothing is waiting.
+
+        Raises:
+            RuntimeError: If the simulator stopped after an oscillation.
+
+        """
+        self._check_alive()
+        queue = self._queue
+        if not queue:
+            return NOTHING_WAITING
+        values = self._values
+        gate = queue.popleft()
+        self._queued[gate] = 0
+        self.events_total += 1
+        wire = self._out[gate]
+        new = 1 - (values[self._first[gate]] & values[self._second[gate]])
+        if values[wire] != new:
+            values[wire] = new
+            self._wake(wire)
+        return gate
+
+    def storage(self) -> bytes:
+        """Copy out the bit held in every storage cell, as one byte (0 or 1) per cell.
+
+        The cells are the circuit's `state_pairs`, in the order they were made,
+        and the bit saved is each pair's `q` wire. Together with the input
+        wires this is everything a circuit remembers.
+
+        Returns:
+            One byte per state pair.
+
+        """
+        values = self._values
+        return bytes(values[q] for _, q, _ in self._circuit.state_pairs)
+
+    def restore_storage(self, bits: bytes) -> None:
+        """Write saved bits back into every storage cell, then settle.
+
+        Before calling this, drop `clk` and `write` to 0 and settle, so no
+        pulse is half way through when the cells are overwritten. The inputs
+        should also hold the values they had when the bits were saved.
+
+        Args:
+            bits: What `storage` returned, one byte per state pair.
+
+        Raises:
+            ValueError: If `bits` is not one byte per state pair, or a byte
+                is not 0 or 1.
+            RuntimeError: If the simulator stopped after an oscillation.
+
+        """
+        self._check_alive()
+        pairs = self._circuit.state_pairs
+        if len(bits) != len(pairs):
+            msg = f"expected {len(pairs)} stored bits, got {len(bits)}"
+            raise ValueError(msg)
+        if bits.count(0) + bits.count(1) != len(bits):
+            msg = "stored bits must each be 0 or 1"
+            raise ValueError(msg)
+        values = self._values
+        for (_, q, qn), bit in zip(pairs, bits, strict=True):
+            for wire, new in ((q, bit), (qn, 1 - bit)):
+                if values[wire] != new:
+                    values[wire] = new
+                    self._wake(wire)
+        self.settle()
+
     def settle(self) -> int:
         """Ripple every pending change through the circuit until all is still.
 
@@ -223,8 +331,11 @@ class Simulator:
         Raises:
             OscillationError: If more than `max_events` evaluations are needed.
                 The message names the part of the circuit still changing.
+                The simulator is dead afterwards.
+            RuntimeError: If the simulator was already dead.
 
         """
+        self._check_alive()
         queue, queued, values = self._queue, self._queued, self._values
         first, second, out = self._first, self._second, self._out
         limit = self._max_events
@@ -235,6 +346,7 @@ class Simulator:
                 queue.clear()
                 queued[:] = bytes(self._gate_count)
                 self.events_total += done
+                self._dead = True
                 msg = f"circuit did not settle within {limit} gate evaluations ({part})"
                 raise OscillationError(msg)
             gate = queue.popleft()

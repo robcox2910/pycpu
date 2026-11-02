@@ -72,6 +72,54 @@ A thousand and five gates, yet flipping `a` woke exactly five. The thousand
 that depend on `b` never stirred. Setting `a` to a value it already had woke
 none at all.
 
+`settle()` lets the whole line of dominoes fall in one go. Sometimes you want
+to watch them fall **one at a time**, like a slow-motion replay. `step()` does
+exactly one gate's thinking, then stops so you can look. It returns the number
+of the gate it just thought about (every gate gets a number, counting up from
+0 in the order it was added), or `-1` if no gate is waiting. Here is a *half
+adder*, a tiny circuit that adds two single bits and gives a sum and a carry,
+with both inputs switched on. We step through it and print each gate, the wire
+it drives (wires are numbered too), and the value that wire holds afterwards:
+
+```python
+from pycpu.arithmetic import half_adder
+from pycpu.circuit import Circuit
+from pycpu.simulator import Simulator
+
+circuit = Circuit()
+a = circuit.input("a")
+b = circuit.input("b")
+total, carry = half_adder(circuit, a, b)
+_, _, gate_outputs = circuit.gate_wires
+
+sim = Simulator(circuit)
+sim.set(a, 1)
+sim.set(b, 1)
+print("gates waiting:", sim.pending)
+steps = 0
+while (gate := sim.step()) != -1:
+    steps += 1
+    wire = gate_outputs[gate]
+    print(f"step {steps}: gate {gate} drives wire {wire}, which now holds {sim.get(wire)}")
+print("sum:", sim.get(total), "carry:", sim.get(carry))
+# Output:
+# gates waiting: 4
+# step 1: gate 0 drives wire 4, which now holds 0
+# step 2: gate 1 drives wire 5, which now holds 1
+# step 3: gate 4 drives wire 8, which now holds 0
+# step 4: gate 2 drives wire 6, which now holds 1
+# step 5: gate 5 drives wire 9, which now holds 1
+# sum: 0 carry: 1
+```
+
+Watch the dominoes: four gates were waiting at the start, but there were five
+steps. The fifth, gate 5, was woken part way through because gate 4 changed
+its wire. Some steps changed nothing at all (wire 5 held 1 before and after
+gate 1 looked at it), so the ripple stopped there. One push, a little ripple,
+then stillness. Once the queue is empty the circuit is exactly where `settle()` would have
+left it, and `step()` took exactly as many steps as `settle()` would have
+counted.
+
 ## How It Works
 
 The simulator lives in `src/pycpu/simulator.py` and is built from three small
@@ -112,6 +160,24 @@ of hanging forever. By default the fuse is ten million evaluations. The error
 also says *where* the trouble is. Our ring was built in no named part, so it
 says "at the top level". Later in the climb, circuits are filed into named
 parts, and then the error names the part instead.
+
+**4. One gate at a time.** `step()` is the loop above with the "repeat" cut
+off: it takes the gate at the front of the queue, works out its NAND, writes
+the answer straight away, queues the listeners, and stops. It follows the very
+same rule as `settle()`, so stepping until nothing is waiting always ends with
+the same wire values. `settle()` keeps its own copy of the loop only so that it
+stays as fast as it can be. `sim.pending` says how many gates are waiting.
+
+**5. Saving what a circuit remembers.** Later in the climb we build circuits
+that remember a bit (latches, registers, memory). `sim.storage()` copies out
+every remembered bit as a row of bytes, and `sim.restore_storage(bits)` writes
+them back and settles. That is how a computer can be paused and wound back to
+an earlier moment. Before restoring, switch the clock wires off and settle, so
+nothing is half way through a pulse.
+
+After an `OscillationError` the wire values are left half way through a ripple
+and cannot be trusted, so that simulator is **dead**: every later call raises
+`RuntimeError` and you build a new one.
 
 When the `Simulator` is first made it queues every gate once, in order, and
 settles. That gives every circuit the same starting values every time.

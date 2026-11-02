@@ -2,12 +2,19 @@
 
 import pytest
 
+from pycpu.arithmetic import ripple_adder
 from pycpu.circuit import Circuit
+from pycpu.memory import Ram, Register, make_clock
 from pycpu.simulator import OscillationError, Simulator
 
 WORD = 16
 BEEF = 0xBEEF
 TWO_UNDRIVEN = 2
+SMALL_EVENTS = 50
+RAM_ADDRESS_WIDTH = 4
+SOME_WORD = 0x1234
+OTHER_WORD = 0xABCD
+ADDRESS_THREE = 3
 
 
 def test_nand_truth_table() -> None:
@@ -235,3 +242,117 @@ def test_one_undriven_wire_is_reported_in_the_singular() -> None:
     c.wire_placeholder()
     with pytest.raises(ValueError, match=r"1 wire has no gate driving it"):
         Simulator(c)
+
+
+def _adder_simulator(x: int, y: int) -> tuple[Simulator, Circuit]:
+    """Build a 16-bit ripple adder simulator with `x` and `y` set but not settled."""
+    c = Circuit()
+    a, b = c.bus_input("a", WORD), c.bus_input("b", WORD)
+    carry_in = c.input("cin")
+    ripple_adder(c, a, b, carry_in)
+    sim = Simulator(c)
+    sim.set_bus(a, x)
+    sim.set_bus(b, y)
+    return sim, c
+
+
+def test_stepping_gate_by_gate_ends_where_settle_ends() -> None:
+    """Stepping until nothing waits gives the same wires, in as many steps as settle counts."""
+    settled, circuit = _adder_simulator(0xFFFF, 1)
+    stepped, _ = _adder_simulator(0xFFFF, 1)
+    expected_steps = settled.settle()
+    steps = 0
+    while stepped.step() != -1:
+        steps += 1
+    assert steps == expected_steps > 0
+    assert all(settled.get(w) == stepped.get(w) for w in range(circuit.wire_count))
+
+
+def test_step_with_nothing_waiting_returns_minus_one() -> None:
+    """A settled circuit has nothing to step, and `pending` counts down to 0."""
+    sim, _ = _adder_simulator(1, 2)
+    assert sim.pending > 0
+    before = sim.pending
+    sim.step()
+    assert sim.pending != before
+    sim.settle()
+    assert sim.pending == 0
+    assert sim.step() == -1
+
+
+def test_step_returns_the_gate_it_evaluated() -> None:
+    """The gate id returned is the front of the queue, so the first step is gate 0."""
+    c = Circuit()
+    a = c.input("a")
+    out = c.nand(a, a)
+    sim = Simulator(c)
+    sim.set(a, 1)
+    gate = sim.step()
+    assert c.gate_wires[2][gate] == out
+    assert sim.get(out) == 0
+
+
+def test_a_simulator_is_dead_after_an_oscillation() -> None:
+    """Once the fuse blows, every way of using the simulator says a new one is needed."""
+    c = Circuit()
+    enable = c.input("enable")
+    loop = c.wire_placeholder()
+    c.nand_into(enable, loop, loop)  # a NOT gate that feeds itself once enabled
+    sim = Simulator(c, max_events=SMALL_EVENTS)
+    sim.set(enable, 1)
+    with pytest.raises(OscillationError):
+        sim.settle()
+    for action in (
+        lambda: sim.settle(),
+        lambda: sim.step(),
+        lambda: sim.set(enable, 0),
+        lambda: sim.tick(make_clock(Circuit())),
+        lambda: sim.poke_pairs([], 0),
+        lambda: sim.restore_storage(b""),
+    ):
+        with pytest.raises(RuntimeError, match="stopped after an oscillation"):
+            action()
+
+
+def _register_and_ram() -> tuple[Circuit, Register, Ram]:
+    """Build a register and a 16-word RAM that share one clock."""
+    c = Circuit()
+    clock = make_clock(c)
+    data = c.bus_input("data", WORD)
+    load = c.input("load")
+    address = c.bus_input("address", RAM_ADDRESS_WIDTH)
+    write = c.input("write_enable")
+    register = Register(c, WORD, data, load, clock, "reg")
+    ram = Ram(c, address, data, write, clock)
+    return c, register, ram
+
+
+def test_storage_round_trips_into_a_second_simulator() -> None:
+    """Saving the storage and restoring it into a fresh simulator copies every wire."""
+    c, register, ram = _register_and_ram()
+    first = Simulator(c)
+    register.poke(first, SOME_WORD)
+    ram.poke(first, ADDRESS_THREE, OTHER_WORD)
+    first.settle()
+    second = Simulator(c)
+    second.restore_storage(first.storage())
+    assert register.peek(second) == SOME_WORD
+    assert ram.peek(second, ADDRESS_THREE) == OTHER_WORD
+    assert all(first.get(w) == second.get(w) for w in range(c.wire_count))
+
+
+def test_restore_storage_rejects_the_wrong_length() -> None:
+    """Bits that do not match the number of state pairs are refused."""
+    c, _, _ = _register_and_ram()
+    sim = Simulator(c)
+    with pytest.raises(ValueError, match="expected"):
+        sim.restore_storage(sim.storage()[:-1])
+
+
+def test_restore_storage_rejects_a_byte_that_is_not_a_bit() -> None:
+    """Each stored byte must be 0 or 1."""
+    c, _, _ = _register_and_ram()
+    sim = Simulator(c)
+    bad = bytes([2]) + sim.storage()[1:]
+    with pytest.raises(ValueError, match="0 or 1"):
+        sim.restore_storage(bad)

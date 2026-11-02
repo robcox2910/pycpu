@@ -25,7 +25,7 @@ KEY_IDEAS: dict[str, list[str]] = {
     "from-scratch.md": ["petzold", "nand", "faking", "pebble"],
     "concepts/bits-and-binary.md": ["bit", "binary", "hex"],
     "concepts/switches-and-nand.md": ["nand", "wire", "gate", "truth table"],
-    "concepts/simulating-a-circuit.md": ["event", "settle", "oscillat", "netlist"],
+    "concepts/simulating-a-circuit.md": ["event", "settle", "oscillat", "netlist", "step"],
     "concepts/gates.md": ["nand", "truth table", "xor"],
     "concepts/choosing-and-decoding.md": ["mux", "decoder"],
     "concepts/looking-inside.md": ["scope", "zoom", "real", "faking"],
