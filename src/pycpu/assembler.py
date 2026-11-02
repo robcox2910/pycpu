@@ -43,6 +43,8 @@ OFF9_MIN = -(1 << (OFF9_BITS - 1))
 OFF9_MAX = (1 << (OFF9_BITS - 1)) - 1
 MIN_CHAR_LITERAL = 3
 MIN_QUOTED = 2
+MAX_DIGITS = 20
+MAX_ADDRESS = (1 << WORD_BITS) - 1
 ADDR12_MAX = (1 << ADDR12_BITS) - 1
 
 _NAME = r"[A-Za-z_][A-Za-z0-9_]*"
@@ -192,7 +194,7 @@ def _split_operands(text: str) -> list[str]:
             current += char
         index += 1
     parts.append(current.strip())
-    return parts if any(parts) else []
+    return parts if text.strip() else []
 
 
 def _unescape(body: str, line: int) -> str:
@@ -241,10 +243,10 @@ def _number(text: str, line: int) -> int:
     """Read a decimal, `-` decimal, `0x` hex or `'A'` character as a number."""
     if re.fullmatch(r"-?[0-9]+", text, flags=re.ASCII):
         sign, digits = (-1, text[1:]) if text[0] == "-" else (1, text)
-        return sign * _decimal(digits, 10, text, line)
+        return sign * _decimal(digits, 10, line)
     if re.fullmatch(r"-?0[xX][0-9a-fA-F]+", text):
         sign, digits = (-1, text[1:]) if text[0] == "-" else (1, text)
-        return sign * _decimal(digits[2:], 16, text, line)
+        return sign * _decimal(digits[2:], 16, line)
     if len(text) >= MIN_CHAR_LITERAL and text[0] == text[-1] == "'":
         letters = _unescape(text[1:-1], line)
         if len(letters) != 1:
@@ -257,12 +259,13 @@ def _number(text: str, line: int) -> int:
     )
 
 
-def _decimal(digits: str, base: int, shown: str, line: int) -> int:
-    """Convert digits, turning Python's refusal of absurdly long numbers into an AssemblyError."""
-    try:
-        return int(digits, base)
-    except ValueError:
-        raise AssemblyError(line, f"the number {shown[:20]}... is far too big") from None
+def _decimal(digits: str, base: int, line: int) -> int:
+    """Convert digits, refusing absurdly long ones before Python is asked to convert them."""
+    if len(digits.lstrip("0")) > MAX_DIGITS:
+        raise AssemblyError(
+            line, f"that number has more than {MAX_DIGITS} digits, which is far too big for a word"
+        )
+    return int(digits, base)
 
 
 def _within(value: int, low: int, high: int, what: str, line: int) -> int:
@@ -482,8 +485,10 @@ def _encode(item: _Item, shape: tuple[str, ...], labels: dict[str, int]) -> int:
 
 def _branch_offset(target: int, address: int, line: int) -> int:
     """Work out how far a `br` at `address` must hop to reach `target`."""
-    if target < 0:
-        raise AssemblyError(line, f"{target} is not an address: addresses start at 0")
+    if not 0 <= target <= MAX_ADDRESS:
+        raise AssemblyError(
+            line, f"{target} is not an address: use a number from 0 to {MAX_ADDRESS}"
+        )
     distance = ((target - (address + 1) + (1 << (WORD_BITS - 1))) & WORD_MASK) - (
         1 << (WORD_BITS - 1)
     )

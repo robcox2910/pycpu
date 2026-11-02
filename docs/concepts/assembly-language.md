@@ -143,10 +143,14 @@ tells you to branch over a `jmp` instead (a `jmp` reaches anywhere).
 on a line of its own or in front of an instruction. Mnemonics and register names such as
 `R1` can be written in any case. Operands are separated by commas. A memory operand is
 `[r2]`, `[r2+3]` or `[r2-1]`. A number is decimal (`12`, `-3`), hex (`0x1F`) or a letter in
-quotes (`'A'`, which is 65). Besides the instruction names on the
+quotes (`'A'`, which is 65). Inside quotes, a backslash writes a special character:
+`\n` (new line), `\t` (tab), `\0` (zero), `\\` (a backslash), `\"` and `\'`. A
+`jmp`, `call` or `br` target may be a label or a plain number (an address, `br` from 0 to
+65535 and `jmp`/`call` from 0 to 4095). `halt` alone means `halt 0`, and `halt 3` stops with
+the code 3. `set` takes any value from -32768 to 65535, or a label. Besides the instruction names on the
 [Instruction Set page](../reference/instruction-set.md) there is `set`, plus two
 directives (orders to the assembler itself, not to the CPU): `.word value` puts one raw
-word in memory, and `.string "text"` puts one word per letter followed by a 0.
+word in memory (`.word 1, 2, 3` puts three), and `.string "text"` puts one word per letter followed by a 0.
 
 **Going backwards.** `disassemble(word, address)` is the same path in reverse: `decode`
 the word, then print it as the text the assembler would accept, always in the same
@@ -158,7 +162,8 @@ disassembling a word and assembling the text again gives the same word back.
 **When you get it wrong.** Every mistake becomes an `AssemblyError` that begins with the
 line number and says what is wrong and what would be right, for example
 `line 2: r8 is not a register. The registers are r0, r1, r2, r3, r4, r5, r6 and r7.`
-Nothing the assembler is given, however silly, should crash it with some other error.
+Nothing the assembler is given, however silly, can make it fail any other way: even a
+number with five thousand digits just gets an `AssemblyError`.
 A test throws many random scraps of text at it to check.
 
 ## Why Does This Matter?

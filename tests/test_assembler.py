@@ -174,6 +174,20 @@ def test_a_branch_at_the_edge_of_its_range_works_and_one_more_is_refused() -> No
         ("load r1, r2", 1, "["),
         ("1abc: halt", 1, "1abc"),
         ("r1: halt", 1, "r1"),
+        ("li r1, 0x" + "f" * 5000, 1, "digits"),
+        ("li r1, " + "9" * 5000, 1, "digits"),
+        ("set r1, " + "9" * 5000, 1, "digits"),
+        (".word 0x" + "f" * 5000, 1, "digits"),
+        ("addi r1, -" + "9" * 5000, 1, "digits"),
+        ("halt " + "9" * 5000, 1, "digits"),
+        ("br eq, 65537", 1, "65537"),
+        ("br eq, 99999999", 1, "99999999"),
+        ("jmp 4096", 1, "4096"),
+        ("call 65536", 1, "65536"),
+        ("halt ,", 1, "halt"),
+        ("ret ,", 1, "ret"),
+        ("halt 1,", 1, "halt"),
+        ("push r1,", 1, "push"),
     ],
 )
 def test_mistakes_give_a_friendly_error_naming_the_line(
@@ -218,7 +232,16 @@ def test_disassemble_prints_the_canonical_text() -> None:
     assert disassemble(0x9000, 0) == "ret"
 
 
-@given(st.text(max_size=200))
+@given(
+    st.one_of(
+        st.text(max_size=200),
+        st.builds(
+            "li r1, {}{}".format,
+            st.sampled_from(["", "0x", "-"]),
+            st.text(alphabet="0123456789abcdefx", min_size=1, max_size=6000),
+        ),
+    )
+)
 def test_random_text_gives_a_program_or_an_assembly_error_and_nothing_else(text: str) -> None:
     """No text at all can make the assembler raise anything but AssemblyError."""
     with contextlib.suppress(AssemblyError):
