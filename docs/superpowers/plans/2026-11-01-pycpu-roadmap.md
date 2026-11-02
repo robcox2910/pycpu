@@ -36,12 +36,17 @@ a write includes `Simulator.tick`. Every read, and every word after the writes, 
 | `read_seconds` (median of 100) | 0.0010 | under 0.1 |
 | `write_seconds` (median of 100) | 0.024 | under 0.1 |
 
-Across five fresh runs: build 2.49 to 2.71 s, memory 111 to 115 MiB, load 0.091 to 0.102 s,
-read 0.0009 to 0.0010 s, write 0.023 to 0.027 s. Slowest seen in a longer run (2,000 reads, 500 writes): read 0.0065 s, write
-0.044 s, and a write flipping all 16 data wires 0.051 s.
+Ranges seen across five fresh runs, not bounds, since timings move with whatever else the
+laptop is doing (an independent run saw load 0.11 s and write 0.0277 s, both outside these):
+build 2.49 to 2.71 s, memory 111 to 115 MiB, load 0.091 to 0.102 s, read 0.0009 to 0.0010 s,
+write 0.023 to 0.027 s.
+
+`scripts/ram_tails.py` (seed 2026; 2,000 reads, 500 writes) gives the tails on the same laptop.
+Slowest seen in one run: read 0.0047 s, write 0.036 s, and a write flipping all 16 data wires
+0.047 s. Plain list read about 2.7e-08 s. Gate evaluations do not vary between runs.
 
 **This is the RAM alone.** The CPU adds gates in Plan 2, so these figures are a floor, not a
-forecast. A write is costly (median 43,162 gate evaluations against 1,752 for a read) because
+forecast. A write is costly (median about 43,270 gate evaluations against 1,745 for a read, from the same script) because
 each changed data wire wakes one gate per word. Two reads and a write take about 0.026 s, which
 suits gate stepping and is why long runs need Plan 2's fast engine.
 

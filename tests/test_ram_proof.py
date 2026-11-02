@@ -7,7 +7,8 @@ from typing import cast
 
 import pytest
 
-from pycpu.circuit import Bus
+from pycpu import proof
+from pycpu.circuit import Bus, Clock
 from pycpu.memory import RAM_ADDRESS_BITS, WORD_BITS, Ram
 from pycpu.proof import measure
 from pycpu.simulator import Simulator
@@ -23,9 +24,9 @@ LOAD_LIMIT_SECONDS = 5
 ACCESS_LIMIT_SECONDS = 0.1
 
 
-def _script_main() -> Callable[[list[str] | None], int]:
-    """Load `scripts/prove_ram.py` from its file and hand back its `main`."""
-    spec = importlib.util.spec_from_file_location("prove_ram", ROOT / "scripts" / "prove_ram.py")
+def _script_main(name: str = "prove_ram") -> Callable[[list[str] | None], int]:
+    """Load a script from `scripts/` by its file and hand back its `main`."""
+    spec = importlib.util.spec_from_file_location(name, ROOT / "scripts" / f"{name}.py")
     assert spec is not None
     assert spec.loader is not None
     module = importlib.util.module_from_spec(spec)
@@ -43,6 +44,29 @@ def test_a_small_measurement_fills_in_every_figure() -> None:
 def test_the_gate_count_grows_with_the_ram() -> None:
     """Twice as many address wires means many more gates."""
     assert measure(SMALL_BITS)["gates"] > measure(TINY_BITS)["gates"]
+
+
+def test_every_measured_write_includes_a_clock_tick(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Each of the 100 writes ticks the clock once, inside the timed part."""
+    ticks_timed: list[bool] = []
+    timing: list[bool] = []
+    real_tick = Simulator.tick
+    real_stopwatch = proof._stopwatch
+
+    def spying_tick(sim: Simulator, clock: Clock) -> None:
+        ticks_timed.append(bool(timing))
+        real_tick(sim, clock)
+
+    def spying_stopwatch(action: Callable[[], object]) -> float:
+        timing.append(True)
+        seconds = real_stopwatch(action)
+        timing.clear()
+        return seconds
+
+    monkeypatch.setattr(Simulator, "tick", spying_tick)
+    monkeypatch.setattr(proof, "_stopwatch", spying_stopwatch)
+    measure(SMALL_BITS)
+    assert ticks_timed == [True] * proof.ACCESSES
 
 
 def test_a_ram_that_reads_wrongly_fails_the_proof(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -111,6 +135,19 @@ def test_the_script_exits_non_zero_when_a_limit_is_missed(
     monkeypatch.setitem(main.__globals__, "measure", measure_slowly)
     assert main(["--address-bits", str(TINY_BITS)]) == 1
     assert "MISSED" in capsys.readouterr().out
+
+
+def test_the_tails_script_reports_every_figure_with_its_seed(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """The tails script names its seed, prints each figure and finds no wrong words."""
+    main = _script_main("ram_tails")
+    assert main(["--address-bits", str(TINY_BITS)]) == 0
+    printed = capsys.readouterr().out
+    assert "seed 2026" in printed
+    assert "words wrong afterwards   0" in printed
+    for name in ("read evaluations", "write evaluations", "all-16-flip", "plain list"):
+        assert name in printed
 
 
 @pytest.mark.slow

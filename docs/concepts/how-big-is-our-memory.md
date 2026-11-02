@@ -100,6 +100,12 @@ parts that are shared by everybody:
 | The write pulse | 2 |
 | **Total** | **607,454** |
 
+Sharp-eyed readers will spot something. 148 x 4,096 is 606,208, but the first two
+rows of the table add up to 606,160, which is 48 fewer. Nothing is missing. Joining
+4,096 answers takes 4,095 ORs, not 4,096, just as tying 4 bits of string into one
+line takes 3 knots. So each of the 16 output lines has 4,095 ORs of 3 gates:
+16 x 4,095 x 3 = 196,560. The first word gets its 48 joining gates for free.
+
 **The results.** Measured on 2 November 2026, on one laptop: an Intel Core i7-9750H
 at 2.60 GHz with 16 GB of memory, running macOS 26.5 and Python 3.14.3.
 
@@ -122,10 +128,12 @@ Three of those words need explaining.
 - Those limits were written down *before* anything was measured, so that nobody
   could pick them to suit the answer.
 
-A median can hide a bad day, so we also looked at the slowest. In a longer run
-with 2,000 reads and 500 writes, the slowest read took 0.0065 seconds and the
-slowest write took 0.044 seconds. Even a write that flipped all 16 data wires
-took 0.051 seconds at most. All of those are under the limit too.
+A median can hide a bad day, so we also looked at the slowest. The script
+`scripts/ram_tails.py` makes a longer run of 2,000 reads and 500 writes, with the
+seed 2026, on the same laptop. The slowest read took 0.0047 seconds and the
+slowest write took 0.036 seconds. Even a write that flipped all 16 data wires
+took 0.047 seconds at most. All of those are under the limit too. Run it yourself
+and your times will differ, but the gate evaluations below will not.
 
 **How it grows.** Each extra address wire doubles the lockers. Most of these
 figures double as well, more or less, but a read barely moves:
@@ -139,8 +147,8 @@ figures double as well, more or less, but a read barely moves:
 | 4,096 | 607,454 | 2.52 s | 115 MiB | 0.095 s | 0.0010 s | 0.024 s |
 
 **Why is a write so much slower than a read?** In that longer run, a typical read
-needed 1,752 gate evaluations (one gate working out its answer once). A typical
-write needed 43,162. A read only wakes the decoders and one word. But every data
+needed 1,745 gate evaluations (one gate working out its answer once). A typical
+write needed about 43,270. A read only wakes the decoders and one word. But every data
 wire runs to *every* word, because any word might be the one being written. When
 one data wire changes, all 4,096 gates listening to it have to think again, and
 about half of the 16 data wires change on each write. Those gates all work out
@@ -154,8 +162,8 @@ means keeping a lot of latches ready, and nearly all of them sit still at any
 moment. It only works because the simulator wakes just the gates that need it.
 
 There is an easy shortcut: keep the numbers in a plain Python list and have the
-circuit pretend. On the same laptop a list read took about 0.00000005 seconds,
-which is about 19,000 times quicker than our one-read figure. We still chose real
+circuit pretend. In that same longer run a list read took about 0.00000003 seconds,
+which is roughly 32,000 times quicker than a typical read through the gates. We still chose real
 gates, because this project promises no faking. When you zoom into a locker,
 you must see a real latch holding the real bit, not a picture of one. The test on
 this page was there to answer one question: can we keep that promise and still
