@@ -26,6 +26,7 @@ COUNTDOWN_STEPS = 19  # instructions the countdown runs, counting its HALT
 MAX_REWIND_GATE_STEPS = 15_000
 MAX_RESUME_GATE_STEPS = 30_000
 FIRST_PAUSE = 3
+FIRST_STORE = 5  # the countdown's first `store r3, [r1]`, to the output port
 
 COUNTDOWN = """
     set r1, 0xFFFF
@@ -115,11 +116,18 @@ def test_rewind_after_gate_steps_restores_the_instruction_start(
 @given(
     stop=st.integers(0, COUNTDOWN_STEPS + 1),
     gate_steps=st.integers(0, MAX_RESUME_GATE_STEPS),
+    rewind_first=st.booleans(),
+    more_gate_steps=st.integers(0, MAX_RESUME_GATE_STEPS),
 )
 def test_resume_mid_instruction_matches_a_straight_run(
-    computer: Computer, program: Program, stop: int, gate_steps: int
+    computer: Computer,
+    program: Program,
+    stop: int,
+    gate_steps: int,
+    rewind_first: bool,
+    more_gate_steps: int,
 ) -> None:
-    """Pause anywhere, wander through the gates, resume: the end is the same as never pausing."""
+    """Pause, wander through the gates, maybe rewind, wander again, resume: no drift at the end."""
     straight = FastMachine(WORDS)
     straight.load_program(program.words)
     straight.run(RUN_LIMIT)
@@ -128,10 +136,38 @@ def test_resume_mid_instruction_matches_a_straight_run(
     computer.pause()
     for _ in range(gate_steps):
         computer.step(StepSize.GATE)
+    if rewind_first:
+        computer.rewind()
+    for _ in range(more_gate_steps):
+        computer.step(StepSize.GATE)
     computer.resume()
     assert not computer.paused
     computer.run(RUN_LIMIT)
     assert computer.state() == straight.state()
+
+
+def test_rewind_takes_back_a_character_already_sent_to_the_screen(
+    computer: Computer, program: Program
+) -> None:
+    """Rewinding a STORE to the output port takes its character back off the screen."""
+    _fresh(computer, program)
+    computer.run(FIRST_STORE)
+    computer.pause()
+    start = computer.instruction_start
+    assert start.output == ()
+    while True:
+        micro = computer.step(StepSize.GATE)
+        assert micro is not None
+        assert micro.kind != "end"
+        if micro.phase == Phase.EXECUTE and micro.wire == "write" and micro.value == 1:
+            break
+    assert computer.state().output == (ord("3"),)
+    computer.rewind()
+    assert computer.state().output == ()
+    assert computer.state() == start
+    computer.step(StepSize.INSTRUCTION)
+    assert computer.state() == _fast_after(start, 1)
+    assert computer.state().output == (ord("3"),)
 
 
 def test_resume_mid_instruction_finishes_that_instruction(

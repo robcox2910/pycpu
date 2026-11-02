@@ -100,9 +100,9 @@ register** (`cpu.ir`, which holds the instruction being worked on) start to copy
 fetched word: each bit's flip-flop has a *slave* latch, the second half that opens when
 `clk` rises (see [The Clock](the-clock.md)). After 20 tiny steps, nothing that
 `state()` reports has changed yet, because the instruction register is not part of the
-saved state and the gates that hold `pc` have not had their turn yet. Finishing the beat moved `pc` from 3 to 4.
-Rewinding put everything back, and the program still printed `321`, exactly as if we
-had never paused.
+saved state and the gates that hold `pc` have not had their turn yet. Finishing the
+beat moved `pc` from 3 to 4. Rewinding put everything back, and the program still
+printed `321`, exactly as if we had never paused.
 
 ## How It Works
 
@@ -165,16 +165,23 @@ boundary, because it has nowhere to keep "half an instruction". So `resume()` fi
 finishes the current instruction on the gate engine, then reads its state and loads it
 into the fast engine with `load_state`, and the program runs on fast. If you paused at
 a boundary and took no steps, there is nothing to finish, and the state is copied back
-as it is. Because the two engines are proved to agree after every instruction
+as it is. Because the two engines are checked to agree after every instruction
 ([Two Engines](two-engines.md)), finishing an instruction on the gates gives the same
 state the fast engine would have reached: no drift (a tiny difference that builds up
 over time). `tests/test_computer.py` checks this by pausing at random places, taking a
-random number of gate steps, resuming, and comparing the final state with a straight
-fast run.
+random number of gate steps, sometimes rewinding and stepping again, resuming, and
+comparing the final state with a straight fast run.
 
 **Who is in charge?** `state()` reads whichever engine is live: the gate engine while
-paused, the fast engine otherwise. Calling `run` while paused, or `step` or `rewind`
-while running, raises a `RuntimeError`, because each only makes sense for one engine.
+paused, the fast engine otherwise. Some calls only make sense for one engine, so the
+computer refuses the others: Python stops with an error called a `RuntimeError` (an
+error that means "you can't do that right now"). It refuses:
+
+- `run` while paused, because the fast engine is not live;
+- `step`, `rewind` or `resume` while running, because there is nothing paused to step,
+  rewind or resume;
+- `pause` while already paused, because pausing again would copy the fast engine's old
+  state over the gates and throw away the steps you have taken.
 
 ## Why Does This Matter?
 
@@ -188,9 +195,10 @@ whole program over.
 Programmers use exactly this every day. A **debugger** is a tool that lets you pause a
 program, step through it one line at a time and look at its values; every big
 programming tool has one. Some debuggers can even run backwards, like the `rr` tool on
-Linux, which records a program as it runs so that you can rewind to the moment a bug
-happened. Chip designers do the same with their slow gate-level simulators: run fast to
-just before the problem, then switch to the slow, detailed view.
+Linux (an operating system, the program that runs a computer's other programs), which
+records a program as it runs so that you can rewind to the moment a bug happened. Chip
+designers do the same with their slow gate-level simulators: run fast to just before the
+problem, then switch to the slow, detailed view.
 
 ## What's Next
 
