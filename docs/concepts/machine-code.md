@@ -20,7 +20,7 @@ knows where to look first.
 |-----------------------|----------|
 | The codebook | `src/pycpu/isa.py` (ISA means *instruction set architecture*: the list of orders) |
 | The first box, what to do | The **opcode**: bits 15 to 12, an `Opcode` |
-| The other boxes | Fields such as `rd`, `ra`, `rb`, `fn` and the immediate `imm` |
+| The other boxes | Fields such as `rd`, `ra`, `rb`, `fn` and `imm`, the **immediate**: a number written right inside the instruction, such as the 3 in "put 3 in `r1`" |
 | Writing a card | `encode(opcode, rd=..., ra=...)` gives the 16-bit word |
 | Reading a card | `decode(word)` gives an `Instruction` with the fields |
 | Four lamps on the machine | The **flags**: `zero`, `negative`, `carry`, `overflow` |
@@ -113,6 +113,17 @@ simply `HALT` with the code 255. `decode` never fails; it is `encode` that
 refuses to write a value which does not fit a box, such as `LI` with 256 (the
 box is only 8 bits, so it tops out at 255).
 
+**How `decode` takes a word apart.** There is no magic: it is shifting and masking,
+which are the same wires-and-gates ideas from the ALU page. To get `rd` out of
+`0x0650`, shift the word right 9 places so that bits 11-9 land at the bottom, then
+keep only the bottom three bits (a *mask* is a pattern of 1s that lets only those
+bits through, here `0b111`): `0x0650 >> 9` is `0b11`, and `0b11 & 0b111` is 3. The
+opcode is `word >> 12`. In the same way `ra` is `(word >> 6) & 0b111` and `rb` is
+`(word >> 3) & 0b111`. Signed immediates need one more step, because the bits
+alone cannot say whether `FF` means 255 or -1: if the top bit of the box is 1,
+`decode` subtracts the box's size (256 for an 8-bit box) to get the negative
+number.
+
 **Numbers that can be negative.** An *immediate* is a number written right inside
 the instruction. Some immediates are signed: `ADDI r1, -1` needs a -1. Remember
 [two's complement](negative-numbers.md): in eight bits, -1 is `11111111`. That is
@@ -122,8 +133,8 @@ just before an address.
 
 **The branch.** The card `BR NE, -2` (`0x83FE`) means "if the answer last time
 was not zero, add -2 to the PC". Remember the PC already points to the *next*
-card when this one runs, so from card 2 the PC is 3, and 3 - 2 = 1. That is why
-the countdown goes back to card 1.
+card when this one runs. We count cards from 0, so this is card 2 and the PC is
+3, and 3 - 2 = 1. That is why the countdown goes back to card 1.
 
 **The four lamps.** The ALU page showed four flags. Some instructions set them
 (`ALU`, `CMP` and `ADDI`) and the rest leave them as they were. `CMP` is a

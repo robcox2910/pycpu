@@ -11,7 +11,7 @@ works out logic directly, and why it never feeds the gate view.
 computer built on it, following the definitions in `isa.py`.
 """
 
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import replace
 
 from pycpu.arithmetic import AluOp
@@ -20,6 +20,7 @@ from pycpu.isa import (
     WORD_MASK,
     Condition,
     Fault,
+    Instruction,
     Opcode,
     condition_holds,
     decode,
@@ -34,7 +35,7 @@ BYTE_BITS = 8
 def alu_model(a: int, b: int, op: AluOp) -> tuple[int, Flags]:
     """Work out what the gate ALU would give, using plain integers.
 
-    Returns the 16-bit result and the four flags, matching `pycpu.arithmetic.alu`
+    Return the 16-bit result and the four flags, matching `pycpu.arithmetic.alu`
     bit for bit: carry is the carry out for `ADD`, 1 for `SUB` when nothing was
     borrowed, the bit shifted out for `SHL` and `SHR`, and 0 for the logic
     operations and `PASS_B`; overflow is 1 only for a signed `ADD` or `SUB` that
@@ -163,7 +164,7 @@ class FastMachine:
         self._halted = True
         self._halt_code = Fault.BAD_ADDRESS
 
-    def step(self) -> bool:  # noqa: C901, PLR0912, PLR0915
+    def step(self) -> bool:
         """Fetch and obey one instruction; return False if the machine had already halted."""
         if self._halted:
             return False
@@ -173,74 +174,132 @@ class FastMachine:
             return True
         instruction = decode(self._memory[pc])
         self._pc = (pc + 1) & WORD_MASK
-        regs, memory = self._registers, self._memory
-        rd, ra, rb, imm = instruction.rd, instruction.ra, instruction.rb, instruction.imm
-        match instruction.opcode:
-            case Opcode.ALU:
-                result, self._flags = alu_model(regs[ra], regs[rb], AluOp(instruction.fn))
-                regs[rd] = result
-            case Opcode.CMP:
-                _, self._flags = alu_model(regs[ra], regs[rb], AluOp.SUB)
-            case Opcode.LI:
-                regs[rd] = imm
-            case Opcode.LHI:
-                regs[rd] = (imm << BYTE_BITS) | (regs[rd] & BYTE_MASK)
-            case Opcode.LOAD:
-                address = (regs[ra] + imm) & WORD_MASK
-                if address >= self.words:
-                    self._fault()
-                else:
-                    regs[rd] = memory[address]
-            case Opcode.STORE:
-                address = (regs[ra] + imm) & WORD_MASK
-                if address < self.words:
-                    memory[address] = regs[rd]
-                elif address == OUTPUT_PORT:
-                    self._output.append(regs[rd])
-                else:
-                    self._fault()
-            case Opcode.JMP:
-                self._pc = imm
-            case Opcode.CALL:
-                address = (self._sp - 1) & WORD_MASK
-                if address >= self.words:
-                    self._fault()
-                else:
-                    memory[address] = self._pc
-                    self._sp = address
-                    self._pc = imm
-            case Opcode.BR:
-                if condition_holds(Condition(rd), self._flags):  # rd holds the condition
-                    self._pc = (self._pc + imm) & WORD_MASK
-            case Opcode.RET:
-                if self._sp >= self.words:
-                    self._fault()
-                else:
-                    self._pc = memory[self._sp]
-                    self._sp = (self._sp + 1) & WORD_MASK
-            case Opcode.PUSH:
-                address = (self._sp - 1) & WORD_MASK
-                if address >= self.words:
-                    self._fault()
-                else:
-                    memory[address] = regs[rd]
-                    self._sp = address
-            case Opcode.POP:
-                if self._sp >= self.words:
-                    self._fault()
-                else:
-                    regs[rd] = memory[self._sp]
-                    self._sp = (self._sp + 1) & WORD_MASK
-            case Opcode.GETSP:
-                regs[rd] = self._sp
-            case Opcode.SETSP:
-                self._sp = regs[rd]
-            case Opcode.ADDI:
-                regs[rd], self._flags = alu_model(regs[rd], imm & WORD_MASK, AluOp.ADD)
-            case Opcode.HALT:
-                self._halted = True
-                self._halt_code = imm
+        self._handlers()[instruction.opcode](instruction)
         return True
+
+    def _handlers(self) -> dict[Opcode, Callable[[Instruction], None]]:
+        """Map each opcode to the method that obeys it."""
+        return {
+            Opcode.ALU: self._alu,
+            Opcode.CMP: self._cmp,
+            Opcode.LI: self._li,
+            Opcode.LHI: self._lhi,
+            Opcode.LOAD: self._load,
+            Opcode.STORE: self._store,
+            Opcode.JMP: self._jmp,
+            Opcode.CALL: self._call,
+            Opcode.BR: self._br,
+            Opcode.RET: self._ret,
+            Opcode.PUSH: self._push,
+            Opcode.POP: self._pop,
+            Opcode.GETSP: self._getsp,
+            Opcode.SETSP: self._setsp,
+            Opcode.ADDI: self._addi,
+            Opcode.HALT: self._halt,
+        }
+
+    def _alu(self, i: Instruction) -> None:
+        """Obey `ALU`: `rd = ra <fn> rb`, setting the flags."""
+        result, self._flags = alu_model(self._registers[i.ra], self._registers[i.rb], AluOp(i.fn))
+        self._registers[i.rd] = result
+
+    def _cmp(self, i: Instruction) -> None:
+        """Obey `CMP`: set the flags from `ra - rb` and keep no answer."""
+        _, self._flags = alu_model(self._registers[i.ra], self._registers[i.rb], AluOp.SUB)
+
+    def _li(self, i: Instruction) -> None:
+        """Obey `LI`: put the immediate in `rd`."""
+        self._registers[i.rd] = i.imm
+
+    def _lhi(self, i: Instruction) -> None:
+        """Obey `LHI`: put the immediate in the high byte of `rd`, keeping the low byte."""
+        self._registers[i.rd] = (i.imm << BYTE_BITS) | (self._registers[i.rd] & BYTE_MASK)
+
+    def _load(self, i: Instruction) -> None:
+        """Obey `LOAD`: `rd = mem[ra + off6]`, a fault outside RAM."""
+        address = (self._registers[i.ra] + i.imm) & WORD_MASK
+        if address >= self.words:
+            self._fault()
+        else:
+            self._registers[i.rd] = self._memory[address]
+
+    def _store(self, i: Instruction) -> None:
+        """Obey `STORE`: `mem[ra + off6] = rd`, or send it to the output port."""
+        address = (self._registers[i.ra] + i.imm) & WORD_MASK
+        if address < self.words:
+            self._memory[address] = self._registers[i.rd]
+        elif address == OUTPUT_PORT:
+            self._output.append(self._registers[i.rd])
+        else:
+            self._fault()
+
+    def _jmp(self, i: Instruction) -> None:
+        """Obey `JMP`: go to the address (a bad one faults at the next fetch)."""
+        self._pc = i.imm
+
+    def _push_word(self, value: int) -> bool:
+        """Push `value` on the stack; return False after a fault, with nothing changed."""
+        address = (self._sp - 1) & WORD_MASK
+        if address >= self.words:
+            self._fault()
+            return False
+        self._memory[address] = value
+        self._sp = address
+        return True
+
+    def _call(self, i: Instruction) -> None:
+        """Obey `CALL`: push the return address, then jump."""
+        if self._push_word(self._pc):
+            self._pc = i.imm
+
+    def _br(self, i: Instruction) -> None:
+        """Obey `BR`: jump by the offset if the condition (held in `rd`) is true."""
+        if condition_holds(Condition(i.rd), self._flags):
+            self._pc = (self._pc + i.imm) & WORD_MASK
+
+    def _pop_word(self) -> int | None:
+        """Pop a word off the stack; return None after a fault, with nothing changed."""
+        if self._sp >= self.words:
+            self._fault()
+            return None
+        value = self._memory[self._sp]
+        self._sp = (self._sp + 1) & WORD_MASK
+        return value
+
+    def _ret(self, _i: Instruction) -> None:
+        """Obey `RET`: pop the return address into `pc`."""
+        value = self._pop_word()
+        if value is not None:
+            self._pc = value
+
+    def _push(self, i: Instruction) -> None:
+        """Obey `PUSH`: put `rd` on the stack."""
+        self._push_word(self._registers[i.rd])
+
+    def _pop(self, i: Instruction) -> None:
+        """Obey `POP`: take the top of the stack into `rd`."""
+        value = self._pop_word()
+        if value is not None:
+            self._registers[i.rd] = value
+
+    def _getsp(self, i: Instruction) -> None:
+        """Obey `GETSP`: copy the stack pointer into `rd`."""
+        self._registers[i.rd] = self._sp
+
+    def _setsp(self, i: Instruction) -> None:
+        """Obey `SETSP`: copy `rd` into the stack pointer."""
+        self._sp = self._registers[i.rd]
+
+    def _addi(self, i: Instruction) -> None:
+        """Obey `ADDI`: add the signed immediate to `rd`, setting the flags."""
+        self._registers[i.rd], self._flags = alu_model(
+            self._registers[i.rd], i.imm & WORD_MASK, AluOp.ADD
+        )
+
+    def _halt(self, i: Instruction) -> None:
+        """Obey `HALT`: stop with the immediate as the halt code."""
+        self._halted = True
+        self._halt_code = i.imm
 
 
 def _validate(state: MachineState, words: int) -> None:

@@ -24,6 +24,16 @@ words = st.integers(min_value=0, max_value=WORD_MAX)
 ops = st.sampled_from(list(AluOp))
 COUNTDOWN = [0x2203, 0xE2FF, 0x83FE, 0xF000]
 COUNTDOWN_STEPS = 8
+TEN = 10
+LI_HI_RESULT = 0x3412
+MIN_NEGATIVE = 0x8000
+STORED_VALUE = 99
+STORED_ADDRESS = 37
+AFTER_LOAD_FAULT_PC = 3
+BAD_JUMP = 4000
+CALL_PROGRAM_STEPS = 5
+PUSHED_VALUE = 42
+FULL_WORDS = 4096
 
 
 class AluRig:
@@ -108,7 +118,7 @@ def test_the_countdown_counts_down_and_halts() -> None:
 def test_run_stops_after_max_steps() -> None:
     """A program that never halts is stopped by the step limit."""
     machine = make([encode(Opcode.JMP, imm=0)])
-    assert machine.run(10) == 10  # noqa: PLR2004
+    assert machine.run(10) == TEN
     assert not machine.state().halted
 
 
@@ -118,7 +128,7 @@ def test_li_then_lhi_builds_a_sixteen_bit_number() -> None:
         [encode(Opcode.LI, rd=1, imm=0x12), encode(Opcode.LHI, rd=1, imm=0x34), encode(Opcode.HALT)]
     )
     machine.run(10)
-    assert machine.state().registers[1] == 0x3412  # noqa: PLR2004
+    assert machine.state().registers[1] == LI_HI_RESULT
 
 
 def test_addi_on_the_largest_signed_number_overflows() -> None:
@@ -132,7 +142,7 @@ def test_addi_on_the_largest_signed_number_overflows() -> None:
     )
     machine.run(3)
     state = machine.state()
-    assert state.registers[1] == 0x8000  # noqa: PLR2004
+    assert state.registers[1] == MIN_NEGATIVE
     assert state.flags == Flags(zero=0, negative=1, carry=0, overflow=1)
 
 
@@ -194,8 +204,8 @@ def test_store_then_load_round_trips_through_memory() -> None:
     )
     machine.run(4)
     state = machine.state()
-    assert state.memory[37] == 99  # noqa: PLR2004
-    assert state.registers[3] == 99  # noqa: PLR2004
+    assert state.memory[STORED_ADDRESS] == STORED_VALUE
+    assert state.registers[3] == STORED_VALUE
 
 
 def test_store_to_the_output_port_adds_to_output_and_leaves_memory_alone() -> None:
@@ -231,7 +241,7 @@ def test_load_from_the_output_port_is_a_fault() -> None:
     state = machine.state()
     assert (state.halted, state.halt_code) == (True, Fault.BAD_ADDRESS)
     assert state.registers[2] == 0
-    assert state.pc == 3  # noqa: PLR2004
+    assert state.pc == AFTER_LOAD_FAULT_PC
 
 
 def _faulted(machine: FastMachine, steps: int) -> tuple[MachineState, MachineState]:
@@ -253,7 +263,7 @@ def test_a_jump_outside_memory_faults_at_the_next_fetch() -> None:
     """After `jmp 4000` the fetch fails, and pc stays at the bad address."""
     machine = make([encode(Opcode.JMP, imm=4000)])
     before, after = _faulted(machine, 2)
-    assert before.pc == 4000  # noqa: PLR2004
+    assert before.pc == BAD_JUMP
     _same_but_halted(before, after, pc=4000)
 
 
@@ -318,7 +328,7 @@ def test_call_and_ret_come_back_with_the_stack_restored() -> None:
         encode(Opcode.RET),
     ]
     machine = make(program)
-    assert machine.run(100) == 5  # noqa: PLR2004
+    assert machine.run(100) == CALL_PROGRAM_STEPS
     state = machine.state()
     assert (state.registers[1], state.sp, state.halted) == (14, SMALL, True)
 
@@ -337,7 +347,7 @@ def test_push_and_pop_move_values_and_the_stack_pointer() -> None:
     )
     machine.run(3)
     state = machine.state()
-    assert state.memory[SMALL - 1] == 42  # noqa: PLR2004
+    assert state.memory[SMALL - 1] == PUSHED_VALUE
     assert state.registers[2] == SMALL - 1
     machine.run(3)
     state = machine.state()
@@ -405,7 +415,7 @@ def test_load_state_rejects_a_state_that_does_not_fit(bad: dict[str, object]) ->
 
 def test_the_default_machine_has_four_thousand_words() -> None:
     """With no size given, the machine has the full RAM size."""
-    assert FastMachine().words == 4096  # noqa: PLR2004
+    assert FastMachine().words == FULL_WORDS
 
 
 @pytest.mark.parametrize("size", [0, -1, 0xFFFF])

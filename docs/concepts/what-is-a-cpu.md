@@ -3,9 +3,9 @@
 ## A Cook and a Stack of Recipe Cards
 
 Picture a cook in a kitchen. On the wall is a stack of recipe cards, numbered
-1, 2, 3 and so on, and each card holds exactly one small order: "crack two eggs
+0, 1, 2 and so on (computers like to start counting at 0), and each card holds exactly one small order: "crack two eggs
 into the blue bowl", "add the flour to the blue bowl", "if the bowl is empty, go
-back to card 2". The cook does not understand cooking in general. All the cook
+back to card 1". The cook does not understand cooking in general. All the cook
 can do is this: put a finger on a card, read it, obey it, and move the finger to
 the next card. Then again. And again. Out of that one dull habit, a whole dinner
 appears.
@@ -116,7 +116,7 @@ adder that adds 1, the same counter as on the Registers page. Memory is the
 
 The values that make up the computer at one moment, which are `pc`, `sp`, the
 registers, the flags, the whole memory and whether it has halted, are collected in one
-frozen record, `MachineState`, in `src/pycpu/state.py`. `power_on` makes the
+record that can never be changed once made (programmers call that *frozen*), `MachineState`, in `src/pycpu/state.py`. `power_on` makes the
 state a computer has when you switch it on: everything 0, except that `sp` starts
 at the end of memory, for reasons that the stack page explains.
 

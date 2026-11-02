@@ -20,6 +20,7 @@ REFERENCE_PAGE = ROOT / "docs" / "reference" / "instruction-set.md"
 WORD_MAX = 0xFFFF
 SIGN = 0x8000
 REGISTER_COUNT = 8
+LAST_OPCODE = 15
 words = st.integers(min_value=0, max_value=WORD_MAX)
 registers = st.integers(min_value=0, max_value=REGISTER_COUNT - 1)
 
@@ -87,7 +88,7 @@ def test_the_opcodes_are_numbered_zero_to_fifteen() -> None:
     """The opcode numbers are the ones in the table, in order."""
     assert [int(op) for op in Opcode] == list(range(16))
     assert Opcode.ALU == 0
-    assert Opcode.HALT == 15  # noqa: PLR2004
+    assert Opcode.HALT == LAST_OPCODE
 
 
 @given(
@@ -180,3 +181,40 @@ def test_conditions_agree_with_python_comparisons_after_a_subtraction(a: int, b:
     }
     for condition in Condition:
         assert condition_holds(condition, flags) == expected[condition], condition.name
+
+
+def _assemble_example(text: str) -> int:
+    """Turn a reference-page example like `br ne, -2` into a word, using `encode`."""
+    name, _, rest = text.partition(" ")
+    operands = [part.strip() for part in rest.split(",") if part.strip()]
+    if name in {"add", "sub", "and", "or", "xor"}:
+        rd, ra, rb = (int(o.removeprefix("r")) for o in operands)
+        return encode(Opcode.ALU, rd=rd, ra=ra, rb=rb, fn=AluOp[name.upper()])
+    opcode = Opcode[name.upper()]
+    fields: dict[str, int] = {}
+    registers_read = [int(o.removeprefix("r")) for o in operands if re.fullmatch(r"r\d", o)]
+    if opcode is Opcode.CMP:
+        fields = {"ra": registers_read[0], "rb": registers_read[1]}
+    elif registers_read:
+        fields = {"rd": registers_read[0]}
+    memory_operand = [o for o in operands if o.startswith("[")]
+    if memory_operand:
+        base, _, offset = memory_operand[0].strip("[]").partition(" ")
+        fields["ra"] = int(base.removeprefix("r"))
+        fields["imm"] = int(offset.replace(" ", "") or 0)
+    elif opcode is Opcode.BR:
+        fields = {"rd": Condition[operands[0].upper()], "imm": int(operands[1])}
+    elif operands and not registers_read:
+        fields["imm"] = int(operands[0], 0)
+    elif len(operands) > 1 and opcode is not Opcode.CMP:
+        fields["imm"] = int(operands[1], 0)
+    return encode(opcode, **fields)
+
+
+def test_every_worked_example_on_the_reference_page_matches_encode() -> None:
+    """Each `instruction` = `0xWORD` example in the table is what `encode` really gives."""
+    text = REFERENCE_PAGE.read_text(encoding="utf-8")
+    examples = re.findall(r"`([a-z][^`]*)` = `0x([0-9A-Fa-f]{4})`", text)
+    assert len(examples) == len(Opcode)
+    for source, word in examples:
+        assert _assemble_example(source) == int(word, 16), source
