@@ -26,7 +26,7 @@ from pycpu.isa import (
     decode,
 )
 from pycpu.memory import RAM_WORDS, WORD_BITS
-from pycpu.state import BYTE_MASK, REGISTER_COUNT, Flags, MachineState, power_on
+from pycpu.state import BYTE_MASK, HALT_CODE_MAX, REGISTER_COUNT, Flags, MachineState, power_on
 
 SIGN_BIT = 1 << (WORD_BITS - 1)
 BYTE_BITS = 8
@@ -107,8 +107,8 @@ class FastMachine:
 
         Raises:
             ValueError: If the memory is the wrong length, or a register, `pc`,
-                `sp`, `halt_code` or output word is outside 0-65535, or a flag is
-                not 0 or 1. The machine is left unchanged.
+                `sp` or output word is outside 0-65535, or `halt_code` is outside
+                0-255, or a flag is not 0 or 1. The machine is left unchanged.
 
         """
         validate_state(state, self.words)
@@ -313,7 +313,6 @@ def validate_state(state: MachineState, words: int) -> None:
     numbers = {
         "pc": [state.pc],
         "sp": [state.sp],
-        "halt code": [state.halt_code],
         "register": state.registers,
         "memory word": state.memory,
         "output word": state.output,
@@ -323,6 +322,9 @@ def validate_state(state: MachineState, words: int) -> None:
             if not 0 <= value <= WORD_MASK:
                 msg = f"{name} {value} is not a 16-bit number"
                 raise ValueError(msg)
+    if not 0 <= state.halt_code <= HALT_CODE_MAX:
+        msg = f"halt code {state.halt_code} must be from 0 to {HALT_CODE_MAX}"
+        raise ValueError(msg)
     for name, flag in zip(Flags._fields, state.flags, strict=True):
         if flag not in (0, 1):
             msg = f"flag {name} must be 0 or 1, not {flag}"

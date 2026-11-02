@@ -15,13 +15,15 @@ from pycpu.assembler import assemble
 from pycpu.cpu import GateMachine, MicroStep, Phase
 from pycpu.fast import FastMachine
 from pycpu.isa import Condition, Fault, Opcode, encode
-from pycpu.state import MachineState, power_on
+from pycpu.state import Flags, MachineState, power_on
 
 ADDRESS_BITS = 6
 SMALL = 1 << ADDRESS_BITS
 MAX_STEPS = 200
 COUNTDOWN = [0x2203, 0xE2FF, 0x83FE, 0xF000]
 EDGES_PER_CYCLE = [("write", 1), ("write", 0), ("clk", 1), ("clk", 0)]
+MID_PROGRAM_STEPS = 5
+MID_CYCLE_GATES = 20
 LOADED_REGISTERS = (1, 2, 3, 0x1234, 0xFFFF, 0x8000, 7, 42)
 
 
@@ -210,17 +212,27 @@ def test_pc_running_off_the_end_faults_at_fetch(machine: GateMachine) -> None:
 
 
 def test_loading_a_state_twice_leaves_every_wire_the_same(machine: GateMachine) -> None:
-    """A used machine and a fresh one given the same state agree on every wire."""
+    """A machine stopped mid-instruction and a fresh one, given one state, agree on every wire."""
     start = replace(program_state(COUNTDOWN), registers=LOADED_REGISTERS, sp=5)
     machine.load_state(program_state(PROGRAMS["hello"]))
-    machine.run(MAX_STEPS)
-    machine.step_cycle()
+    machine.run(MID_PROGRAM_STEPS)
+    edges_seen: list[tuple[str, int]] = []
+    while edges_seen != [("write", 1), ("write", 0), ("clk", 1)]:
+        step = machine.micro_step()
+        if step.kind == "edge":
+            edges_seen.append((step.wire, step.value))
+    for _ in range(MID_CYCLE_GATES):
+        machine.micro_step()
+    assert not machine.state().halted
+    assert not machine.at_boundary
+    assert machine.simulator.get(machine._clock.clk) == 1  # caught with clk high
     machine.load_state(start)
     fresh = GateMachine(address_bits=ADDRESS_BITS)
     fresh.load_state(start)
     wires = range(machine.circuit.wire_count)
     assert [machine.simulator.get(w) for w in wires] == [fresh.simulator.get(w) for w in wires]
     assert fresh.state() == machine.state() == start
+    assert machine.at_boundary
 
 
 def test_micro_steps_end_where_step_ends(machine: GateMachine) -> None:
@@ -289,22 +301,24 @@ def test_a_halted_machine_does_nothing(machine: GateMachine) -> None:
     assert machine.run(10) == 0
 
 
-def test_stack_opcodes_do_not_crash(machine: GateMachine) -> None:
-    """Until the stack arrives, PUSH, POP, CALL and RET run without breaking anything."""
+def test_stack_opcodes_do_nothing_yet(machine: GateMachine) -> None:
+    """Until the stack arrives, PUSH, POP, CALL and RET change nothing but pc."""
     program = [
         encode(Opcode.PUSH, rd=1),
         encode(Opcode.POP, rd=2),
         encode(Opcode.CALL, imm=5),
         encode(Opcode.RET),
-        encode(Opcode.HALT),
     ]
-    machine.load_state(program_state(program))
-    machine.run(MAX_STEPS)
-    assert machine.state().halted
+    start = replace(
+        program_state(program), registers=LOADED_REGISTERS, flags=Flags(1, 0, 1, 0), sp=SMALL // 2
+    )
+    machine.load_state(start)
+    assert machine.run(len(program)) == len(program)
+    assert machine.state() == replace(start, pc=len(program))
 
 
 def test_load_state_refuses_a_state_that_does_not_fit(machine: GateMachine) -> None:
-    """A wrong-sized memory, or a halt code wider than 8 bits, is a ValueError."""
+    """A wrong-sized memory, or a halt code above 255, is a ValueError, as on the fast engine."""
     with pytest.raises(ValueError, match="memory"):
         machine.load_state(power_on(SMALL + 1))
     with pytest.raises(ValueError, match="halt code"):

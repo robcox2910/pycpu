@@ -138,34 +138,51 @@ hundred. Almost all of a computer is memory.
 
 The wires and choosers that carry numbers between those parts are called the
 **datapath**: the roads of the kitchen. Here it is. Every box is a part (a scope) of
-that name inside `cpu`, and every arrow is a bus of real wires. The ALU's second input
-`b` first passes a small chooser part, `operand`, described in step 3.
+that name inside `cpu`, and every arrow is a bus of real wires.
 
 ```
-   ┌──────┐   pc + 1   ┌───────────┐
-   │  pc  ├───────────►│ pc_plus_1 ├──┐
-   │      │            └───────────┘  │     ┌─────────┐
-   │      ├───────────►┌─────────────┐├────►│ next_pc ├───► back into pc
-   │      │  pc + off9 │branch_target├┘     └─────────┘
-   └──┬───┘            └─────────────┘
-      │ fetch: pc
-      ▼                                 ┌─────────────┐
- ┌─────────────┐       address          │     RAM     │ ram.out
- │ address_mux ├───────────────────────►│ (part ram)  ├────────┬────► ir  (fetch)
- └─────▲───────┘                        └──────▲──────┘        │
-       │ execute: ALU answer                   │ data          │ LOAD
-       │                                       │               ▼
- ┌─────┴─────┐ a  ┌──────────────┐  b         │        ┌────────────┐
- │    alu    │◄───┤  registers   ├────────────┘        │ write_back │
- │           │◄───┤  r0 ... r7   │  (STORE data)       │ (choosers) │
- └──┬─────┬──┘ b  └──────▲───────┘                     └─────┬──────┘
-    │     │ answer       │ data                              │
-    ▼     └──────────────┼──────────────────────────────────►┤
-  flags                  └───────────────────────────────────┘
+                ┌────────┐        ┌────────┐  one lit line per opcode:
+   ram.out ───► │   ir   ├───────►│ decode ├──► steers every chooser below
+   (fetch)      └───┬────┘        └────────┘    (control, operand, next_pc,
+                    │ fields: rd ra rb fn imm    write_back, fault, port)
+                    ▼
+ ┌──────┐  pc + 1  ┌───────────────┐
+ │  pc  ├─────────►│ pc_plus_1     ├──┐   ┌─────────┐
+ │      ├─────────►│ branch_target ├──┴──►│ next_pc ├──► new pc
+ └──┬───┘ pc+off9  └───────────────┘      └─────────┘
+    │ fetch: pc
+    ▼                                 ┌────────────┐
+ ┌─────────────┐   address            │    RAM     │  ram.out
+ │ address_mux ├─────────────────────►│ (part ram) ├───► ir (fetch), write_back (LOAD)
+ └─────▲───────┘                      └─────▲──────┘
+       │ execute: ALU answer                │ data ◄── window b (STORE)
+       │
+       │      new rd ┌───────────────────────────────────────┐
+       │             ▼                                       │
+ ┌─────┴─────┐  a  ┌──────────────┐ window b                 │
+ │    alu    │◄────┤  registers   ├────┐                     │
+ │           │     │  r0 ... r7   │    │                     │
+ │           │     └──────────────┘    ▼                     │
+ │           │  b  ┌──────────────────────────┐              │
+ │           │◄────┤ operand: picks window b, │              │
+ │           │     │ imm8 or off6             │              │
+ └──┬─────┬──┘     └──────────────────────────┘              │
+    │     │ answer ┌──────────────────────────────────┐      │
+    │     └───────►│ write_back: picks the answer,    ├──────┘
+    │              │ ram.out, LI, LHI or sp           │
+    │ lamps        └──────────────────────────────────┘
+    ▼
+ ┌───────┐
+ │ flags │ zero, negative, carry, overflow
+ └───────┘
 ```
 
-`ir` feeds the `decode` part, which lights one line per opcode, and those lines steer
-every chooser in the picture.
+`ir` holds the instruction. Its fields are just wires (no gates), and its top four bits
+go into `decode`, which lights one line per opcode. Those lines steer every chooser in
+the picture. The ALU's input `a` is window `a`; its input `b` comes through the
+`operand` chooser, which picks window `b`, the 8-bit immediate or the 6-bit offset. The
+ALU's answer goes to `write_back` (and, on an execute beat, to the RAM's address), and
+its four lamps go to `flags`.
 
 **1. The fetch beat.** While `phase` is 0 (`Phase.FETCH`), the `address_mux` chooser
 sends `pc` to the RAM's address wires, so `ram.out` shows the word the finger points

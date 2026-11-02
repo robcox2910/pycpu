@@ -404,10 +404,11 @@ def test_load_state_round_trips() -> None:
         {"pc": -1},
         {"sp": 0x10000},
         {"halt_code": 0x10000},
+        {"halt_code": 0x100},
     ],
 )
 def test_load_state_rejects_a_state_that_does_not_fit(bad: dict[str, object]) -> None:
-    """A wrong-sized memory, an out-of-range register or a bad flag is a ValueError."""
+    """A wrong-sized memory, an out-of-range register, a halt code above 255 or a bad flag fails."""
     machine = FastMachine(SMALL)
     with pytest.raises(ValueError, match=r"memory|register|flag|pc|sp|halt"):
         machine.load_state(replace(power_on(SMALL), **bad))

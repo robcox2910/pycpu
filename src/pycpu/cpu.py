@@ -37,9 +37,9 @@ from pycpu.isa import (
 from pycpu.logic import and_, buffer_into, is_zero, mux_bus, not_, not_bus, or_, or_many
 from pycpu.memory import RAM_ADDRESS_BITS, WORD_BITS, Ram, Register, make_clock
 from pycpu.simulator import NOTHING_WAITING, Simulator
-from pycpu.state import Flags, MachineState, power_on
+from pycpu.state import HALT_CODE_MAX, Flags, MachineState, power_on
 
-HALT_CODE_BITS = 8
+HALT_CODE_BITS = HALT_CODE_MAX.bit_length()
 FIELD_BITS = 3
 FLAG_COUNT = len(Flags._fields)
 LAST_STAGE = 8  # the gates that ripple after `clk` falls: the end of a clock cycle
@@ -163,6 +163,8 @@ class GateMachine:
             msg = f"address_bits must be from 1 to {WORD_BITS - 1}, not {address_bits}"
             raise ValueError(msg)
         self.words = 1 << address_bits
+        # Registers whose input placeholders still wait for a driver (see `_feed`).
+        self._pending: dict[str, tuple[Bus, Wire]] = {}
         c = Circuit()
         self.circuit = c
         self._clock = make_clock(c)
@@ -188,9 +190,10 @@ class GateMachine:
 
         The registers come first, with placeholders on their inputs, because
         the logic that feeds them reads their own outputs. Every placeholder is
-        driven before this returns.
+        driven before this returns; a register still waiting in `_pending` is a
+        wiring mistake, caught here by name (the `Simulator` would only count
+        the undriven wires).
         """
-        self._pending: dict[str, tuple[Bus, Wire]] = {}
         self._phase = self._register(c, "phase", 1)
         self._ir = self._register(c, "ir", WORD_BITS, data=self._ram.out)
         self._pc = self._register(c, "pc", WORD_BITS)
@@ -204,6 +207,9 @@ class GateMachine:
         self._build_checks(c, w, address_bits)
         self._build_next_pc(c, w)
         self._build_write_back(c, w)
+        if self._pending:
+            msg = f"registers left with undriven inputs: {sorted(self._pending)}"
+            raise RuntimeError(msg)
         return w.address, w.bank.b, w.ram_write
 
     def _register(self, c: Circuit, name: str, width: int, data: Bus | None = None) -> Register:
@@ -353,15 +359,11 @@ class GateMachine:
         and `phase` are set to 0, so the next beat is a fetch.
 
         Raises:
-            ValueError: If the state does not fit this machine (as for the fast
-                engine), or its halt code does not fit in 8 bits. The machine is
-                left unchanged.
+            ValueError: If the state does not fit this machine, by the same rules
+                as the fast engine (`validate_state`). The machine is left unchanged.
 
         """
         validate_state(state, self.words)
-        if state.halt_code >= 1 << HALT_CODE_BITS:
-            msg = f"halt code {state.halt_code} does not fit in {HALT_CODE_BITS} bits"
-            raise ValueError(msg)
         sim = self.simulator
         sim.set(self._clock.clk, 0)
         sim.set(self._clock.write, 0)

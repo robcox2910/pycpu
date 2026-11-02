@@ -17,6 +17,7 @@ from pycpu.memory import RAM_WORDS
 
 REGISTER_COUNT = 8
 BYTE_MASK = 0xFF
+HALT_CODE_MAX = 0xFF  # HALT carries an 8-bit code, so every halt code fits in a byte
 
 
 class Flags(NamedTuple):
@@ -47,7 +48,8 @@ class MachineState:
         flags: The four flag lamps.
         memory: Every word of RAM.
         halted: True once the machine has stopped.
-        halt_code: Why it stopped: 0 for normal, otherwise a `Fault` or a program's own code.
+        halt_code: Why it stopped: 0 for normal, otherwise a `Fault` or a program's own
+            code; always 0 to `HALT_CODE_MAX` (255), because `HALT` carries 8 bits.
         output: Every word the program has sent to the output port, in order.
 
     """
