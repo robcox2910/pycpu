@@ -19,7 +19,7 @@ from typing import Concatenate
 from pycpu.circuit import Bus, Circuit, Wire
 
 
-def _in_own_scope[**P, R](
+def in_own_scope[**P, R](
     build: Callable[Concatenate[Circuit, P], R],
 ) -> Callable[Concatenate[Circuit, P], R]:
     """Make `build` file its gates in a scope named after itself.
@@ -48,7 +48,7 @@ def not_(c: Circuit, a: Wire) -> Wire:
     return c.nand(a, a)
 
 
-@_in_own_scope
+@in_own_scope
 def and_(c: Circuit, a: Wire, b: Wire) -> Wire:
     """Add an AND gate: the output is 1 only when both `a` and `b` are 1.
 
@@ -57,7 +57,7 @@ def and_(c: Circuit, a: Wire, b: Wire) -> Wire:
     return not_(c, c.nand(a, b))
 
 
-@_in_own_scope
+@in_own_scope
 def or_(c: Circuit, a: Wire, b: Wire) -> Wire:
     """Add an OR gate: the output is 1 when `a`, `b` or both are 1.
 
@@ -66,7 +66,7 @@ def or_(c: Circuit, a: Wire, b: Wire) -> Wire:
     return c.nand(not_(c, a), not_(c, b))
 
 
-@_in_own_scope
+@in_own_scope
 def xor(c: Circuit, a: Wire, b: Wire) -> Wire:
     """Add an XOR gate: the output is 1 when `a` and `b` differ.
 
@@ -77,7 +77,7 @@ def xor(c: Circuit, a: Wire, b: Wire) -> Wire:
     return c.nand(c.nand(a, n), c.nand(b, n))
 
 
-@_in_own_scope
+@in_own_scope
 def _choose(c: Circuit, not_select: Wire, select: Wire, when_0: Wire, when_1: Wire) -> Wire:
     """Pick between two wires when the lever and its opposite are already made.
 
@@ -86,7 +86,7 @@ def _choose(c: Circuit, not_select: Wire, select: Wire, when_0: Wire, when_1: Wi
     return c.nand(c.nand(when_0, not_select), c.nand(when_1, select))
 
 
-@_in_own_scope
+@in_own_scope
 def mux(c: Circuit, select: Wire, when_0: Wire, when_1: Wire) -> Wire:
     """Add a chooser: pass `when_0` if `select` is 0, or `when_1` if it is 1.
 
@@ -102,13 +102,13 @@ def _check_widths(a: Bus, b: Bus) -> None:
         raise ValueError(msg)
 
 
-@_in_own_scope
+@in_own_scope
 def not_bus(c: Circuit, a: Bus) -> Bus:
     """Add a NOT gate to every wire of `a` and return the flipped bus."""
     return tuple(not_(c, bit) for bit in a)
 
 
-@_in_own_scope
+@in_own_scope
 def and_bus(c: Circuit, a: Bus, b: Bus) -> Bus:
     """Add an AND gate for each pair of matching wires in `a` and `b`.
 
@@ -120,7 +120,7 @@ def and_bus(c: Circuit, a: Bus, b: Bus) -> Bus:
     return tuple(and_(c, x, y) for x, y in zip(a, b, strict=True))
 
 
-@_in_own_scope
+@in_own_scope
 def or_bus(c: Circuit, a: Bus, b: Bus) -> Bus:
     """Add an OR gate for each pair of matching wires in `a` and `b`.
 
@@ -132,7 +132,7 @@ def or_bus(c: Circuit, a: Bus, b: Bus) -> Bus:
     return tuple(or_(c, x, y) for x, y in zip(a, b, strict=True))
 
 
-@_in_own_scope
+@in_own_scope
 def xor_bus(c: Circuit, a: Bus, b: Bus) -> Bus:
     """Add an XOR gate for each pair of matching wires in `a` and `b`.
 
@@ -144,7 +144,7 @@ def xor_bus(c: Circuit, a: Bus, b: Bus) -> Bus:
     return tuple(xor(c, x, y) for x, y in zip(a, b, strict=True))
 
 
-@_in_own_scope
+@in_own_scope
 def mux_bus(c: Circuit, select: Wire, when_0: Bus, when_1: Bus) -> Bus:
     """Pass the whole bus `when_0` if `select` is 0, or `when_1` if it is 1.
 
@@ -159,7 +159,7 @@ def mux_bus(c: Circuit, select: Wire, when_0: Bus, when_1: Bus) -> Bus:
     return tuple(_choose(c, not_select, select, x, y) for x, y in zip(when_0, when_1, strict=True))
 
 
-@_in_own_scope
+@in_own_scope
 def or_many(c: Circuit, wires: Sequence[Wire]) -> Wire:
     """Return a wire that is 1 when any of `wires` is 1.
 
@@ -177,7 +177,7 @@ def or_many(c: Circuit, wires: Sequence[Wire]) -> Wire:
     return level[0]
 
 
-@_in_own_scope
+@in_own_scope
 def _and_many(c: Circuit, wires: Sequence[Wire]) -> Wire:
     """Return a wire that is 1 when all of `wires` are 1 (they must not be empty)."""
     level = list(wires)
@@ -189,13 +189,13 @@ def _and_many(c: Circuit, wires: Sequence[Wire]) -> Wire:
     return level[0]
 
 
-@_in_own_scope
+@in_own_scope
 def is_zero(c: Circuit, a: Bus) -> Wire:
     """Return a wire that is 1 when every bit of `a` is 0."""
     return not_(c, or_many(c, a))
 
 
-@_in_own_scope
+@in_own_scope
 def decoder(c: Circuit, select: Bus) -> Bus:
     """Turn a number into one lit line out of many.
 

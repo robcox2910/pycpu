@@ -49,3 +49,6 @@ nav:
       - Logic Gates from NAND: concepts/gates.md
       - Choosing and Decoding: concepts/choosing-and-decoding.md
       - Looking Inside a Circuit: concepts/looking-inside.md
+      - Adding: concepts/adding.md
+      - Negative Numbers: concepts/negative-numbers.md
+      - The ALU: concepts/the-alu.md

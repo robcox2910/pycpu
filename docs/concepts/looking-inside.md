@@ -157,5 +157,6 @@ a haystack.
 ## What's Next
 
 You can now find any gate by name and see the real value on its wires. Next
-we use those gates to do arithmetic: an adder that adds two numbers, and from
-it an ALU. (That page comes next in the climb.)
+we use those gates to do arithmetic, starting with how a computer adds two
+numbers by carrying the one, just like you do on paper. Read on to
+[Adding](adding.md).

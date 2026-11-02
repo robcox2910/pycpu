@@ -29,6 +29,9 @@ KEY_IDEAS: dict[str, list[str]] = {
     "concepts/gates.md": ["nand", "truth table", "xor"],
     "concepts/choosing-and-decoding.md": ["mux", "decoder"],
     "concepts/looking-inside.md": ["scope", "zoom", "real", "faking"],
+    "concepts/adding.md": ["half adder", "full adder", "carry", "ripple"],
+    "concepts/negative-numbers.md": ["two's complement", "overflow", "wrap", "subtract"],
+    "concepts/the-alu.md": ["alu", "flag", "zero", "carry", "overflow"],
 }
 
 
