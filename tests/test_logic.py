@@ -128,6 +128,17 @@ def test_mux_bus_picks_a_whole_word(a: int, b: int, s: int) -> None:
     assert sim.get_bus(out) == (b if s else a)
 
 
+def test_is_zero_of_zero_is_one() -> None:
+    """The number 0 has no bit on, so is_zero says 1."""
+    c = Circuit()
+    bus = c.bus_input("a", WORD)
+    out = is_zero(c, bus)
+    sim = Simulator(c)
+    sim.set_bus(bus, 0)
+    sim.settle()
+    assert sim.get(out) == 1
+
+
 @given(a=words)
 def test_is_zero_is_true_only_for_zero(a: int) -> None:
     """is_zero is 1 exactly when every bit is 0."""

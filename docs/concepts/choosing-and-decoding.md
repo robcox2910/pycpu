@@ -99,12 +99,12 @@ lever opens the `when_0` door. Whichever door is open lets its value
 through, and an OR joins the two doors' outputs back into one wire:
 
 ```
-   when_0 ──[AND]──┐
-              │    [OR]── output
-   when_1 ──[AND]──┘
-              │
-   select ────┴── (the NOT of select opens the top door,
-                   select itself opens the bottom door)
+   when_0 ───────[AND]──┐
+                  │     [OR]── output
+   when_1 ───────[AND]──┘
+                  │
+   door control:  top door  open when select = 0   (it gets NOT select)
+                  lower door open when select = 1  (it gets select)
 ```
 
 Written straight in NAND, the AND-then-OR collapses (two flips cancel out)
@@ -124,20 +124,21 @@ every bit its own three NANDs, so all sixteen bits follow the same lever.
 room 5 should light only when bit 0 is **1**, bit 1 is **0** and bit 2 is
 **1**. So we make the NOT of each bit, then for each room pick either the bit
 or its NOT and AND them all together. That is 3 NOTs plus an AND of three
-wires for each of the eight rooms, which is where the measured 35 gates come
-from (3 + 8 x 4). Only the lamp whose pattern matches can be on, so exactly
-one is.
+wires for each of the eight rooms. A NAND gate has only two inputs, so a
+three-wire AND is built as two 2-input ANDs in a row, and each of those costs
+2 NANDs (a NAND and a NOT): 2 x 2 = 4 NANDs. Hence the measured 35 gates
+(3 + 8 x 4). Only the lamp whose pattern matches can be on, so exactly one is.
+
+Here is just the wiring for lamp 5:
 
 ```
-   room bit 0 ─┬────────────────┐
-               └─[NOT]──┐       │
-   room bit 1 ─┬────────┼───┐   │
-               └─[NOT]──┼─┐ │   │
-   room bit 2 ─┬────────┼─┼─┼─┐ │
-               └─[NOT]  │ │ │ │ │
-                        ▼ ▼ ▼ ▼ ▼
-              lamp 5 = bit0 AND (NOT bit1) AND bit2
+   bit 0 ────────────────────┐
+                             [AND]──┐
+   bit 1 ──[NOT]── not bit 1 ┘      [AND]── lamp 5
+   bit 2 ───────────────────────────┘
 ```
+
+Lamp 5 is on only if bit 0 is 1, bit 1 is 0 (so its NOT is 1) and bit 2 is 1.
 
 ## Why Does This Matter?
 

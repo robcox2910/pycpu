@@ -140,13 +140,18 @@ is OR. (Mathematicians call this trick *De Morgan's law*.) Three gates.
 and `b` with `n`, and NAND those two results together. Four gates.
 
 ```
-   a ──┬───────────┐
-       │           [N]── p ──┐
-       ├──[N]─ n ─┬┘         │
-   b ──┼──┘       └┐         [N]── a XOR b
-       │           [N]── q ──┘
-       └───────────┘
+   inputs        gate      output wire
+
+   a, b     ──►  [N1]  ──►  n
+   a, n     ──►  [N2]  ──►  p
+   b, n     ──►  [N3]  ──►  q
+   p, q     ──►  [N4]  ──►  a XOR b
 ```
+
+How to read it: each row is one NAND gate. Its inputs are on the left and
+the wire it drives is on the right. Wire `n` comes out of the first gate and
+goes into the next two (it fans out), and `p` and `q` meet in the last gate.
+Use it to trace any input by hand.
 
 The same four gates, written as a list:
 
@@ -170,7 +175,7 @@ is nothing sensible to pair up, so it raises a `ValueError`.
 could chain the ORs in a line, but then a change at the far end would have to
 travel through every gate. Instead `or_many` arranges them as a tree, pairing
 wires up, then pairing the pairs, and so on. Seven wires need only three
-levels, so a change travels through three gates, not six. `is_zero` is
+levels, so a change travels through three OR levels, not six. `is_zero` is
 `or_many` followed by a NOT: a number is zero when *no* bit is on.
 
 ## Why Does This Matter?
