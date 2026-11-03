@@ -203,4 +203,5 @@ problem, then switch to the slow, detailed view.
 ## What's Next
 
 Now you can freeze the computer and creep through an instruction one gate at a time.
-Next, look at the gates themselves on [The Bench](the-bench.md).
+Next, do all of this with buttons, and watch the whole running computer, on
+[The Bench](the-bench.md).

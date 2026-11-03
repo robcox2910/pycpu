@@ -1,6 +1,5 @@
-"""Tests for the Bench: the local page for looking inside the ALU."""
+"""Tests for the Bench: the local page for watching the running computer."""
 
-import json
 from collections.abc import Coroutine
 from typing import Any, cast
 
@@ -11,16 +10,31 @@ from pyweb.testing import TestClient, TestResponse
 
 from pycpu import __main__ as entry
 from pycpu.__main__ import HOST, banner, open_bench
-from pycpu.bench.app import create_bench
+from pycpu.assembler import assemble
+from pycpu.bench.app import DEMO_PROGRAM, MAX_GATE_STEPS, MAX_RUN, create_bench
+from pycpu.computer import Computer, StepSize
+from pycpu.fast import FastMachine
+from pycpu.memory import RAM_ADDRESS_BITS
 
 OK = 200
 BAD_REQUEST = 400
 NOT_FOUND = 404
-MAX_POSITIVE = 0x7FFF
-SIGN_BIT_SET = 0x8000
-TOO_BIG = 70000
-FOUR = 4
-SCOPE = "alu.adder.bit0"
+SMALL = 6
+WORDS = 1 << SMALL
+WINDOW = 16
+BEHIND = 4
+REGISTER_COUNT = 8
+RUN_TO_ADD = 5  # li, lhi, li, call, li: then the add is next
+GATE_BATCH = 500
+ADD_ADDRESS = 8
+HUNDRED = 100
+SEVEN = 7
+NEAR_END = 62
+OUTSIDE = 100
+JUMP_OUTSIDE = 0x6000 | OUTSIDE  # jmp 100, a word the assembler would refuse to write
+JUMP_NEAR_END = 0x6000 | NEAR_END
+ALU_GATE = "cpu.alu.adder.bit0.full_adder.half_adder.and"
+TOO_MANY_WORDS = "\n".join([".word 0"] * (WORDS + 1))
 
 
 def _run[T](job: Coroutine[Any, Any, T]) -> T:
@@ -33,133 +47,324 @@ def _json(response: TestResponse) -> dict[str, Any]:
     return cast("dict[str, Any]", response.json())
 
 
-def _output_wires(client: TestClient, path: str) -> list[int]:
-    """Collect every gate output under a scope, walking all the scopes inside it."""
+class Bench:
+    """A small Bench (64 words of memory) with plain, waiting-free helpers for each route."""
 
-    async def walk(where: str) -> list[int]:
-        """Read one scope's gates, then each child scope's gates."""
-        view = _json(await client.get("/api/view", query={"path": where}))
+    def __init__(self) -> None:
+        """Build the Bench and a pretend browser pointed at it."""
+        self.client = TestClient(create_bench(address_bits=SMALL))
+
+    def machine(self) -> dict[str, Any]:
+        """Return the machine picture from GET /api/machine."""
+        return _json(_run(self.client.get("/api/machine")))
+
+    def post(self, path: str, body: object) -> TestResponse:
+        """Send a JSON body to `path` and return the raw response."""
+        return _run(self.client.post(path, json=body))  # pyright: ignore[reportArgumentType]
+
+    def step(self, size: str, count: int | None = None) -> dict[str, Any]:
+        """Step by `size` (and `count`, if given), insisting the Bench agrees."""
+        body: dict[str, object] = {"size": size}
+        if count is not None:
+            body["count"] = count
+        response = self.post("/api/step", body)
+        assert response.status == OK, response.text
+        return _json(response)
+
+    def run(self, instructions: int) -> dict[str, Any]:
+        """Run `instructions` instructions, insisting the Bench agrees."""
+        response = self.post("/api/run", {"instructions": instructions})
+        assert response.status == OK, response.text
+        return _json(response)
+
+    def load(self, source: str) -> TestResponse:
+        """Send assembly text to POST /api/program."""
+        return self.post("/api/program", {"source": source})
+
+    def view(self, path: str) -> TestResponse:
+        """Look inside the part at `path`."""
+        return _run(self.client.get("/api/view", query={"path": path}))
+
+    def wires(self, path: str) -> list[int]:
+        """Collect every gate output under a scope, walking all the scopes inside it."""
+        view = _json(self.view(path))
         values = [gate["value_out"] for gate in view["gates"]]
         for child in view["children"]:
-            values += await walk(f"{where}.{child['name']}")
+            values += self.wires(f"{path}.{child['name']}")
         return values
 
-    return _run(walk(path))
+
+def _fast_after(instructions: int) -> FastMachine:
+    """Run the demo program on a fast engine of the same size, as a prediction."""
+    machine = FastMachine(WORDS)
+    machine.load_program(assemble(DEMO_PROGRAM, words=WORDS).words)
+    machine.run(instructions)
+    return machine
 
 
-def test_adding_the_biggest_positive_number_and_one_overflows() -> None:
-    """0x7FFF + 1 gives 0x8000 and lights the overflow flag."""
+class TestTheMachinePicture:
+    """GET /api/machine shows the paused computer, read from the gate engine."""
 
-    async def body() -> dict[str, Any]:
-        client = TestClient(create_bench())
-        return _json(await client.post("/api/inputs", json={"a": MAX_POSITIVE, "b": 1, "op": 0}))
+    def test_the_bench_opens_paused_before_the_first_instruction(self) -> None:
+        """At the start every register is 0, sp is the RAM size and pc points at address 0."""
+        machine = Bench().machine()
+        assert machine["paused"] is True
+        assert machine["phase"] == "fetch"
+        assert machine["at_boundary"] is True
+        assert machine["registers"] == [0] * REGISTER_COUNT
+        assert machine["pc"] == 0
+        assert machine["sp"] == WORDS
+        assert machine["flags"] == {"zero": 0, "negative": 0, "carry": 0, "overflow": 0}
+        assert machine["halted"] is False
+        assert machine["halt_code"] == 0
+        assert machine["output"] == ""
 
-    answer = _run(body())
-    assert answer["result"] == SIGN_BIT_SET
-    assert answer["overflow"] == 1
+    def test_the_current_instruction_is_the_word_at_pc_as_assembly(self) -> None:
+        """The demo program starts with `set r1, 0xFFFF`, whose first half is `li r1, 255`."""
+        instruction = Bench().machine()["instruction"]
+        first = assemble(DEMO_PROGRAM, words=WORDS).words[0]
+        assert instruction == {"address": 0, "word": first, "text": "li r1, 255"}
+
+    def test_the_memory_window_is_sixteen_words_from_zero_at_the_start(self) -> None:
+        """With pc at 0 the window cannot start 4 behind, so it starts at 0."""
+        memory = Bench().machine()["memory"]
+        words = assemble(DEMO_PROGRAM, words=WORDS).words
+        assert [cell["address"] for cell in memory] == list(range(WINDOW))
+        assert memory[1] == {"address": 1, "word": words[1], "text": "lhi r1, 255"}
+
+    def test_the_memory_window_starts_four_words_behind_pc(self) -> None:
+        """Paused before the add at address 8, the window shows addresses 4 to 19."""
+        machine = Bench().run(RUN_TO_ADD)
+        assert machine["pc"] == ADD_ADDRESS
+        assert machine["memory"][0]["address"] == ADD_ADDRESS - BEHIND
+        assert len(machine["memory"]) == WINDOW
+        assert machine["instruction"]["text"] == "add r3, r3, r2"
+
+    def test_the_memory_window_stops_at_the_last_word(self) -> None:
+        """Near the end of memory the window holds only the words that exist."""
+        bench = Bench()
+        assert bench.load(f".word {JUMP_NEAR_END}").status == OK
+        machine = bench.step("instruction")
+        assert machine["pc"] == NEAR_END
+        assert [cell["address"] for cell in machine["memory"]] == list(
+            range(NEAR_END - BEHIND, WORDS)
+        )
+
+    def test_a_pc_outside_memory_shows_no_word_and_a_fault(self) -> None:
+        """Jumping past the end faults on the next fetch; the instruction has no word."""
+        bench = Bench()
+        assert bench.load(f".word {JUMP_OUTSIDE}").status == OK
+        bench.step("instruction")
+        machine = bench.step("instruction")
+        assert machine["halted"] is True
+        assert machine["halt_code"] == 1
+        assert machine["instruction"] == {"address": OUTSIDE, "word": None, "text": ""}
+        assert machine["memory"] == []
 
 
-def test_three_plus_one_is_four() -> None:
-    """The guided tour's sum comes out right."""
+class TestStepping:
+    """POST /api/step moves the gate engine by a gate, a beat or an instruction."""
 
-    async def body() -> dict[str, Any]:
-        client = TestClient(create_bench())
-        return _json(await client.post("/api/inputs", json={"a": 3, "b": 1, "op": 0}))
+    def test_one_instruction_moves_the_machine_as_the_fast_engine_predicts(self) -> None:
+        """After each instruction, the registers, pc, sp and output match a fast run."""
+        bench = Bench()
+        for done in range(1, RUN_TO_ADD + 2):
+            machine = bench.step("instruction")
+            predicted = _fast_after(done).state()
+            assert machine["registers"] == list(predicted.registers)
+            assert machine["pc"] == predicted.pc
+            assert machine["sp"] == predicted.sp
+            assert machine["output"] == predicted.output_text
 
-    assert _run(body())["result"] == FOUR
+    def test_a_cycle_step_leaves_the_add_fetched_but_not_obeyed(self) -> None:
+        """Half way through the add, pc has moved on but the instruction is still the add."""
+        bench = Bench()
+        bench.run(RUN_TO_ADD)
+        machine = bench.step("cycle")
+        assert machine["phase"] == "execute"
+        assert machine["at_boundary"] is False
+        assert machine["pc"] == ADD_ADDRESS + 1
+        assert machine["instruction"]["address"] == ADD_ADDRESS
+        assert machine["instruction"]["text"] == "add r3, r3, r2"
+
+    def test_gate_steps_change_the_phase_and_the_wires_over_one_instruction(self) -> None:
+        """Stepping 500 gates at a time through an instruction, both beats appear and wires move."""
+        bench = Bench()
+        bench.run(RUN_TO_ADD)
+        phases: set[str] = set()
+        pictures = [bench.wires("cpu.pc.bit0")]
+        machine = bench.step("gate", GATE_BATCH)
+        while machine["instruction"]["address"] == ADD_ADDRESS:
+            phases.add(machine["phase"])
+            pictures.append(bench.wires("cpu.pc.bit0"))
+            machine = bench.step("gate", GATE_BATCH)
+        assert phases == {"fetch", "execute"}
+        assert len({tuple(picture) for picture in pictures}) > 1
+        assert machine["registers"][3] == ord("3")
+
+    def test_a_count_of_a_hundred_is_the_same_as_a_hundred_single_gates(self) -> None:
+        """The 100 gates button is a shortcut, not a different kind of step."""
+        one_by_one, at_once = Bench(), Bench()
+        for _ in range(HUNDRED):
+            one_by_one.step("gate")
+        assert at_once.step("gate", HUNDRED) == one_by_one.machine()
+        assert at_once.wires("cpu") == one_by_one.wires("cpu")
+
+    def test_gate_steps_stop_when_the_machine_halts(self) -> None:
+        """A huge count on a program that halts at once finishes quickly and halts."""
+        bench = Bench()
+        assert bench.load("halt 7").status == OK
+        machine = bench.step("gate", MAX_GATE_STEPS)
+        assert machine["halted"] is True
+        assert machine["halt_code"] == SEVEN
+
+    def test_bad_step_requests_are_400s(self) -> None:
+        """Unknown sizes, missing sizes, bad counts and counts on big steps are all refused."""
+        bad: list[object] = [
+            {"size": "giant"},
+            {},
+            {"size": 1},
+            {"size": "gate", "count": 0},
+            {"size": "gate", "count": MAX_GATE_STEPS + 1},
+            {"size": "gate", "count": "5"},
+            {"size": "gate", "count": True},
+            {"size": "cycle", "count": 2},
+            {"size": "instruction", "count": 2},
+            [1, 2],
+        ]
+        bench = Bench()
+        assert [bench.post("/api/step", item).status for item in bad] == [BAD_REQUEST] * len(bad)
+        assert bench.machine()["pc"] == 0
+
+    def test_a_cycle_or_instruction_step_may_say_count_one(self) -> None:
+        """A count of 1 is what those steps already mean, so it is allowed."""
+        bench = Bench()
+        assert bench.step("cycle", 1)["phase"] == "execute"
+        assert bench.step("instruction", 1)["at_boundary"] is True
 
 
-def test_the_view_shows_real_wires_that_change_with_the_inputs() -> None:
-    """Gate values inside a bit differ between 1 + 1 and 0 + 0."""
-    client = TestClient(create_bench())
+class TestRewindAndRun:
+    """POST /api/rewind goes back to the instruction's start; POST /api/run runs fast."""
 
-    async def set_inputs(a: int, b: int) -> None:
-        response = await client.post("/api/inputs", json={"a": a, "b": b, "op": 0})
+    def test_rewind_goes_back_to_the_start_of_the_instruction(self) -> None:
+        """After some gates and a beat, rewind shows exactly the starting picture again."""
+        bench = Bench()
+        start = bench.machine()
+        bench.step("gate", HUNDRED)
+        bench.step("cycle")
+        response = bench.post("/api/rewind", {})
         assert response.status == OK
+        assert _json(response) == start
 
-    async def top() -> int:
-        return (await client.get("/api/view", query={"path": SCOPE})).status
+    def test_running_to_the_end_prints_the_countdown(self) -> None:
+        """The demo program counts 3, 2, 1 and halts normally."""
+        machine = Bench().run(MAX_RUN)
+        assert machine["output"] == "321"
+        assert machine["halted"] is True
+        assert machine["halt_code"] == 0
+        assert machine["paused"] is True
 
-    _run(set_inputs(0, 0))
-    assert _run(top()) == OK
-    quiet = _output_wires(client, SCOPE)
-    _run(set_inputs(1, 1))
-    busy = _output_wires(client, SCOPE)
-    assert quiet
-    assert len(quiet) == len(busy)
-    assert quiet != busy
+    def test_run_finishes_a_half_done_instruction_first(self) -> None:
+        """Run 1 from half way through the add finishes the add and runs one more."""
+        bench = Bench()
+        bench.run(RUN_TO_ADD)
+        bench.step("cycle")
+        machine = bench.run(1)
+        assert machine["at_boundary"] is True
+        assert machine["registers"] == list(_fast_after(RUN_TO_ADD + 2).state().registers)
 
-
-def test_an_unknown_part_is_a_friendly_404() -> None:
-    """Asking for a scope that does not exist says so, rather than crashing."""
-
-    async def body() -> TestResponse:
-        client = TestClient(create_bench())
-        return await client.get("/api/view", query={"path": "alu.nope"})
-
-    response = _run(body())
-    assert response.status == NOT_FOUND
-    assert "No part called alu.nope" in response.text
-
-
-def test_a_number_too_big_for_sixteen_bits_is_a_400() -> None:
-    """A = 70000 does not fit in a word, so the Bench refuses it."""
-
-    async def body() -> int:
-        client = TestClient(create_bench())
-        return (await client.post("/api/inputs", json={"a": TOO_BIG, "b": 0, "op": 0})).status
-
-    assert _run(body()) == BAD_REQUEST
+    def test_bad_run_requests_are_400s(self) -> None:
+        """Zero, too many, text, a boolean, nothing and a list are all refused."""
+        bad: list[object] = [
+            {"instructions": 0},
+            {"instructions": MAX_RUN + 1},
+            {"instructions": "5"},
+            {"instructions": True},
+            {},
+            [5],
+        ]
+        bench = Bench()
+        assert [bench.post("/api/run", item).status for item in bad] == [BAD_REQUEST] * len(bad)
 
 
-def test_other_bad_inputs_are_400s() -> None:
-    """Missing fields, a bad op, text, a boolean and broken JSON are all refused."""
-    bad: list[object] = [
-        {"a": 1, "b": 1},
-        {"a": 1, "b": 1, "op": 8},
-        {"a": -1, "b": 1, "op": 0},
-        {"a": "1", "b": 1, "op": 0},
-        {"a": True, "b": 1, "op": 0},
-        [1, 2, 3],
-    ]
+class TestLoadingAProgram:
+    """POST /api/program puts new assembly into the computer, or says which line is wrong."""
 
-    async def body() -> list[int]:
-        client = TestClient(create_bench())
-        statuses = [(await client.post("/api/inputs", json=item)).status for item in bad]  # pyright: ignore[reportArgumentType]
-        statuses.append((await client.post("/api/inputs", body=b"{nope")).status)
-        return statuses
+    def test_a_new_program_starts_paused_at_its_first_instruction(self) -> None:
+        """Loading `li r0, 7` and running it leaves 7 in r0."""
+        bench = Bench()
+        bench.run(RUN_TO_ADD)
+        response = bench.load("li r0, 7\nhalt")
+        assert response.status == OK
+        machine = _json(response)
+        assert machine["pc"] == 0
+        assert machine["paused"] is True
+        assert machine["sp"] == WORDS
+        assert machine["instruction"]["text"] == "li r0, 7"
+        assert bench.run(MAX_RUN)["registers"][0] == SEVEN
 
-    assert _run(body()) == [BAD_REQUEST] * (len(bad) + 1)
+    def test_a_mistake_is_a_400_naming_the_line(self) -> None:
+        """The assembler's own message, with its line number, comes back."""
+        bench = Bench()
+        response = bench.load("li r0, 7\nfly r1")
+        assert response.status == BAD_REQUEST
+        assert _json(response)["message"].startswith("line 2:")
+        assert bench.machine()["instruction"]["text"] == "li r1, 255"
+
+    def test_a_program_too_big_for_memory_is_a_400(self) -> None:
+        """65 words do not fit in 64."""
+        assert Bench().load(TOO_MANY_WORDS).status == BAD_REQUEST
+
+    def test_source_that_is_not_text_is_a_400(self) -> None:
+        """A number, nothing at all, or a list is not assembly."""
+        bench = Bench()
+        statuses = [bench.post("/api/program", item).status for item in ({"source": 5}, {}, [1])]
+        assert statuses == [BAD_REQUEST] * len(statuses)
 
 
-def test_the_front_page_is_the_bench_html() -> None:
-    """GET / serves the page, which mentions the three inputs."""
+class TestTheViewAndThePage:
+    """GET /api/view looks into the gate engine's circuit; GET / serves the page."""
 
-    async def body() -> TestResponse:
-        return await TestClient(create_bench()).get("/")
+    def test_the_whole_circuit_holds_the_cpu_and_the_ram(self) -> None:
+        """With no path the view is the top of the circuit."""
+        view = _json(Bench().view(""))
+        assert sorted(child["name"] for child in view["children"]) == ["cpu", "ram"]
 
-    response = _run(body())
-    assert response.status == OK
-    assert "text/html" in (response.headers.get("Content-Type") or "")
-    assert "Bench" in response.text
+    def test_the_alu_is_one_click_down_from_the_cpu(self) -> None:
+        """`cpu` lists `alu` among its parts."""
+        view = _json(Bench().view("cpu"))
+        assert "alu" in [child["name"] for child in view["children"]]
 
+    def test_the_tour_gates_show_forty_eight_plus_three_in_the_first_column(self) -> None:
+        """After fetching the add, the first column's and sees a 0 and a 1, so nothing carries."""
+        bench = Bench()
+        bench.run(RUN_TO_ADD)
+        bench.step("cycle")
+        gates = _json(bench.view(ALU_GATE))["gates"]
+        assert sorted((g["value_a"], g["value_b"]) for g in gates) == [(0, 1), (1, 1)]
+        assert gates[-1]["value_out"] == 0
 
-def test_the_whole_circuit_view_lists_alu() -> None:
-    """With no path the view is the top of the circuit, holding the alu."""
+    def test_an_unknown_part_is_a_friendly_404(self) -> None:
+        """Asking for a scope that does not exist says so, rather than crashing."""
+        response = Bench().view("cpu.nope")
+        assert response.status == NOT_FOUND
+        assert "No part called cpu.nope" in response.text
 
-    async def body() -> dict[str, Any]:
-        return _json(await TestClient(create_bench()).get("/api/view"))
-
-    view = _run(body())
-    assert [child["name"] for child in view["children"]] == ["alu"]
-    json.dumps(view)
+    def test_the_front_page_has_the_machine_and_its_buttons(self) -> None:
+        """GET / serves HTML with the step buttons, rewind, run and the load box."""
+        response = _run(Bench().client.get("/"))
+        assert response.status == OK
+        assert "text/html" in (response.headers.get("Content-Type") or "")
+        for words in ("Bench", "1 gate", "100 gates", "1 cycle", "1 instruction", "Rewind"):
+            assert words in response.text
+        assert "<script src" not in response.text
 
 
 def test_the_bench_opens_on_this_computer_only() -> None:
     """open_bench listens on 127.0.0.1, and the banner names the real address."""
 
     async def body() -> tuple[str, int]:
-        server = await open_bench(0)
+        server = await open_bench(0, address_bits=SMALL)
         try:
             return banner(server), server.port
         finally:
@@ -196,5 +401,53 @@ def test_serve_prints_the_banner_and_shuts_the_server_down(
 
     monkeypatch.setattr(AsyncServer, "serve_forever", finish)
     monkeypatch.setattr(entry, "PORT", 0)
+    monkeypatch.setattr(entry, "ADDRESS_BITS", SMALL)
     _run(entry.serve())
-    assert "The Bench is open at http://127.0.0.1:" in capsys.readouterr().out
+    out = capsys.readouterr().out
+    assert "Building the computer" in out
+    assert "The Bench is open at http://127.0.0.1:" in out
+
+
+FULL_SIZE_TOUR_GATES = [610636, 610637]
+
+
+@pytest.mark.slow
+def test_the_full_size_tour_finds_the_gates_the_bench_page_names() -> None:
+    """On the real 4K Bench, the tour's two gates are the numbers the docs give."""
+
+    async def body() -> list[int]:
+        client = TestClient(create_bench())
+        await client.post("/api/run", json={"instructions": RUN_TO_ADD})
+        await client.post("/api/step", json={"size": "cycle"})
+        view = _json(await client.get("/api/view", query={"path": ALU_GATE}))
+        return [gate["id"] for gate in view["gates"]]
+
+    assert _run(body()) == FULL_SIZE_TOUR_GATES
+
+
+DEMO_GATE_STEPS = {SMALL: (6736, 15213), RAM_ADDRESS_BITS: (6988, 43045)}
+
+
+def _gate_steps_per_instruction(address_bits: int) -> list[int]:
+    """Count the gate steps each instruction of the demo program takes, to the halt."""
+    computer = Computer(assemble(DEMO_PROGRAM, words=1 << address_bits), address_bits)
+    computer.pause()
+    counts: list[int] = []
+    taken = 0
+    while True:
+        taken += 1
+        micro = computer.step(StepSize.GATE)
+        assert micro is not None
+        if micro.kind == "end":
+            if computer.state().halted and taken == 1:
+                return counts
+            counts.append(taken)
+            taken = 0
+
+
+@pytest.mark.slow
+@pytest.mark.parametrize("address_bits", sorted(DEMO_GATE_STEPS))
+def test_the_bench_page_gives_the_real_gate_steps_per_instruction(address_bits: int) -> None:
+    """The quickest and slowest demo instructions take the gate steps the docs give."""
+    counts = _gate_steps_per_instruction(address_bits)
+    assert (min(counts), max(counts)) == DEMO_GATE_STEPS[address_bits]
