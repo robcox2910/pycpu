@@ -75,6 +75,7 @@ nav:
       - How a Function Call Really Works: concepts/how-a-function-call-really-works.md
       - Multiply and Divide: concepts/multiply-and-divide.md
       - Printing a Number: concepts/printing-a-number.md
+      - What Happens When Things Go Wrong: concepts/what-happens-when-things-go-wrong.md
   - The Bench: concepts/the-bench.md
   - Reference:
       - Instruction Set: reference/instruction-set.md

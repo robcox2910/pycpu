@@ -53,6 +53,7 @@ KEY_IDEAS: dict[str, list[str]] = {
     "concepts/how-a-function-call-really-works.md": ["argument", "frame", "recursion"],
     "concepts/multiply-and-divide.md": ["multiply", "shift", "remainder"],
     "concepts/printing-a-number.md": ["digit", "character", "output port"],
+    "concepts/what-happens-when-things-go-wrong.md": ["fault", "halt", "source map"],
     "concepts/the-bench.md": ["bench", "register", "gate", "instruction"],
 }
 

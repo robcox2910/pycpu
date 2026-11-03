@@ -67,6 +67,25 @@ class PebbleRun:
     line: int | None
     steps: int
 
+    def describe(self) -> str:
+        """Say in one friendly sentence how the run ended.
+
+        Returns:
+            For example "Division by zero at line 3", or "The program finished". When
+            the Pebble line is unknown, the sentence leaves it out.
+
+        """
+        if self.fault is None:
+            if self.halted:
+                return "The program finished"
+            return f"The program was still running after {self.steps} steps"
+        where = "" if self.line is None else f" at line {self.line}"
+        if self.fault is Fault.DIVIDE_BY_ZERO:
+            return f"Division by zero{where}"
+        if self.fault is Fault.STACK_OVERFLOW:
+            return f"The stack ran out of room{where} (does a function keep calling itself?)"
+        return f"The program used a memory address that does not exist{where}"
+
 
 def translate(source: str) -> TranslatedProgram:
     """Turn a Pebble program into PyCPU machine code.

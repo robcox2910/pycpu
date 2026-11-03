@@ -150,5 +150,7 @@ two pushes. This is the routine behind every Pebble `print(x)`: as you saw in
 
 ## What's Next
 
-You can now compute with numbers and show them. Next, do all of this with buttons, and
-watch the whole running computer, on [The Bench](the-bench.md).
+You can now compute with numbers and show them. But what if the program asks for
+something impossible, like dividing by zero? See how the machine stops and finds the
+guilty line in
+[What Happens When Things Go Wrong](what-happens-when-things-go-wrong.md).
