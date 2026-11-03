@@ -1,0 +1,10 @@
+# A small times table: a loop inside a loop.
+let row = 1
+while row <= 4 {
+    let col = 1
+    while col <= 4 {
+        print(row * col)
+        col = col + 1
+    }
+    row = row + 1
+}

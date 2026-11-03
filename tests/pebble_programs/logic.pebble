@@ -1,0 +1,25 @@
+# and, or and not, including the short cuts that skip the second question.
+let a = 4
+let b = 0
+if a > 0 and b == 0 {
+    print("both")
+}
+if a < 0 or b == 0 {
+    print("either")
+}
+if not (a == b) {
+    print("not equal")
+}
+if a < 0 and a // b > 1 {
+    print("never")
+} else {
+    print("and stopped early")
+}
+if a > 0 or a // b > 1 {
+    print("or stopped early")
+}
+let i = 0
+while i < 10 and not (i == 4) {
+    i = i + 1
+}
+print(i)

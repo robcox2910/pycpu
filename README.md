@@ -82,6 +82,7 @@ You need Python 3.14 and [uv](https://docs.astral.sh/uv/).
 uv sync --all-extras
 uv run pytest
 uv run python examples/run_assembly.py   # assemble and run a program that prints Hi
+uv run python examples/run_pebble.py   # translate a Pebble program and run it: prints 6, 4, 2
 uv run python examples/alu_tour.py   # more programs live in examples/
 uv run mkdocs serve   # read the docs at http://127.0.0.1:8000
 uv run python -m pycpu   # open the Bench at http://127.0.0.1:8765

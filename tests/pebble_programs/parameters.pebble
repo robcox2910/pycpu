@@ -1,0 +1,10 @@
+# Several parameters keep their order, and one function calls another.
+fn digits(a, b, c) {
+    return a * 100 + b * 10 + c
+}
+fn spread(w, x, y, z) {
+    return digits(w, x, y) - z
+}
+print(digits(1, 2, 3))
+print(spread(4, 5, 6, 7))
+print(spread(-1, 0, 9, 100))

@@ -1,0 +1,16 @@
+# Every operator PyCPU knows, on positive and negative numbers.
+let a = 17
+let b = 5
+print(a + b)
+print(a - b)
+print(a * b)
+print(a // b)
+print(a % b)
+print(-a)
+let c = -17
+print(c // b)
+print(c % b)
+print(a // -5)
+print(a % -5)
+print(c * -3)
+print(b - a * 2)

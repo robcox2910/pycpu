@@ -1,0 +1,6 @@
+# Dividing by zero stops both machines on line 5.
+let a = 10
+let b = 0
+print(a)
+print(a // b)
+print("never printed")

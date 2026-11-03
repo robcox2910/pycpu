@@ -1,0 +1,23 @@
+# Trial division finds the primes below 40.
+fn is_prime(n) {
+    if n < 2 {
+        return 0
+    }
+    let d = 2
+    while d * d <= n {
+        if n % d == 0 {
+            return 0
+        }
+        d = d + 1
+    }
+    return 1
+}
+let count = 0
+for n in range(40) {
+    if is_prime(n) == 1 {
+        print(n)
+        count = count + 1
+    }
+}
+print("primes:")
+print(count)
