@@ -12,12 +12,14 @@ from pycpu.assembler import disassemble
 from pycpu.cockpit.session import Cockpit
 from pycpu.computer import Computer
 from pycpu.isa import Fault, Opcode, decode
-from pycpu.state import MachineState
+from pycpu.state import WORD_BITS, MachineState
 from pycpu.translator import PebbleRun, TranslatedProgram
 
 WINDOW_WORDS = 16  # how many words of memory the page shows
 WINDOW_BEHIND = 4  # how many of them sit before pc
 STACK_CELLS = 16  # how many words of the stack the page shows, from sp upwards
+FRAME_POINTER = 7  # r7 points at the frame of the Pebble code that is running
+_SIGN_BIT = 1 << (WORD_BITS - 1)
 
 # Which part of the circuit does the main work of each kind of instruction.
 _PART_FOR_OPCODE = {
@@ -96,6 +98,56 @@ def _stack(state: MachineState) -> list[dict[str, object]]:
     ]
 
 
+def _signed(word: int) -> int:
+    """Read a 16-bit word as a signed number, the way Pebble's code means it (65535 is -1)."""
+    return word - (_SIGN_BIT << 1) if word & _SIGN_BIT else word
+
+
+def variables_picture(
+    translated: TranslatedProgram | None, start: MachineState
+) -> dict[str, object] | None:
+    """Describe the Pebble names of the running code: each one's address and value.
+
+    The frame is the one of the instruction that started in `start` (its `pc`), found
+    in `translated.frames`, and `r7` says where that frame sits. Each name lives at `r7`
+    plus its slot's offset; a name whose address falls outside memory is left out.
+
+    Args:
+        translated: The Pebble program, or None for assembly.
+        start: The state at the start of the current instruction.
+
+    Returns:
+        `function` (None for the top level), `frame_pointer` and `names`, or None for
+        assembly, or when the current word has no ready frame (a prologue, a return's
+        `ret`, or a runtime routine).
+
+    """
+    if translated is None or not 0 <= start.pc < len(translated.frames):
+        return None
+    layout = translated.frames[start.pc]
+    if layout is None:
+        return None
+    pointer = start.registers[FRAME_POINTER]
+    names: list[dict[str, object]] = []
+    for slot in layout.slots:
+        address = pointer + slot.offset
+        if not 0 <= address < len(start.memory):
+            continue
+        word = start.memory[address]
+        names.append(
+            {
+                "name": slot.name,
+                "kind": slot.kind,
+                "hidden": slot.hidden,
+                "address": address,
+                "word": word,
+                "value": _signed(word),
+                "part": f"ram.word{address}",
+            }
+        )
+    return {"function": layout.function, "frame_pointer": pointer, "names": names}
+
+
 def _last_gate(cockpit: Cockpit) -> dict[str, object] | None:
     """Describe the last gate step: which gate, the part it lives in, and its new output.
 
@@ -111,9 +163,10 @@ def _last_gate(cockpit: Cockpit) -> dict[str, object] | None:
 def listing(cockpit: Cockpit) -> dict[str, object]:
     """Describe the whole loaded program, one row for each word of machine code.
 
-    Each row has its `address`, `word`, `text`, `first` (true for the first word that came
-    from its source line, since a line such as `set` makes two), the `labels` that mark this address, and `pebble_line`
-    (the Pebble line that made the word, or None for assembly and runtime words).
+    Each row has its `address`, `word`, `text`, `first` (true for the first word that
+    came from its source line, since a line such as `set` makes two), the `labels` that
+    mark this address, and `pebble_line` (the Pebble line that made the word, or None
+    for assembly and runtime words).
     The `text` is the source line the word came from, as the program was written
     (a word made by `set` shows the `set` line, not the `li` it became).
 
@@ -202,6 +255,8 @@ def machine_picture(cockpit: Cockpit) -> dict[str, object]:
     `"BAD_ADDRESS"`) when the machine has halted with one of those codes, else None;
     a program's own `halt 1` to `halt 3` shares those codes. `pebble` is the
     `pebble_picture` when the program came from Pebble, and None for assembly.
+    `variables` is the `variables_picture` of the current instruction (None while
+    playing).
 
     Args:
         cockpit: The session to describe.
@@ -248,6 +303,7 @@ def machine_picture(cockpit: Cockpit) -> dict[str, object]:
         "pebble": pebble,
         "changed": _changed(cockpit.before, state),
         "stack": _stack(state),
+        "variables": None if playing else variables_picture(translated, start),
         "last_gate": None if playing else _last_gate(cockpit),
         "note": cockpit.note,
         "parts": {

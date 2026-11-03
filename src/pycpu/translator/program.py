@@ -21,7 +21,7 @@ from pycpu.fast import FastMachine
 from pycpu.isa import Fault
 from pycpu.memory import RAM_WORDS
 from pycpu.state import MachineState
-from pycpu.translator.codegen import END_LABEL, frame_words, generate
+from pycpu.translator.codegen import END_LABEL, FrameLayout, frame_words, generate
 from pycpu.translator.subset import TOO_BIG, UnsupportedFeature, check_program
 
 
@@ -36,6 +36,9 @@ class TranslatedProgram:
         pebble_lines: For every machine word, the Pebble line that made it, or None
             for the runtime routines and the text data.
         main_frame_words: The stack words the top-level code needs for its own frame.
+        frames: For every machine word, the layout of the frame `r7` points at just
+            before that word runs, or None where no frame is ready: the runtime
+            routines, the text data, every prologue word and each return's `ret`.
 
     """
 
@@ -44,6 +47,7 @@ class TranslatedProgram:
     program: Program
     pebble_lines: tuple[int | None, ...]
     main_frame_words: int
+    frames: tuple[FrameLayout | None, ...]
 
     @property
     def memory_needed(self) -> int:
@@ -156,7 +160,10 @@ def translate(source: str) -> TranslatedProgram:
     except ProgramTooLongError as error:
         raise UnsupportedFeature(TOO_BIG) from error
     lines = tuple(assembly.lines[line - 1] for line in program.lines)
-    translated = TranslatedProgram(source, assembly.text, program, lines, frame_words(checked.main))
+    frames = tuple(assembly.frames[line - 1] for line in program.lines)
+    translated = TranslatedProgram(
+        source, assembly.text, program, lines, frame_words(checked.main), frames
+    )
     # The prologue would stop the machine with STACK_OVERFLOW before printing anything,
     # so a program with no room left for main's frame is refused here instead.
     if translated.memory_needed > RAM_WORDS:

@@ -625,6 +625,53 @@ once, so there is no single last one to name and the answer goes back to `null`.
 picture also carries a `note`, one sentence about the last move, which is `null` for
 now; later pages use it to say why a line step stopped.
 
+### Variables
+
+For a Pebble program, the picture's `variables` names the boxes of the code that is
+running: `function` (the function's name, or `null` for the top level), `frame_pointer`
+(the value of `r7`) and `names`. Each name has its `address`, its raw `word`, its `value`
+read as a signed number (so the word 65535 shows as -1), its `kind` (`"parameter"` or
+`"variable"`), the `part` to zoom to, and `hidden`. How the Cockpit finds them is on
+[Variables in Memory](variables-in-memory.md). For an assembly program, inside a
+ready-made routine, while a frame is still being built, and while the computer is
+playing, `variables` is `null`.
+
+`hidden` marks the compiler's own helpers. A `for` loop needs to remember where to stop,
+so Pebble quietly makes a variable for the loop's end value and gives it a name that
+starts with `$`, which no Pebble program could ever write. It is a real box in the frame,
+so the Cockpit shows it, but marks it `hidden` so the page can keep it out of the way.
+
+```python
+from pynet.loop import run
+from pyweb.testing import TestClient
+
+from pycpu.cockpit.app import create_cockpit
+
+LOOP = """\
+for i in range(3) {
+    print(i)
+}
+"""
+
+
+async def variables() -> None:
+    client = TestClient(create_cockpit(address_bits=8))
+    machine = (await client.post("/api/pebble", json={"source": LOOP})).json()
+    while machine["pebble"]["line"] != 2:  # line 2 is print(i)
+        machine = (await client.post("/api/step", json={"size": "instruction"})).json()
+    for name in machine["variables"]["names"]:
+        print(name["name"], name["kind"], "hidden" if name["hidden"] else "shown", name["value"])
+
+
+run(variables())
+# Output:
+# $for_limit_0 variable hidden 3
+# i variable shown 0
+```
+
+The loop's end value, 3, sits in a box named `$for_limit_0`, and `i` is 0 on the first
+time round.
+
 ## Why Does This Matter?
 
 Without the Cockpit, a wrong answer from a program is a mystery: it prints 5 where you

@@ -15,7 +15,12 @@ from pycpu.__main__ import HOST, banner, open_cockpit
 from pycpu.assembler import assemble
 from pycpu.cockpit import picture as picture_module
 from pycpu.cockpit.app import create_cockpit
-from pycpu.cockpit.picture import listing, machine_picture, part_for_instruction
+from pycpu.cockpit.picture import (
+    listing,
+    machine_picture,
+    part_for_instruction,
+    variables_picture,
+)
 from pycpu.cockpit.session import (
     DEMO_PROGRAM,
     MAX_GATE_STEPS,
@@ -1052,3 +1057,158 @@ class TestListing:
         assert len(body["rows"]) == len(translated.program.words)
         for row in body["rows"]:
             assert row["pebble_line"] == translated.line_at(row["address"])
+
+
+NEGATIVE = "let n = 0 - 3\nprint(n)\n"
+NEGATIVE_VALUE = -3
+NEGATIVE_WORD = 0x10000 - 3
+NEGATIVE_PRINT_LINE = 2
+ADD_FUNCTION = "fn add(a, b) {\n    let c = a + b\n    return c\n}\nprint(add(2, 3))\n"
+ADD_BODY_LINE = 2
+ADD_A, ADD_B = 2, 3
+ADD_A_OFFSET, ADD_B_OFFSET = 3, 2
+FRAME_POINTER_REGISTER = 7
+RANGE_LOOP = "for i in range(3) {\n    print(i)\n}\n"
+RANGE_PRINT_LINE = 2
+RANGE_LIMIT = 3
+
+
+def _pebble_session(source: str) -> Session:
+    """Build a 256-word session with `source` loaded and paused at its start."""
+    session = Session(PEBBLE_BITS)
+    session.load_pebble(source)
+    return session
+
+
+def _step_to_line(session: Session, line: int) -> dict[str, Any]:
+    """Step one instruction at a time until the current instruction belongs to `line`."""
+    picture = machine_picture(session)
+    while cast("dict[str, Any]", picture["pebble"])["line"] != line:
+        assert not picture["halted"]
+        session.step(StepSize.INSTRUCTION)
+        picture = machine_picture(session)
+    return picture
+
+
+class TestVariables:
+    """The picture's `variables` shows each Pebble name at its real address."""
+
+    def test_at_print_n_the_countdown_shows_n_about_to_be_printed(self) -> None:
+        """At the start of `print(n)`, `n` sits just below r7 and holds the value printed next."""
+        session = _pebble_session(COUNTDOWN)
+        picture = _step_to_line(session, PRINT_LINE)
+        variables = cast("dict[str, Any]", picture["variables"])
+        top = PEBBLE_WORDS - 1
+        assert variables["function"] is None
+        assert variables["frame_pointer"] == top
+        assert variables["names"] == [
+            {
+                "name": "n",
+                "kind": "variable",
+                "hidden": False,
+                "address": top - 1,
+                "word": 2,
+                "value": 2,
+                "part": f"ram.word{top - 1}",
+            }
+        ]
+        session.run(MAX_RUN)
+        assert str(machine_picture(session)["output"]).startswith("2\n")
+
+    def test_inside_the_print_routine_there_are_none(self) -> None:
+        """A runtime routine has no frame of its own, so `variables` is null."""
+        session = _pebble_session(COUNTDOWN)
+        _step_to_line(session, PRINT_LINE)
+        picture = machine_picture(session)
+        while cast("dict[str, Any]", picture["pebble"])["line"] is not None:
+            session.step(StepSize.INSTRUCTION)
+            picture = machine_picture(session)
+        assert session.translated is not None
+        address = cast("dict[str, Any]", picture["instruction"])["address"]
+        assert address >= session.translated.program.labels["__mul"]
+        assert picture["variables"] is None
+
+    def test_the_prologue_has_none(self) -> None:
+        """At the very first instruction the frame is still being built."""
+        assert machine_picture(_pebble_session(COUNTDOWN))["variables"] is None
+
+    def test_assembly_has_none(self) -> None:
+        """An assembly program has no names at all."""
+        assert machine_picture(Session(SMALL))["variables"] is None
+
+    def test_while_playing_there_are_none(self) -> None:
+        """Playing reads the fast engine, and `variables` is null."""
+        session = _pebble_session(COUNTDOWN)
+        _step_to_line(session, PRINT_LINE)
+        session.playing = True
+        assert machine_picture(session)["variables"] is None
+
+    def test_a_negative_value_is_signed_and_its_word_is_raw(self) -> None:
+        """`n = 0 - 3` shows a value of -3, stored as the word 65533."""
+        picture = _step_to_line(_pebble_session(NEGATIVE), NEGATIVE_PRINT_LINE)
+        (name,) = cast("dict[str, Any]", picture["variables"])["names"]
+        assert name["value"] == NEGATIVE_VALUE
+        assert name["word"] == NEGATIVE_WORD
+
+    def test_a_function_shows_its_parameters_and_variables(self) -> None:
+        """Inside `add(2, 3)`, `a` and `b` sit above r7 and `c` below, each part a real word."""
+        session = _pebble_session(ADD_FUNCTION)
+        picture = _step_to_line(session, ADD_BODY_LINE)
+        assert picture["variables"] is None  # line 2 starts with add's prologue
+        while picture["variables"] is None:
+            session.step(StepSize.INSTRUCTION)
+            picture = machine_picture(session)
+        variables = cast("dict[str, Any]", picture["variables"])
+        pointer = variables["frame_pointer"]
+        assert variables["function"] == "add"
+        assert pointer == cast("list[int]", picture["registers"])[FRAME_POINTER_REGISTER]
+        found = {n["name"]: (n["kind"], n["address"], n["value"]) for n in variables["names"]}
+        assert found == {
+            "a": ("parameter", pointer + ADD_A_OFFSET, ADD_A),
+            "b": ("parameter", pointer + ADD_B_OFFSET, ADD_B),
+            "c": ("variable", pointer - 1, 0),
+        }
+        circuit = GateMachine(PEBBLE_BITS).simulator.circuit
+        assert all(circuit.has_scope(n["part"]) for n in variables["names"])
+
+    def test_the_for_loops_end_value_is_hidden(self) -> None:
+        """The loop's own `$for_limit_0` holds 3 and is hidden; `i` is shown (as the docs say)."""
+        picture = _step_to_line(_pebble_session(RANGE_LOOP), RANGE_PRINT_LINE)
+        names = cast("dict[str, Any]", picture["variables"])["names"]
+        assert [(n["name"], n["hidden"], n["value"]) for n in names] == [
+            ("$for_limit_0", True, RANGE_LIMIT),
+            ("i", False, 0),
+        ]
+
+    def test_an_address_outside_memory_is_left_out(self) -> None:
+        """With r7 at the last word, `a` and `b` above it fall outside memory and are skipped."""
+        session = _pebble_session(ADD_FUNCTION)
+        translated = session.translated
+        assert translated is not None
+        body = next(
+            a for a, f in enumerate(translated.frames) if f is not None and f.function == "add"
+        )
+        start = session.computer.instruction_start
+        registers = list(start.registers)
+        registers[FRAME_POINTER_REGISTER] = PEBBLE_WORDS - 1
+        state = replace(start, pc=body, registers=tuple(registers))
+        variables = variables_picture(translated, state)
+        assert variables is not None
+        assert [n["name"] for n in cast("list[dict[str, Any]]", variables["names"])] == ["c"]
+
+    def test_a_pc_past_the_program_has_none(self) -> None:
+        """A `pc` beyond the program's words has no frame."""
+        session = _pebble_session(COUNTDOWN)
+        start = replace(session.computer.instruction_start, pc=PEBBLE_WORDS - 1)
+        assert variables_picture(session.translated, start) is None
+
+    def test_loading_another_program_shows_its_names(self) -> None:
+        """After a reload nothing of the old program's names leaks through."""
+        session = _pebble_session(ADD_FUNCTION)
+        _step_to_line(session, ADD_BODY_LINE)
+        session.load_assembly("halt\n")
+        assert machine_picture(session)["variables"] is None
+        session.load_pebble(NEGATIVE)
+        picture = _step_to_line(session, NEGATIVE_PRINT_LINE)
+        names = cast("dict[str, Any]", picture["variables"])["names"]
+        assert [n["name"] for n in names] == ["n"]
