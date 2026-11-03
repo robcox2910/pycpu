@@ -67,6 +67,7 @@ KEY_IDEAS: dict[str, list[str]] = {
         "pebble",
         "source map",
     ],
+    "concepts/stepping-a-pebble-line.md": ["line", "step over", "step into"],
 }
 
 

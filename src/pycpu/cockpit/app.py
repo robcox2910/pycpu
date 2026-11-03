@@ -2,7 +2,7 @@
 
 Think of the cockpit's radio to the ground crew: each message is read, passed to the
 pilot, and the answer read back. Visitors can freeze the flight, nudge it forward
-(`/api/step`), wind it back (`/api/rewind`), let it play (`/api/run`), load a new
+(`/api/step`, by a gate up to a whole Pebble line), wind it back (`/api/rewind`), let it play (`/api/run`), load a new
 program (`/api/program`, or `/api/pebble` for one that comes with its lyric sheet),
 read its dials (`/api/machine`) and ask what any part is carrying (`/api/view`).
 These routes only parse the request, call the session and answer; every rule lives
@@ -92,14 +92,31 @@ def _as_http() -> Generator[None]:
         raise HTTPError(BAD_REQUEST, str(error)) from None
 
 
-def _step_request(request: HttpRequest) -> tuple[StepSize, int]:
-    """Read a `POST /api/step` body as a step size and a count, or raise a 400."""
+# A line step's size, mapped to whether it steps into calls (True) or over them (False).
+LINE_SIZES = {"line": False, "line_into": True}
+
+
+def _step_request(request: HttpRequest) -> tuple[StepSize | str, int]:
+    """Read a `POST /api/step` body as a step size (or a line size) and a count, or raise a 400."""
     body = _object(request, "a size")
     size = body.get("size")
-    if size not in tuple(StepSize):
-        sizes = ", ".join(f'"{s}"' for s in StepSize)
+    if size not in tuple(StepSize) and size not in LINE_SIZES:
+        sizes = ", ".join(f'"{s}"' for s in (*StepSize, *LINE_SIZES))
         raise HTTPError(BAD_REQUEST, f"size must be one of {sizes}")
-    return StepSize(str(size)), _whole_number(body, "count", MAX_GATE_STEPS, 1)
+    count = _whole_number(body, "count", MAX_GATE_STEPS, 1)
+    if size in LINE_SIZES:
+        if count != 1:
+            raise HTTPError(BAD_REQUEST, "count is only for gate steps")
+        return str(size), count
+    return StepSize(str(size)), count
+
+
+def _step(cockpit: Cockpit, size: StepSize | str, count: int) -> None:
+    """Make one step request's move: a gate, beat or instruction step, or a line step."""
+    if isinstance(size, StepSize):
+        cockpit.step(size, count)
+    else:
+        cockpit.step_line(into=LINE_SIZES[size])
 
 
 def _text(request: HttpRequest, what: str, complaint: str) -> str:
@@ -168,10 +185,10 @@ def create_cockpit(address_bits: int = RAM_ADDRESS_BITS, start_example: str | No
 
     @app.post("/api/step")
     def step(request: HttpRequest) -> HttpResponse:  # pyright: ignore[reportUnusedFunction]
-        """Step by a gate (`count` of them), a clock beat or an instruction."""
+        """Step by a gate (`count` of them), a clock beat, an instruction or a Pebble line."""
         size, count = _step_request(request)
         with _as_http():
-            cockpit.step(size, count)
+            _step(cockpit, size, count)
         return answer()
 
     @app.post("/api/rewind")

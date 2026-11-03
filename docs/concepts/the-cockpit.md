@@ -302,6 +302,8 @@ the machine, which the page redraws:
   `{"size": "gate", "count": 100}`: that is the page's **100 gates** button. The steps
   stop early if the machine halts. Any other size, a count outside 1 to 100,000, or a
   count with a cycle or instruction step gets a 400 ("bad request") answer.
+  `{"size": "line"}` and `{"size": "line_into"}` step a whole Pebble line, over or into
+  a function call; [Stepping a Pebble Line](stepping-a-pebble-line.md) explains them.
 - `POST /api/rewind` goes back to the start of the current instruction.
 - `POST /api/run` takes `{"instructions": 25}` (from 1 to 10,000). The computer
   resumes, which finishes any half-done instruction in the gates, runs that many more
@@ -702,7 +704,8 @@ it. Only part of Pebble runs on PyCPU so far: whole numbers, variables, `if`, `w
 `for` over a range, functions and `print`. Lists, text in variables and the rest are
 refused with a friendly message.
 
-What comes next is the rest of the Cockpit: the Pebble pane becomes the left side of
-the screen and you can step one *Pebble line* at a time, then drop from that line all
-the way down to the gates. Until then, go back to
-[the start of the story](../index.md) and see how far you have climbed.
+What comes next is the rest of the Cockpit. First, instead of pressing **1
+instruction** hundreds of times to get through one line, you can step a whole *Pebble
+line* at a time, stepping over a function call or into it, and then drop from that line
+all the way down to the gates: read
+[Stepping a Pebble Line](stepping-a-pebble-line.md).

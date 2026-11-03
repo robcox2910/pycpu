@@ -8,16 +8,19 @@ refuse bad requests with a `CockpitRefusal` that names the reason; the web app o
 reads requests and answers, and the picture module only reads.
 """
 
+from dataclasses import dataclass
+
 from pycpu.assembler import AssemblyError, assemble
 from pycpu.computer import Computer, StepSize
 from pycpu.cpu import MicroStep
 from pycpu.memory import RAM_ADDRESS_BITS
 from pycpu.state import MachineState
-from pycpu.translator import TranslatedProgram, translate
+from pycpu.translator import FRAME_POINTER, TranslatedProgram, translate
 
 MAX_RUN = 10_000  # the most instructions one press of Run may ask for
 MAX_GATE_STEPS = 100_000  # the most gate steps one request may ask for
 MAX_PEBBLE_CHARACTERS = 65_536  # far more Pebble than fits in 4K words once translated
+MAX_LINE_INSTRUCTIONS = 10_000  # the most instructions one line step may run before giving up
 
 DEMO_PROGRAM = """\
     set r1, 0xFFFF    ; the output port's address
@@ -35,6 +38,8 @@ show:
 """
 
 BUSY_MESSAGE = "the computer is running: press pause first"
+FINISHED_NOTE = "The program has finished, so there is no next line."
+NOT_PEBBLE_MESSAGE = "line steps need a Pebble program: this one is assembly"
 
 
 class CockpitRefusal(Exception):  # noqa: N818
@@ -43,6 +48,27 @@ class CockpitRefusal(Exception):  # noqa: N818
 
 class CockpitBusy(CockpitRefusal):
     """Say that the computer is playing, so only pause or a load is allowed."""
+
+
+@dataclass(frozen=True)
+class LineStep:
+    """What one Pebble line step did: how far it ran and why it stopped.
+
+    Attributes:
+        instructions: How many instructions ran on the fast engine.
+        stopped: `"line"` if it reached the next line, `"halted"` if the program
+            stopped (or had already stopped), `"limit"` if it gave up after
+            `MAX_LINE_INSTRUCTIONS` instructions.
+
+    """
+
+    instructions: int
+    stopped: str
+
+
+def _instructions(count: int) -> str:
+    """Say `count` instructions in words, with "instruction" singular for 1."""
+    return "1 instruction" if count == 1 else f"{count:,} instructions"
 
 
 def _check_whole(name: str, value: int, largest: int) -> None:
@@ -185,3 +211,71 @@ class Cockpit:
         ran = self.computer.run(instructions)
         self.computer.pause()
         return ran
+
+    def step_line(self, *, into: bool) -> LineStep:
+        """Run to the next Pebble line on the fast engine, then pause there in the gates.
+
+        The step starts from the current instruction's line and frame pointer (`r7`).
+        It finishes a part-done instruction in the gates (`resume`), then runs one
+        instruction at a time on the fast engine. Before each one it stops if the
+        word has a ready frame and a Pebble line, and that line or the frame pointer
+        differs from the start. A step over (`into=False`) also needs the frame
+        pointer at or above the start's, so it runs a whole call; a step into stops
+        on the called function's first line. Runtime routine words have no line, so
+        they never stop a step. It also stops when the program halts, or after
+        `MAX_LINE_INSTRUCTIONS` instructions, then pauses. `note` says why it stopped.
+
+        Args:
+            into: True to step into a call; False to step over it.
+
+        Returns:
+            How many instructions ran and why the step stopped.
+
+        Raises:
+            CockpitRefusal: If the program is assembly, which has no lines to step.
+            CockpitBusy: While playing.
+
+        """
+        translated = self.translated
+        if translated is None:
+            raise CockpitRefusal(NOT_PEBBLE_MESSAGE)
+        self._begin()
+        if self.before.halted:
+            self.note = FINISHED_NOTE
+            return LineStep(0, "halted")
+        start = self.computer.instruction_start
+        start_line, start_fp = translated.line_at(start.pc), start.registers[FRAME_POINTER]
+        frames = translated.frames
+        self.computer.resume()
+        fast = self.computer.fast
+        ran, stopped, line = 0, "limit", None
+        while True:
+            if fast.halted:
+                stopped = "halted"
+                break
+            pc, fp = fast.pc, fast.register(FRAME_POINTER)
+            line = translated.line_at(pc)
+            ready = pc < len(frames) and frames[pc] is not None
+            moved = line != start_line or fp != start_fp
+            if ready and line is not None and moved and (into or fp >= start_fp):
+                stopped = "line"
+                break
+            if ran == MAX_LINE_INSTRUCTIONS:
+                break
+            fast.step()
+            ran += 1
+        self.computer.pause()
+        self.note = _line_note(ran, stopped, line)
+        return LineStep(ran, stopped)
+
+
+def _line_note(ran: int, stopped: str, line: int | None) -> str:
+    """Say in one sentence why a line step that moved stopped where it did."""
+    if stopped == "line":
+        return f"Ran {_instructions(ran)} to reach line {line}."
+    if stopped == "halted":
+        return f"Ran {_instructions(ran)}, and then the program stopped."
+    return (
+        f"Ran {_instructions(ran)} without reaching another line, so the step gave up "
+        "there; the program may be stuck in a loop on one line."
+    )
