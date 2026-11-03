@@ -79,7 +79,9 @@ class PebbleRun:
         Args:
             translated: The program that was running.
             state: The machine as it is now.
-            steps: How many instructions it has carried out.
+            steps: How many instructions it has carried out, stored as given. A
+                caller that does not count (the Bench) passes 0; `describe` only
+                mentions the count for a run that has not halted.
 
         Returns:
             The output, whether it halted, any fault, and the Pebble line to blame.

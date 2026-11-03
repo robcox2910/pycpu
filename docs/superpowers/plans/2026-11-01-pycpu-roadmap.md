@@ -200,6 +200,13 @@ What Plan 3 learned, measured on the same Intel Core i7-9750H laptop (macOS 26.5
   - `FastMachine.step` still rebuilds its opcode handler table on every step. The
     conformance corpus ran fast enough without fixing it, but the Cockpit's fast line step
     calls `step` per instruction: fix it if line steps feel slow.
+  - Reading a function's labels back after `__fn_` (Task 6) relies on no label addition
+    (the `_` + number or word after the name) starting with `_` or `x`; documented in
+    `function_label`'s docstring in `codegen.py`, not enforced by a check or test. Also `subset.py`'s `if first` truthiness
+    check (around line 372) where `first is None` is meant.
+  - The top-level stack-overflow test (Task 7, `tests/test_pebble_faults.py`) searches text
+    lengths 3900-3999 for a program that just overflows, which depends on the program layout;
+    it fails loudly if a layout change breaks it.
   - Long source lines in `printing-a-number.md` and `from-pebble-to-machine-code.md` (render fine).
   - The engine speed limits now live once, in `pycpu.proof.ENGINE_LIMITS` (done in Plan 3).
 

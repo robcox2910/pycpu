@@ -11,7 +11,13 @@ from pyweb.testing import TestClient, TestResponse
 from pycpu import __main__ as entry
 from pycpu.__main__ import HOST, banner, open_bench
 from pycpu.assembler import assemble
-from pycpu.bench.app import DEMO_PROGRAM, MAX_GATE_STEPS, MAX_RUN, create_bench
+from pycpu.bench.app import (
+    DEMO_PROGRAM,
+    MAX_GATE_STEPS,
+    MAX_PEBBLE_CHARACTERS,
+    MAX_RUN,
+    create_bench,
+)
 from pycpu.computer import Computer, StepSize
 from pycpu.fast import FastMachine
 from pycpu.memory import RAM_ADDRESS_BITS
@@ -496,7 +502,9 @@ class TestPebbleOnTheBench:
         machine = bench.run(TOUR_RUN)
         assert machine["output"] == "3\n"
         assert machine["pebble"]["line"] == TOUR_LINE_AFTER_PRINT
-        assert bench.run(MAX_RUN)["pebble"]["message"] == "The program finished"
+        machine = bench.run(MAX_RUN)
+        assert machine["output"] == "3\n2\n1\n"
+        assert machine["pebble"]["message"] == "The program finished"
 
     def test_the_second_tours_divide_by_zero_prints_twice_then_names_line_three(self) -> None:
         """10 // 2 and 10 // 1 print, then 10 // 0 halts on line 3."""
@@ -506,6 +514,20 @@ class TestPebbleOnTheBench:
         assert machine["output"] == "5\n10\n"
         assert machine["pebble"]["line"] == PRINT_LINE
         assert machine["pebble"]["message"] == f"Division by zero at line {PRINT_LINE}"
+
+    def test_a_text_too_long_to_ever_fit_is_a_400_before_translating(self) -> None:
+        """One character over the limit is refused with a friendly message; nothing loads."""
+        bench = Bench(PEBBLE_BITS)
+        response = bench.pebble("#" * (MAX_PEBBLE_CHARACTERS + 1))
+        assert response.status == BAD_REQUEST
+        assert "at most 65,536 characters" in _json(response)["message"]
+        assert bench.machine()["pebble"] is None
+
+    def test_a_text_just_at_the_limit_is_translated(self) -> None:
+        """A comment padded to exactly the limit is still a Pebble program."""
+        source = "print(7)\n#"
+        source += "x" * (MAX_PEBBLE_CHARACTERS - len(source))
+        assert Bench(PEBBLE_BITS).pebble(source).status == OK
 
     def test_source_that_is_not_text_is_a_400(self) -> None:
         """A number, nothing at all, or a list is not a Pebble program."""

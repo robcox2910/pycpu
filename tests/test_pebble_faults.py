@@ -5,12 +5,16 @@ the same program on both machines and check that PyCPU stops with the right faul
 names the same line, then check the friendly sentence for every way a run can end.
 """
 
+from collections.abc import Callable
+
 import pebble
 import pytest
 
+from pycpu.computer import Computer, StepSize
 from pycpu.fast import FastMachine
 from pycpu.isa import Fault
-from pycpu.translator import UnsupportedFeature, run_pebble, translate
+from pycpu.state import MachineState
+from pycpu.translator import PebbleRun, UnsupportedFeature, run_pebble, translate
 
 THREE_DEEP = (
     "fn c(n) {\n    return 10 OP n\n}\nfn b(n) {\n    return c(n)\n}\n"
@@ -169,3 +173,55 @@ class TestDescribe:
         """Division by zero with line None still reads well."""
         run = run_pebble("print(7)")
         assert type(run)("", True, Fault.DIVIDE_BY_ZERO, None, 1).describe() == "Division by zero"
+
+
+SMALL_BITS = 8  # 256 words: room for each program below and a few frames
+GATE_TAIL = 3  # how many final instructions run on the gate engine
+RECURSIVE_CALL_LINE = 2  # `return f(n + 1)`, the call that finds no room
+FROM_STATE_CASES = [
+    ("let a = 7\nprint(a)\n", "7\n", None, None),
+    ("let a = 7\nprint(a // 0)\n", "", Fault.DIVIDE_BY_ZERO, DIVISION_LINE),
+    (ENDLESS_RECURSION, "", Fault.STACK_OVERFLOW, RECURSIVE_CALL_LINE),
+]
+
+
+def _fast_state(source: str) -> tuple[MachineState, int]:
+    """Run `source` to its halt on a small fast engine; return its state and step count."""
+    machine = FastMachine(1 << SMALL_BITS)
+    machine.load_program(translate(source).program.words)
+    steps = machine.run(1_000_000)
+    return machine.state(), steps
+
+
+def _gate_state(source: str) -> tuple[MachineState, int]:
+    """Run `source` fast to just before its halt, then finish on the gate engine."""
+    _, steps = _fast_state(source)
+    computer = Computer(translate(source).program, SMALL_BITS)
+    computer.run(steps - GATE_TAIL)
+    computer.pause()
+    while not computer.state().halted:
+        computer.step(StepSize.INSTRUCTION)
+    return computer.state(), steps
+
+
+class TestReadingARunFromAState:
+    """`PebbleRun.from_state` reads the same ending from either engine's state."""
+
+    @pytest.mark.parametrize("engine", [_fast_state, _gate_state], ids=["fast", "gate"])
+    @pytest.mark.parametrize(
+        ("source", "output", "fault", "line"),
+        FROM_STATE_CASES,
+        ids=["finished", "divide-by-zero", "stack-overflow"],
+    )
+    def test_the_ending_is_read_from_the_machine(
+        self,
+        engine: Callable[[str], tuple[MachineState, int]],
+        source: str,
+        output: str,
+        fault: Fault | None,
+        line: int | None,
+    ) -> None:
+        """Output, fault and blamed line come from the state; the step count is passed through."""
+        state, steps = engine(source)
+        run = PebbleRun.from_state(translate(source), state, steps)
+        assert run == PebbleRun(output, True, fault, line, steps)

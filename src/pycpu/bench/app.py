@@ -28,6 +28,7 @@ BAD_REQUEST = 400
 NOT_FOUND = 404
 MAX_RUN = 10_000  # the most instructions one press of Run may ask for
 MAX_GATE_STEPS = 100_000  # the most gate steps one request may ask for
+MAX_PEBBLE_CHARACTERS = 65_536  # far more Pebble than fits in 4K words once translated
 WINDOW_WORDS = 16  # how many words of memory the page shows
 WINDOW_BEHIND = 4  # how many of them sit before pc
 
@@ -95,7 +96,8 @@ def pebble_picture(computer: Computer, translated: TranslatedProgram) -> dict[st
     """
     state = computer.state()
     if state.halted:
-        # The Bench does not count instructions; a halted run's sentence never uses the count.
+        # steps=0 is not a count: the Bench does not count instructions, and a halted
+        # run's sentence never mentions one.
         ended = PebbleRun.from_state(translated, state, steps=0)
         line, message = ended.line, ended.describe()
     else:
@@ -211,7 +213,8 @@ def load_pebble(computer: Computer, source: object) -> TranslatedProgram:
         The translated program, whose source map the machine picture reads.
 
     Raises:
-        HTTPError: 400 if `source` is not text, or the program needs more words than
+        HTTPError: 400 if `source` is not text, is longer than
+            `MAX_PEBBLE_CHARACTERS`, or the program needs more words than
             this Bench's memory has (only a small Bench; the full 4K is what the
             translator itself checks against).
         PebbleError: If Pebble itself finds a mistake in the program.
@@ -220,6 +223,11 @@ def load_pebble(computer: Computer, source: object) -> TranslatedProgram:
     """
     if not isinstance(source, str):
         raise HTTPError(BAD_REQUEST, "source must be the Pebble program's text")
+    # Refuse a huge text before Pebble's compiler spends time on it: anything this long
+    # could never fit in memory once translated.
+    if len(source) > MAX_PEBBLE_CHARACTERS:
+        msg = f"a Pebble program may be at most {MAX_PEBBLE_CHARACTERS:,} characters long"
+        raise HTTPError(BAD_REQUEST, msg)
     translated = translate(source)
     needed, words = len(translated.program.words), computer.gate.words
     if needed > words:
