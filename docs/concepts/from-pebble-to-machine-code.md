@@ -121,8 +121,9 @@ The bytecode is seven tiny steps. A **constant** is a value written straight int
 program, like the `6` and the `7`; Pebble keeps them in a numbered list. `LOAD_CONST 0`
 means "put constant number 0 on the stack", and the list says constant 0 is `6`. Then each step becomes a few
 lines of assembly, and above each group a comment such as `; line 2: MULTIPLY` says
-which Pebble step and which Pebble line it was written for. The program's own part is
-only 26 words; the rest of the 122 are the ready-made routines for multiplying,
+which Pebble step and which Pebble line it was written for. The routines are placed
+right after the program, so the address of the first one, `__mul`, is also the size of
+the program's own part: only 26 words; the rest of the 122 are the ready-made routines for multiplying,
 dividing and printing that every translated program carries along.
 
 Not every Pebble program can be translated yet. When something is outside what PyCPU
@@ -148,7 +149,8 @@ The translator lives in `src/pycpu/translator/`. `translate`, in `program.py`, p
 program along a short line of workers, like a recipe passing along a counter:
 
 ```
-  Pebble text            "let apples = 6 / print(apples * 7)"
+  Pebble text            let apples = 6
+                         print(apples * 7)
        |
        |  compile_source    Pebble's own compiler (not ours)
        v
@@ -160,7 +162,9 @@ program along a short line of workers, like a recipe passing along a counter:
        |
        |  generate          codegen.py: a few lines of assembly per bytecode step
        v
-  assembly text          li r1, 6 / push r1 / ...
+  assembly text          li   r1, 6
+                         push r1
+                         ...
        |
        |  assemble          the assembler from Assembly Language
        v
@@ -250,11 +254,13 @@ Without a translator, the only way to program PyCPU is to write every `push` and
 yourself. With it, a learner writes `print(apples * 7)` and the machine works out the
 rest, and every card it wrote is still there to read.
 
-This is how real languages run too. Python, Java and WebAssembly (the language that
-runs fast code inside web browsers) all compile programs into stack bytecode first.
-Then a part called a **JIT compiler** ("just in time") translates the bytecode into the
-real machine code of your computer's processor while the program runs, often step by
-step much as ours does. And every debugger that shows you "the error is on line 12"
+This is how many real languages run too. Java and WebAssembly (the language that runs
+fast code inside web browsers), for example, compile programs into stack bytecode
+first. Then a part called a **JIT compiler** ("just in time") translates the bytecode
+into the real machine code of your computer's processor while the program runs, often
+step by step much as ours does. (Standard Python makes stack bytecode too, but mostly
+follows it one step at a time with a **VM**, a "virtual machine": a program that obeys
+bytecode itself, the way Pebble's own VM does, instead of translating it.) And every debugger that shows you "the error is on line 12"
 is reading a source map like `pebble_lines`.
 
 ## What's Next

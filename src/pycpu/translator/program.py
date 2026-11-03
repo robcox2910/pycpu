@@ -15,11 +15,11 @@ from dataclasses import dataclass
 
 from pebble import compile_source
 
-from pycpu.assembler import AssemblyError, Program, assemble
+from pycpu.assembler import Program, ProgramTooLongError, assemble
 from pycpu.fast import FastMachine
 from pycpu.isa import Fault
 from pycpu.memory import RAM_WORDS
-from pycpu.translator.codegen import generate
+from pycpu.translator.codegen import END_LABEL, frame_words, generate
 from pycpu.translator.subset import TOO_BIG, UnsupportedFeature, check_program
 
 
@@ -89,12 +89,12 @@ def translate(source: str) -> TranslatedProgram:
     assembly = generate(checked)
     try:
         program = assemble(assembly.text, words=RAM_WORDS)
-    except AssemblyError as error:
-        # The generated text is always well formed, so the only way the assembler can
-        # refuse it is a program too long for memory.
-        if "too long" in str(error):
-            raise UnsupportedFeature(TOO_BIG) from error
-        raise
+    except ProgramTooLongError as error:
+        raise UnsupportedFeature(TOO_BIG) from error
+    # The prologue would stop the machine with STACK_OVERFLOW before printing anything,
+    # so a program with no room left for main's frame is refused here instead.
+    if program.labels[END_LABEL] + frame_words(checked.main) > RAM_WORDS:
+        raise UnsupportedFeature(TOO_BIG)
     lines = tuple(assembly.lines[line - 1] for line in program.lines)
     return TranslatedProgram(source, assembly.text, program, lines)
 

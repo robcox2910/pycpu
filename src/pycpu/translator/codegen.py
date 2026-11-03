@@ -19,7 +19,7 @@ from dataclasses import dataclass
 from pebble import Instruction, OpCode
 
 from pycpu.translator.runtime import RUNTIME, RUNTIME_STACK_WORDS
-from pycpu.translator.subset import CheckedCode, CheckedProgram, located
+from pycpu.translator.subset import CheckedCode, CheckedProgram, PebbleCPUError, located
 
 BYTE_MAX = 255
 COLUMN = 24
@@ -41,6 +41,11 @@ class Assembly:
 
     text: str
     lines: tuple[int | None, ...]
+
+
+def frame_words(checked: CheckedCode) -> int:
+    """Count the stack words a piece of code may need: old r7, variables, stack, routines."""
+    return 1 + len(checked.variables) + checked.deepest + RUNTIME_STACK_WORDS
 
 
 def _quote(text: str) -> str:
@@ -109,7 +114,7 @@ class _CodeWriter:
         """Check there is room on the stack, then build the frame and zero the variables."""
         line, out, label = self.first_line, self.out, self.label
         count = len(self.checked.variables)
-        need = 1 + count + self.checked.deepest + RUNTIME_STACK_WORDS
+        need = frame_words(self.checked)
         out.raw(f"{label}:", line)
         out.raw(
             f"    ; make the frame: 1 word for the old r7, {count} for variables, "
@@ -165,16 +170,26 @@ class _CodeWriter:
             out.op(f"call {routine}", "print it and a newline", line)
         elif opcode == OpCode.HALT:
             out.op("halt 0", "the program has finished", line)
-        else:  # CHECK_TYPE Int: Pebble has already checked; no cards needed
+        elif opcode == OpCode.CHECK_TYPE:
             out.raw("    ; (no code: Pebble has already checked this is a number)", line)
+        else:
+            # The subset check should have refused it; writing nothing would be wrong code.
+            msg = f"translator bug: no code for {opcode}"
+            raise PebbleCPUError(msg)
 
     def _load_constant(self, number: int, line: int | None) -> None:
         """Write the cards that put a number, or the address of a text, on the stack."""
         value = self.code.constants[number]
+        if value is None:
+            self.out.op("push r0", "null is stored as 0", line)
+            return
         if isinstance(value, str):
             label = self.out.text_label(value)
             self.out.op(f"set  r1, {label}", "r1 = the address of the text", line)
-        elif isinstance(value, int):  # the subset check let only text and numbers through
+        elif isinstance(value, bool):  # before int: in Python, True is also an int
+            word = int(value)
+            self.out.op(f"li   r1, {word}", f"{str(value).lower()} is {word} (0 means false)", line)
+        elif isinstance(value, int):  # the subset check let only these kinds through
             load = "li  " if 0 <= value <= BYTE_MAX else "set "
             self.out.op(f"{load} r1, {value}", f"r1 = {value}", line)
         self.out.op("push r1", "onto the stack", line)

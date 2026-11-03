@@ -40,12 +40,13 @@ TRY_CATCH = "try, catch and throw"
 GENERATORS = "generators and async"
 NUMBER_RANGE = "numbers bigger than 32767 or smaller than -32768"
 BOOL_OUTSIDE_CONDITIONS = "true and false outside if and while"
+NULL_VALUES = "null values"
 NULL_USED = "using the result of a function that does not always return a number"
 OUTSIDE_VARIABLES = "variables from outside a function"
 TOO_MANY_VARIABLES = f"more than {MAX_VARIABLES} variables in one function"
 BIG_CHARACTERS = "emoji and other characters too big for one 16-bit word"
 ZERO_CHARACTER = "the \\0 character inside text"
-TOO_BIG = "programs too big to fit in memory"
+TOO_BIG = "programs too big to fit in memory with room for the stack"
 # Stand-ins until later tasks teach the translator these.
 CONTROL_FLOW_FOR_NOW = "if, while, comparisons and not (coming soon)"
 FUNCTIONS_FOR_NOW = "calls to your own functions (coming soon)"
@@ -228,6 +229,7 @@ class _Slot:
 
     kind: Kind
     made_at: SourceLocation | None
+    null_literal: bool = False
 
 
 def located(instructions: Sequence[Instruction]) -> list[SourceLocation | None]:
@@ -324,9 +326,11 @@ class _CodeChecker:
         """Take the top slot off the imagined stack."""
         return self.stack.pop()
 
-    def _push(self, kind: Kind, place: SourceLocation | None) -> None:
+    def _push(
+        self, kind: Kind, place: SourceLocation | None, *, null_literal: bool = False
+    ) -> None:
         """Put a slot on the imagined stack and remember the deepest it has been."""
-        self.stack.append(_Slot(kind, place))
+        self.stack.append(_Slot(kind, place, null_literal))
         self.deepest = max(self.deepest, len(self.stack))
 
     def _need_number(self, slot: _Slot) -> None:
@@ -337,7 +341,9 @@ class _CodeChecker:
             Kind.NULL: NULL_USED,
             Kind.MAYBE: NULL_USED,
         }
-        if slot.kind in refusals:
+        if slot.null_literal:
+            self._problem(NULL_VALUES, slot.made_at)
+        elif slot.kind in refusals:
             self._problem(refusals[slot.kind], slot.made_at)
 
     def _step(self, index: int, instruction: Instruction, place: SourceLocation | None) -> bool:
@@ -390,8 +396,11 @@ class _CodeChecker:
             if "\0" in value:
                 self._problem(ZERO_CHARACTER, place)
             self._push(Kind.TEXT, place)
+        elif value is None:  # a literal `null`
+            self._push(Kind.NULL, place, null_literal=True)
         else:
-            self._push(Kind.NULL, place)
+            self._problem(f"values like {value!r}", place)
+            self._push(Kind.INT, place)
 
     def _store(self, name: str, place: SourceLocation | None) -> None:
         """Give a newly stored name the next slot, if there is one left."""

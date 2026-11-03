@@ -11,9 +11,12 @@ from dataclasses import replace
 import pebble
 import pytest
 
+from pycpu.assembler import assemble
 from pycpu.fast import FastMachine
 from pycpu.isa import Fault
+from pycpu.memory import RAM_WORDS
 from pycpu.translator import (
+    RUNTIME_STACK_WORDS,
     PebbleCPUError,
     PebbleRun,
     TranslatedProgram,
@@ -21,6 +24,7 @@ from pycpu.translator import (
     run_pebble,
     translate,
 )
+from pycpu.translator.codegen import generate
 from pycpu.translator.subset import (
     BITWISE,
     BOOL_OUTSIDE_CONDITIONS,
@@ -29,7 +33,7 @@ from pycpu.translator.subset import (
     DIVIDE,
     FUNCTIONS_AS_VALUES,
     LISTS,
-    NULL_USED,
+    NULL_VALUES,
     NUMBER_RANGE,
     OUTSIDE_VARIABLES,
     POWER,
@@ -39,11 +43,16 @@ from pycpu.translator.subset import (
     TOO_BIG,
     TOO_MANY_VARIABLES,
     ZERO_CHARACTER,
+    CheckedCode,
+    CheckedProgram,
     builtin_function,
+    check_program,
 )
 
 MAX_LOCALS = 32
 TOO_MANY_PRINTS = 1100
+BOUNDARY_SEARCH_START = 980
+STACK_FOR_ONE_PRINT = 1 + 1 + RUNTIME_STACK_WORDS  # old r7, one slot, the routines
 SECOND_LINE = 2
 A_FEW_STEPS = 3
 SMALLEST = -32768
@@ -56,6 +65,15 @@ def run_and_compare(source: str) -> PebbleRun:
     assert run.fault is None
     assert run.output == pebble.run_source(source)
     return run
+
+
+def fits(source: str) -> bool:
+    """Say whether `source` translates without being refused."""
+    try:
+        translate(source)
+    except UnsupportedFeature:
+        return False
+    return True
 
 
 def refusal(source: str) -> UnsupportedFeature:
@@ -148,6 +166,12 @@ class TestRunningPebble:
     def test_a_constant_power_is_done_by_pebbles_compiler(self) -> None:
         """`print(2 ** 3)` reaches us as the single number 8, so it runs."""
         assert run_and_compare("print(2 ** 3)").output == "8\n"
+
+    @pytest.mark.parametrize("statement", ["true", "false", "1 < 2", "null"])
+    def test_a_value_nobody_uses_is_worked_out_and_dropped(self, statement: str) -> None:
+        """`true`, `false`, a folded comparison and `null` alone on a line are fine."""
+        source = f"print(1)\n{statement}\nprint(2)"
+        assert run_and_compare(source).output == "1\n2\n"
 
     def test_running_out_of_steps_stops_without_halting(self) -> None:
         """With only a few steps allowed, the run stops early and says so."""
@@ -248,7 +272,9 @@ class TestFriendlyErrors:
             ("let b = true", BOOL_OUTSIDE_CONDITIONS, 1, 9),
             ("print(true)", BOOL_OUTSIDE_CONDITIONS, 1, 7),
             ("print(1 + true)", BOOL_OUTSIDE_CONDITIONS, 1, 11),
-            ("print(null)", NULL_USED, 1, 7),
+            ("print(null)", NULL_VALUES, 1, 7),
+            ("let x = null", NULL_VALUES, 1, 9),
+            ("print(1 + null)", NULL_VALUES, 1, 11),
             ("struct P { x: Int }\nlet p = P(1)", STRUCTS, 2, 9),
             ("fn f() { print(1) }\nlet g = f", FUNCTIONS_AS_VALUES, 2, 9),
             ("let b: Bool = true", "the Bool type", 1, 1),
@@ -299,6 +325,22 @@ class TestFriendlyErrors:
         assert error.line is None
         assert str(error) == f"{TOO_BIG} are not supported on PyCPU yet"
 
+    def test_the_biggest_program_that_fits_still_runs(self) -> None:
+        """At the edge, one more print leaves no room for the stack, and is refused."""
+        prints = BOUNDARY_SEARCH_START
+        while fits("print(1)\n" * (prints + 1)):
+            prints += 1
+        error = refusal("print(1)\n" * (prints + 1))
+        assert error.feature == TOO_BIG
+        program = translate("print(1)\n" * prints)
+        end = program.program.labels["__end"]
+        assert end + STACK_FOR_ONE_PRINT <= RAM_WORDS
+        source = "print(1)\n" * prints
+        assert run_and_compare(source).output == "1\n" * prints
+        # The refused program's code alone would fit: it was the stack room that ran out.
+        refused = generate(check_program(pebble.compile_source(source + "print(1)\n").compiled))
+        assert len(assemble(refused.text).words) < RAM_WORDS
+
     def test_a_function_that_is_never_called_is_fine(self) -> None:
         """Defining a function is allowed; main still runs."""
         assert run_and_compare("fn f(a) { return a }\nprint(1)").output == "1\n"
@@ -315,6 +357,13 @@ class TestFriendlyErrors:
     def test_a_comparison_of_two_numbers_is_folded_into_true(self) -> None:
         """`print(1 < 2)` reaches us as `true`, which cannot be printed on PyCPU."""
         assert refusal("print(1 < 2)").feature == BOOL_OUTSIDE_CONDITIONS
+
+    def test_an_instruction_the_checker_wrongly_lets_through_is_a_loud_bug(self) -> None:
+        """If the code generator meets an instruction it has no cards for, it says so."""
+        code = pebble.compile_source("let a = 1\nprint(a < 2)").compiled.main
+        unchecked = CheckedCode("main", code, ("a",), frozenset(), deepest=2)
+        with pytest.raises(PebbleCPUError, match="translator bug: no code for LESS_THAN"):
+            generate(CheckedProgram(unchecked, {}))
 
     def test_a_pebble_mistake_is_passed_through_unchanged(self) -> None:
         """A syntax error is Pebble's own error, not ours."""

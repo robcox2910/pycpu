@@ -65,7 +65,7 @@ Here it is as a picture. Read it from the bottom up.
   ┌──────────────────────────────────────────────────────┐
   │  The Cockpit      watch a program run, zoom to gates │  coming later in the climb
   ├──────────────────────────────────────────────────────┤
-  │  Pebble           programs, translated to numbers    │  coming later in the climb
+  │  Pebble           programs, translated to numbers    │  partly built: simple programs run
   ├──────────────────────────────────────────────────────┤
   │  The assembler    readable words -> numbers          │  built and working
   ├──────────────────────────────────────────────────────┤
@@ -84,7 +84,7 @@ Here it is as a picture. Read it from the bottom up.
 Each layer is built only from the layer beneath it. Everything from NAND up to the
 CPU and the assembler now exists and works. Pebble has started to arrive: simple Pebble
 programs with variables, sums and `print` already run on PyCPU, and the rest of Pebble and
-the Cockpit are still to come; those are the rungs marked "coming later".
+the Cockpit are still to come; those are the rungs marked "coming later" and "partly built".
 
 ## Where We Are Today
 
@@ -103,8 +103,10 @@ You can do all of that on **the Bench**, a page on your own computer: it shows t
 registers, the memory with the current instruction marked, and buttons to step by a
 gate, a clock beat or an instruction, and to rewind and run. Its zoom panel goes from
 the whole CPU down to a single gate, with the real 0s and 1s on its wires. Start it
-with `uv run python -m pycpu`, or read [The Bench](concepts/the-bench.md). Pebble and
-the full Cockpit come next.
+with `uv run python -m pycpu`, or read [The Bench](concepts/the-bench.md). Simple Pebble
+programs already run on PyCPU (see
+[From Pebble to Machine Code](concepts/from-pebble-to-machine-code.md)); the rest of
+Pebble and the full Cockpit come next.
 
 ## By the End of the Climb
 
