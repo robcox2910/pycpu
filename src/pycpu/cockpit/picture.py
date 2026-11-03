@@ -13,12 +13,11 @@ from pycpu.cockpit.session import Cockpit
 from pycpu.computer import Computer
 from pycpu.isa import Fault, Opcode, decode
 from pycpu.state import WORD_BITS, MachineState
-from pycpu.translator import PebbleRun, TranslatedProgram
+from pycpu.translator import FRAME_POINTER, PebbleRun, TranslatedProgram
 
 WINDOW_WORDS = 16  # how many words of memory the page shows
 WINDOW_BEHIND = 4  # how many of them sit before pc
 STACK_CELLS = 16  # how many words of the stack the page shows, from sp upwards
-FRAME_POINTER = 7  # r7 points at the frame of the Pebble code that is running
 _SIGN_BIT = 1 << (WORD_BITS - 1)
 
 # Which part of the circuit does the main work of each kind of instruction.

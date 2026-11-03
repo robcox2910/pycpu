@@ -33,7 +33,7 @@ from pycpu.cpu import GateMachine
 from pycpu.fast import FastMachine
 from pycpu.memory import RAM_ADDRESS_BITS
 from pycpu.state import REGISTER_COUNT
-from pycpu.translator import translate
+from pycpu.translator import FRAME_POINTER, translate
 
 OK = 200
 BAD_REQUEST = 400
@@ -1067,7 +1067,6 @@ ADD_FUNCTION = "fn add(a, b) {\n    let c = a + b\n    return c\n}\nprint(add(2,
 ADD_BODY_LINE = 2
 ADD_A, ADD_B = 2, 3
 ADD_A_OFFSET, ADD_B_OFFSET = 3, 2
-FRAME_POINTER_REGISTER = 7
 RANGE_LOOP = "for i in range(3) {\n    print(i)\n}\n"
 RANGE_PRINT_LINE = 2
 RANGE_LIMIT = 3
@@ -1161,7 +1160,7 @@ class TestVariables:
         variables = cast("dict[str, Any]", picture["variables"])
         pointer = variables["frame_pointer"]
         assert variables["function"] == "add"
-        assert pointer == cast("list[int]", picture["registers"])[FRAME_POINTER_REGISTER]
+        assert pointer == cast("list[int]", picture["registers"])[FRAME_POINTER]
         found = {n["name"]: (n["kind"], n["address"], n["value"]) for n in variables["names"]}
         assert found == {
             "a": ("parameter", pointer + ADD_A_OFFSET, ADD_A),
@@ -1190,7 +1189,7 @@ class TestVariables:
         )
         start = session.computer.instruction_start
         registers = list(start.registers)
-        registers[FRAME_POINTER_REGISTER] = PEBBLE_WORDS - 1
+        registers[FRAME_POINTER] = PEBBLE_WORDS - 1
         state = replace(start, pc=body, registers=tuple(registers))
         variables = variables_picture(translated, state)
         assert variables is not None

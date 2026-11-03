@@ -48,6 +48,7 @@ _ASCII_LETTERS_AND_DIGITS = frozenset(
     "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
 )
 END_LABEL = "__end"
+FRAME_POINTER = 7  # r7 holds the frame pointer: the address of the running code's frame
 _ALU = {OpCode.ADD: "add", OpCode.SUBTRACT: "sub"}
 # Each comparison, the signed branch condition that says "yes", and how to say it.
 _BRANCHES: dict[str, tuple[str, str]] = {

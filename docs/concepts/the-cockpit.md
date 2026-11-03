@@ -630,7 +630,7 @@ now; later pages use it to say why a line step stopped.
 For a Pebble program, the picture's `variables` names the boxes of the code that is
 running: `function` (the function's name, or `null` for the top level), `frame_pointer`
 (the value of `r7`) and `names`. Each name has its `address`, its raw `word`, its `value`
-read as a signed number (so the word 65535 shows as -1), its `kind` (`"parameter"` or
+read as a signed number (so the word 65533 shows as -3), its `kind` (`"parameter"` or
 `"variable"`), the `part` to zoom to, and `hidden`. How the Cockpit finds them is on
 [Variables in Memory](variables-in-memory.md). For an assembly program, inside a
 ready-made routine, while a frame is still being built, and while the computer is

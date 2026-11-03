@@ -7,15 +7,17 @@ from pebble import compile_source
 
 from pycpu.fast import FastMachine
 from pycpu.isa import Opcode, decode
-from pycpu.translator import FrameLayout, Slot, TranslatedProgram, translate
+from pycpu.translator import FRAME_POINTER, FrameLayout, Slot, TranslatedProgram, translate
 from pycpu.translator.codegen import MAIN_LABEL, function_label, is_pebble_name
 from pycpu.translator.subset import check_program
 
 CORPUS = sorted((Path(__file__).parent / "pebble_programs").glob("*.pebble"))
-FRAME_POINTER = 7
 RUNTIME_START = "__mul"  # the first label of the runtime routines, which follow all the code
 PROLOGUE_TAIL = 2  # after `<label>_room:` come `push r7` and `getsp r7`, then the zeroing pushes
 MAX_STEPS = 20_000  # enough to cover every frame shape in the corpus, and keep the test quick
+# The corpus programs that are still running after MAX_STEPS; every other one must halt, so
+# a new or changed program can never be checked only part way without anyone noticing.
+CUT_OFF = frozenset({"primes"})
 ADD = """\
 fn add(a, b) {
     let c = a + b
@@ -60,9 +62,13 @@ def _expected_frames(source: str, translated: TranslatedProgram) -> list[str | N
     return expected
 
 
-def _main_frame_pointer(translated: TranslatedProgram) -> int:
-    """Return the address of `getsp r7` in main's prologue, after which r7 is main's frame."""
-    return translated.program.labels[f"{MAIN_LABEL}_room"] + 1
+def _frame_makers(source: str, translated: TranslatedProgram) -> dict[int, str | None]:
+    """Map the address of each piece of code's `getsp r7` to that code (None for main)."""
+    labels = translated.program.labels
+    makers: dict[int, str | None] = {labels[f"{MAIN_LABEL}_room"] + 1: None}
+    for name in check_program(compile_source(source).compiled).functions:
+        makers[labels[f"{function_label(name)}_room"] + 1] = name
+    return makers
 
 
 class TestTheLayout:
@@ -135,28 +141,40 @@ class TestTheFramePointerAgrees:
 
     @pytest.mark.parametrize("path", CORPUS, ids=lambda path: path.stem)
     def test_r7_is_the_frame_the_map_says(self, path: Path) -> None:
-        """A function's r7 sits just below a return address; main's r7 is the one it made."""
-        translated = translate(path.read_text(encoding="utf-8"))
+        """Wherever a frame is ready, r7 is the running code's own frame, and the map names it.
+
+        A shadow stack follows the frames as they are made and dropped: each piece of
+        code's `getsp r7` pushes (its name, the new r7), and the `ret` that ends a Pebble
+        function pops it. Whenever the map says a frame is ready, the top of the shadow
+        stack must be that very frame, so a nested function's `ret` wrongly marked ready
+        (with r7 already the caller's) would fail here.
+        """
+        source = path.read_text(encoding="utf-8")
+        translated = translate(source)
+        makers = _frame_makers(source, translated)
+        runtime = translated.program.labels[RUNTIME_START]
         machine = FastMachine()
         machine.load_program(translated.program.words)
-        made = _main_frame_pointer(translated)
-        main_frame: int | None = None
+        shadow: list[tuple[str | None, int]] = []
         checked = 0
         for _ in range(MAX_STEPS):
             if machine.halted:
                 break
             pc = machine.pc
             frame = translated.frames[pc] if pc < len(translated.frames) else None
-            r7 = machine.register(FRAME_POINTER)
             if frame is not None:
                 checked += 1
-                if frame.function is None:
-                    assert r7 == main_frame
-                else:
-                    memory = machine.state().memory
-                    back = memory[r7 + 1]
-                    assert decode(memory[back - 1]).opcode == Opcode.CALL
+                r7 = machine.register(FRAME_POINTER)
+                assert shadow[-1] == (frame.function, r7), f"at address {pc}"
+                if frame.function is not None:
+                    back = machine.state().memory[r7 + 1]
+                    assert decode(machine.state().memory[back - 1]).opcode == Opcode.CALL
+            word = translated.program.words[pc] if pc < len(translated.program.words) else 0
+            leaving = pc < runtime and decode(word).opcode == Opcode.RET
             machine.step()
-            if pc == made:
-                main_frame = machine.register(FRAME_POINTER)
+            if pc in makers:
+                shadow.append((makers[pc], machine.register(FRAME_POINTER)))
+            if leaving:
+                shadow.pop()
         assert checked > 0
+        assert machine.halted == (path.stem not in CUT_OFF), "update CUT_OFF to match"
