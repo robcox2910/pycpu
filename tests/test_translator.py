@@ -161,6 +161,28 @@ class TestRunningPebble:
         assert error.feature == NUMBER_RANGE
         assert (error.line, error.column) == (1, 7)
 
+    @pytest.mark.parametrize(
+        "source",
+        [
+            "let a = 0\nif a < 1 {\n    a = 1\n}\na = -32768\nprint(a)",
+            "let a = 0\nif a < 1 {\n    a = 1\n}\nprint(-32768)",
+        ],
+    )
+    def test_minus_32768_right_after_an_if_is_still_the_smallest_number(self, source: str) -> None:
+        """Just after a block, Pebble leaves `-32768` as `32768` then `NEGATE`; it still fits.
+
+        Pebble's compiler does not fold a constant that a jump lands on, so here the
+        smallest number arrives as "32768, then flip the sign". On 16 bits, 32768 is
+        the same pattern as -32768, and flipping it gives the same pattern back, so
+        PyCPU accepts the pair (and only the pair) and prints -32768 like the VM.
+        """
+        assert run_and_compare(source).output == "-32768\n"
+
+    def test_32768_without_a_minus_is_still_too_big(self) -> None:
+        """Only a 32768 that is negated straight away is let through."""
+        source = "let a = 0\nif a < 1 {\n    a = 1\n}\nprint(32768)"
+        assert refusal(source).feature == NUMBER_RANGE
+
     def test_a_sum_of_plain_numbers_reaches_the_cpu_as_its_answer(self) -> None:
         """`print(1 + 2 * 3)` is just `LOAD_CONST 7`: no multiply is written."""
         assembly = translate("print(1 + 2 * 3)").assembly

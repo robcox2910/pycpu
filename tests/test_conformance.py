@@ -5,14 +5,17 @@ concert hall (Pebble's VM, written in Python) and a home-made one built from
 string and wood (PyCPU, built from NAND gates). If they ever play a different
 note, the home-made one has a fault, and we fix the piano, never the music.
 
-Four kinds of check live here:
+Five kinds of check live here:
 
 - the corpus: every small program in `tests/pebble_programs/` prints the same on
   both machines, and the two that divide by zero stop on the same line;
 - random programs: Hypothesis writes programs from a small grammar (lets,
   assignments, arithmetic with small numbers, `if`/`else if`/`else`, counted
   `while` and `for` loops, `and`/`or`/`not`, functions and prints) and both
-  machines must agree on every one;
+  machines must agree on every one (many of them print which way a comparison
+  went, with its two sides equal or one apart, so a wrong `<` versus `<=` shows);
+- the edge table: every comparison on every pair of -32768, -32767, -1, 0, 1,
+  32766 and 32767;
 - unsupported programs: the same programs with things PyCPU cannot do mixed in
   (decimals, `/`, lists, text in variables, closures, built-ins, stored
   booleans and more); the translator must refuse them politely, or run them and
@@ -27,7 +30,8 @@ thrown away. And Pebble v0.4.0's VM has a known bug: a function whose last
 statement is an `if` containing `return` crashes the VM with an `IndexError`
 when the condition is false (PyCPU correctly returns null). The fix is merged
 for Pebble v0.4.1; until it is released, the corpus avoids that shape and every
-generated function ends with an unconditional `return`.
+generated function ends with an unconditional `return` (search for
+"Pebble v0.4.1:" to find the places to change once that version is the floor).
 """
 
 import io
@@ -63,7 +67,9 @@ PROGRAM_MIN = 3
 PROGRAM_MAX = 7
 FUNCTION_MAX = 2
 PARAMETER_MAX = 3
-RANDOM_EXAMPLES = 200
+# 200 under the default "ci" profile; twice the profile's count under a bigger one,
+# so `--hypothesis-profile=thorough` (2000) runs 4000 random programs per property.
+RANDOM_EXAMPLES = max(200, 2 * settings().max_examples)
 
 GATE_ADDRESS_BITS = 12
 GATE_STEP_LIMIT = 1_500
@@ -89,7 +95,10 @@ def assert_same_behaviour(source: str) -> PebbleRun:
         assert run.halted
         assert run.fault is None, run.describe()
     else:
-        assert run.fault is not None, f"the VM failed ({vm_error}) but PyCPU did not"
+        # Dividing by zero is the only way a subset program can fail on the VM.
+        assert run.fault is Fault.DIVIDE_BY_ZERO, (
+            f"the VM failed ({vm_error}), PyCPU: {run.describe()}"
+        )
         assert run.line == vm_error.line
     return run
 
@@ -288,12 +297,27 @@ class Raw:
     text: str
 
 
-type Stmt = Let | Assign | Print | PrintText | If | While | For | CallStmt | Raw
+@dataclass(frozen=True)
+class Observe:
+    """`if <comparison> { print(1) } else { print(0) }`: print which way a question went.
+
+    Most comparisons only steer a program, and a wrong answer may never show in
+    what it prints. This one always does.
+    """
+
+    question: Cmp
+
+
+type Stmt = Let | Assign | Print | PrintText | If | While | For | CallStmt | Observe | Raw
 
 
 @dataclass(frozen=True)
 class Function:
     """`fn name(params) { body; return result }`, always ending in a plain `return`."""
+
+    # Pebble v0.4.1: allow a conditional final return once the floor is >=0.4.1.
+    # (v0.4.0's VM crashes when a function's last statement is an `if` with a
+    # `return` inside and the condition is false.)
 
     name: str
     params: tuple[str, ...]
@@ -395,6 +419,14 @@ def render_stmt(stmt: Stmt, indent: str) -> list[str]:
                 *render_block(body, inner),
                 f"{indent}}}",
             ]
+        case Observe(question):
+            return [
+                f"{indent}if {render_cond(question)} {{",
+                f"{inner}print(1)",
+                f"{indent}}} else {{",
+                f"{inner}print(0)",
+                f"{indent}}}",
+            ]
         case Raw(text):
             return [indent + line for line in text.splitlines()]
         case _:
@@ -407,6 +439,7 @@ def render(script: Script) -> str:
     for function in script.functions:
         lines.append(f"fn {function.name}({', '.join(function.params)}) {{")
         lines.extend(render_block(function.body, "    "))
+        # Pebble v0.4.1: allow a conditional final return once the floor is >=0.4.1.
         lines.append(f"    return {render_expr(function.result)}")
         lines.append("}")
     lines.extend(render_block(script.main, ""))
@@ -496,7 +529,7 @@ class Model:
         match stmt:
             case Let(name, value) | Assign(name, value):
                 env[name] = self.expr(value, env)
-            case Print(value):
+            case Print(value) | CallStmt(value):
                 self.expr(value, env)
             case If(branches, otherwise):
                 for cond, body in branches:
@@ -514,8 +547,8 @@ class Model:
                 for value in range(start, stop):
                     env[name] = value
                     self.block(body, env)
-            case CallStmt(call):
-                self.expr(call, env)
+            case Observe(question):
+                self.cond(question, env)
             case PrintText() | Raw():
                 pass
 
@@ -626,8 +659,26 @@ def draw_cond(draw: st.DrawFn, scope: Scope, depth: int = 1) -> Cond:
         return Logic(kind, draw_cond(draw, scope, depth - 1), draw_cond(draw, scope, depth - 1))
     if depth > 0 and kind == "not":
         return Not(draw_cond(draw, scope, depth - 1))
+    return draw_cmp(draw, scope)
+
+
+def draw_cmp(draw: st.DrawFn, scope: Scope) -> Cmp:
+    """Draw a comparison whose two sides are often equal or one apart.
+
+    The edges are where `<` and `<=` differ, so the right side is usually the left
+    side itself, or the left side plus -1, 0 or 1. The left side is a variable
+    whenever one exists, so Pebble's compiler cannot work the answer out first.
+    """
     op = draw(st.sampled_from(COMPARISONS))
-    return Cmp(op, draw_leaf(draw, scope), draw_expr(draw, scope, 1))
+    left: Expr = (
+        Var(draw(st.sampled_from(scope.readable))) if scope.readable else draw_leaf(draw, scope)
+    )
+    shape = draw(st.sampled_from(("same", "near", "any")))
+    if shape == "same":
+        return Cmp(op, left, left)
+    if shape == "near":
+        return Cmp(op, left, Bin("+", left, Num(draw(st.integers(-1, 1)))))
+    return Cmp(op, left, draw_expr(draw, scope, 1))
 
 
 def draw_block(
@@ -647,7 +698,7 @@ def draw_stmt(draw: st.DrawFn, scope: Scope, names: Names, depth: int) -> tuple[
     Only a `let` changes the scope: the variable it makes can be used afterwards.
     """
     # Hypothesis leans towards the first choice in a list, so the richer kinds come first.
-    kinds = ["if", "while", "for"] if depth > 0 else []
+    kinds = ["observe"] + (["if", "while", "for"] if depth > 0 else [])
     if scope.writable:
         kinds += ["assign", "assign"]
     kinds += ["let", "print", "print", "text"]
@@ -663,13 +714,15 @@ def draw_stmt(draw: st.DrawFn, scope: Scope, names: Names, depth: int) -> tuple[
 
 
 def draw_simple(draw: st.DrawFn, kind: str, scope: Scope) -> Stmt:
-    """Draw a one-line statement of the given kind: an assignment, a print or a call."""
+    """Draw a simple statement of the given kind: an assignment, a print, a call or an observer."""
     if kind == "assign":
         return Assign(draw(st.sampled_from(scope.writable)), draw_expr(draw, scope))
     if kind == "print":
         return Print(draw_expr(draw, scope))
     if kind == "text":
         return PrintText(draw(st.sampled_from(WORDS)))
+    if kind == "observe":
+        return Observe(draw_cmp(draw, scope))
     return CallStmt(draw_call(draw, scope))
 
 
@@ -727,6 +780,27 @@ def test_random_programs_match_the_pebble_vm(script: Script) -> None:
     assert_same_behaviour(render(script))
 
 
+EDGE_VALUES = (SMALLEST, SMALLEST + 1, -1, 0, 1, BIGGEST - 1, BIGGEST)
+
+
+@pytest.mark.parametrize("op", COMPARISONS)
+def test_every_comparison_agrees_with_the_vm_at_the_edges(op: str) -> None:
+    """Each comparison, on every pair of edge values, gives the VM's answer.
+
+    The values go through variables, so Pebble's compiler cannot answer the
+    question itself; the CPU's flags really have to do it. -32768 against 32767 is
+    the case a careless "subtract and look at the sign" gets wrong.
+    """
+    lines: list[str] = []
+    for left in EDGE_VALUES:
+        for right in EDGE_VALUES:
+            lines += [f"a = {left}", f"b = {right}", f"if a {op} b {{", "    print(1)", "} else {"]
+            lines += ["    print(0)", "}"]
+    source = "let a = 0\nlet b = 0\n" + "\n".join(lines)
+    run = assert_same_behaviour(source)
+    assert len(run.output.split()) == len(EDGE_VALUES) ** 2
+
+
 # ---------------------------------------------------------------------------
 # Unsupported constructs mixed in
 # ---------------------------------------------------------------------------
@@ -754,7 +828,7 @@ def unsupported_snippets(a: int, b: int, big: int, tag: int) -> list[str]:
         ),
         f"fn g{tag}(n) {{\n    return n\n}}\nlet h{tag} = g{tag}\nprint(h{tag}({a}))",
         f'print(len("{"x" * abs(a)}"))',
-        f"print(abs({a}))",
+        f"print(int({a}))",
         f"let t{tag} = true\nif t{tag} {{\n    print({a})\n}}",
         f"let t{tag} = {a} < {b}\nif t{tag} {{\n    print(1)\n}}",
         f"print({a} == {b})",

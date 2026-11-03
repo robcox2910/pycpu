@@ -288,6 +288,24 @@ class TestFunctionErrors:
         """A function's name used as a value is refused; the VM stores the function."""
         assert refusal("fn f() {\n    return 1\n}\nlet g = f").feature == FUNCTIONS_AS_VALUES
 
+    @pytest.mark.parametrize(
+        "source",
+        [
+            "let x = 1\nprint(x())",
+            "let x = 1\nx()",
+            "fn f(n) {\n    return n()\n}\nprint(f(1))",
+        ],
+    )
+    def test_calling_a_variable_is_refused_as_a_function_used_as_a_value(self, source: str) -> None:
+        """`x()` on a variable is not a built-in; it treats a value as a function.
+
+        Pebble's own VM v0.4.0 crashes on these with a Python `KeyError`, not a
+        friendly error, so PyCPU refusing them is the kinder answer.
+        """
+        with pytest.raises(KeyError):
+            pebble.run_source(source)
+        assert refusal(source).feature == FUNCTIONS_AS_VALUES
+
     def test_thirty_parameters_are_too_many(self) -> None:
         """Parameter 0 of 30 would sit at [r7+31], past what we allow for a frame."""
         params = ", ".join(f"p{n}" for n in range(MAX_PARAMETERS + 1))

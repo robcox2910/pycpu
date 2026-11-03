@@ -456,6 +456,10 @@ class _CodeChecker:
         if opcode == OpCode.CALL:
             if is_function:
                 return None
+            # Calling one of this code object's own variables, like `x()`, treats a
+            # number as if it were a function; it is not a built-in.
+            if name in self.stored or name in self.code.parameters:
+                return FUNCTIONS_AS_VALUES
             # Pebble's built-in and library functions are lower case; a capital
             # letter means a struct or class being made, like `Point(1, 2)`.
             return STRUCTS if name[:1].isupper() else builtin_function(name)
@@ -530,7 +534,7 @@ class _CodeChecker:
         """Play the stack effect of one instruction that is not a jump."""
         opcode = instruction.opcode
         if opcode == OpCode.LOAD_CONST:
-            self._load_constant(int(instruction.operand or 0), place)
+            self._load_constant(int(instruction.operand or 0), place, self._negated_next(index))
         elif opcode == OpCode.LOAD_NAME:
             self._push(Kind.INT, place)
         elif opcode in (OpCode.STORE_NAME, OpCode.POP):
@@ -586,13 +590,27 @@ class _CodeChecker:
             # A number, or (so far) nothing ever comes back, so nobody can use it.
             self._push(Kind.INT, place, never=not gives)
 
-    def _load_constant(self, number: int, place: SourceLocation | None) -> None:
-        """Push a constant's kind, complaining about values PyCPU cannot hold."""
+    def _negated_next(self, index: int) -> bool:
+        """Say whether the instruction after `index` is a `NEGATE`."""
+        following = index + 1
+        instructions = self.code.instructions
+        return following < len(instructions) and instructions[following].opcode == OpCode.NEGATE
+
+    def _load_constant(self, number: int, place: SourceLocation | None, negated: bool) -> None:
+        """Push a constant's kind, complaining about values PyCPU cannot hold.
+
+        `negated` says the very next instruction flips the constant's sign. Pebble's
+        compiler usually folds `-32768` into one constant, but not when a jump lands
+        on it (just after a block), and then it arrives as 32768 followed by `NEGATE`.
+        On 16 bits 32768 is the same bit pattern as -32768, and negating it gives
+        that pattern back, so the pair is exactly -32768 and is allowed.
+        """
         value = self.code.constants[number]
         if isinstance(value, bool):
             self._push(Kind.BOOL, place)
         elif isinstance(value, int):
-            if not INT_MIN <= value <= INT_MAX:
+            smallest_negated = negated and value == -INT_MIN
+            if not INT_MIN <= value <= INT_MAX and not smallest_negated:
                 self._problem(NUMBER_RANGE, place)
             self._push(Kind.INT, place)
         elif isinstance(value, float):
