@@ -124,6 +124,15 @@ class _CodeWriter:
                 self.out.raw(f"{self._page(index)}:", line)
             self.out.raw(f"    ; {self._describe(instruction, line)}", line)
             self._instruction(index, instruction, line)
+        end = len(self.code.instructions)
+        if end in self.targets:
+            # A jump to just past the last instruction: Pebble returns null there.
+            place = self.places[-1]
+            line = place.line if place else None
+            self.out.raw(f"{self._page(end)}:", line)
+            self.out.raw("    ; the end of the code: Pebble gives back null here", line)
+            self.out.op("push r0", "null is stored as 0", line)
+            self._leave(OpCode.RETURN, line)
 
     def _page(self, index: int) -> str:
         """Return the label of instruction `index`, such as `__main_7`."""
@@ -188,14 +197,25 @@ class _CodeWriter:
             routine = "__print_text" if index in self.checked.prints_text else "__print_int"
             out.op("pop  r1", "r1 = the thing to print", line)
             out.op(f"call {routine}", "print it and a newline", line)
-        elif opcode == OpCode.HALT:
-            out.op("halt 0", "the program has finished", line)
+        elif opcode in (OpCode.HALT, OpCode.RETURN):
+            self._leave(opcode, line)
         elif opcode == OpCode.CHECK_TYPE:
             out.raw("    ; (no code: Pebble has already checked this is a number)", line)
         else:
             # The subset check should have refused it; writing nothing would be wrong code.
             msg = f"translator bug: no code for {opcode}"
             raise PebbleCPUError(msg)
+
+    def _leave(self, opcode: OpCode, line: int | None) -> None:
+        """Write `HALT` (stop the machine) or `RETURN` (give a value back to the caller)."""
+        out = self.out
+        if opcode == OpCode.HALT:
+            out.op("halt 0", "the program has finished", line)
+            return
+        out.op("pop  r1", "r1 = the value to give back", line)
+        out.op("setsp r7", "drop the variables and the stack in one go", line)
+        out.op("pop  r7", "get the caller's frame pointer back", line)
+        out.op("ret", "go back to the caller", line)
 
     def _variable(self, opcode: OpCode, name: str, line: int | None) -> None:
         """Write `LOAD_NAME` or `STORE_NAME`: copy between the stack and the name's slot."""

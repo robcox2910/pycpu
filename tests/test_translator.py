@@ -12,7 +12,7 @@ from dataclasses import replace
 
 import pebble
 import pytest
-from hypothesis import given
+from hypothesis import example, given
 from hypothesis import strategies as st
 
 from pycpu.assembler import OFF9_MAX, assemble
@@ -41,6 +41,7 @@ from pycpu.translator.subset import (
     NUMBER_RANGE,
     OUTSIDE_VARIABLES,
     POWER,
+    RANGE_STEP,
     STRUCTS,
     TEXT_BRACES,
     TEXT_OUTSIDE_PRINT,
@@ -398,6 +399,9 @@ class TestConditionsAndLoops:
     """`if`, `while`, comparisons, `not`, `and` and `or` behave as on the Pebble VM."""
 
     @given(WORDS, WORDS)
+    @example(SMALLEST, 32767)
+    @example(32767, SMALLEST)
+    @example(5, 5)
     def test_every_comparison_matches_python_for_signed_numbers(self, a: int, b: int) -> None:
         """Each of the six comparisons on two 16-bit numbers gives Python's answer."""
         setup = f"let a = {a}\nlet b = {b}\n"
@@ -464,6 +468,35 @@ class TestConditionsAndLoops:
         source = "for i in range(3) {\n    print(i)\n}"
         assert run_and_compare(source).output == "0\n1\n2\n"
         assert "$for_limit_0" in translate(source).assembly
+
+    @pytest.mark.parametrize("arguments", ["2, 5", "0, 0", "-3, -1"])
+    def test_for_over_range_with_a_start_runs_too(self, arguments: str) -> None:
+        """`for i in range(a, b)` counts from a up to b - 1, as on the VM."""
+        run_and_compare(f"for i in range({arguments}) {{\n    print(i)\n}}")
+
+    def test_a_function_whose_if_jumps_past_its_end_is_fine(self) -> None:
+        """Pebble leaves out a closing `return null` after a `return`; a jump there is fine."""
+        source = "fn f(a) {\n    if a {\n        return 1\n    }\n}\nprint(2)"
+        compiled = pebble.compile_source(source).compiled
+        body = compiled.functions["f"].instructions
+        assert any(i.operand == len(body) for i in body if i.opcode == pebble.OpCode.JUMP_IF_FALSE)
+        assert run_and_compare(source).output == "2\n"
+
+    def test_the_end_of_a_function_gets_a_label_and_returns_null(self) -> None:
+        """The jump past the end lands on a label whose cards give back null (0)."""
+        source = "fn f() {\n    let a = 1\n    if a {\n        return 1\n    }\n}"
+        checked = check_program(pebble.compile_source(source).compiled).functions["f"]
+        # Generate f's code as if it were main, to see the cards it would get.
+        text = generate(CheckedProgram(checked, {})).text
+        end = len(checked.code.instructions)
+        cards = text.split(f"__main_{end}:\n")[1].splitlines()[:5]
+        assert [card.split(";")[0].strip() for card in cards[1:]] == [
+            "push r0",
+            "pop  r1",
+            "setsp r7",
+            "pop  r7",
+        ]
+        assemble(text)
 
     def test_and_does_not_work_out_its_right_side_when_the_left_is_false(self) -> None:
         """`false and (1 // 0 == 0)` never divides, so nothing faults."""
@@ -539,6 +572,7 @@ class TestConditionRefusals:
             ("let a = 4\nif (a < 2) == (a < 3) {\n    print(1)\n}", BOOL_OUTSIDE_CONDITIONS, 2, 7),
             ('let a = 4\nif "yes" {\n    print(a)\n}', TEXT_OUTSIDE_PRINT, 2, 4),
             ('let a = 4\nprint(a or "no")', TEXT_OUTSIDE_PRINT, 2, 12),
+            ('print("" or "b")', TEXT_OUTSIDE_PRINT, 1, 7),
             (
                 "let a = 4\nif a > 0 {\n    print(1)\n}\nlet b = a > 1",
                 BOOL_OUTSIDE_CONDITIONS,
@@ -553,6 +587,22 @@ class TestConditionRefusals:
         """Storing, printing or counting with true/false is refused at the place it was made."""
         error = refusal(source)
         assert (error.feature, error.line, error.column) == (feature, line, column)
+
+    @pytest.mark.parametrize("arguments", ["5, 0, -1", "0, 10, 3"])
+    def test_a_range_with_a_step_is_refused_by_name(self, arguments: str) -> None:
+        """`range(5, 0, -1)` needs a step check PyCPU cannot do yet, and says so at the `for`."""
+        error = refusal(f"let a = 1\nfor i in range({arguments}) {{\n    print(i)\n}}")
+        assert (error.feature, error.line, error.column) == (RANGE_STEP, 2, 1)
+        assert str(error).startswith("range with a step is not supported")
+
+    def test_a_jump_outside_the_code_is_a_loud_bug(self) -> None:
+        """A jump further than one past the end can only be a bug."""
+        place = pebble.SourceLocation(1, 1)
+        code = pebble.CodeObject(
+            "main", instructions=[pebble.Instruction(pebble.OpCode.JUMP, 5, place)]
+        )
+        with pytest.raises(PebbleCPUError, match="outside it"):
+            check_program(pebble.CompiledProgram(main=code, functions={}))
 
     def test_the_message_names_true_and_false(self) -> None:
         """The refusal reads as a sentence about true and false."""

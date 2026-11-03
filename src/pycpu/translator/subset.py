@@ -38,6 +38,10 @@ METHODS = "methods like .upper()"
 FUNCTIONS_AS_VALUES = "functions used as values"
 TRY_CATCH = "try, catch and throw"
 GENERATORS = "generators and async"
+RANGE_STEP = "range with a step"
+# Pebble lowers `for i in range(a, b, step)` with a hidden `$for_step_N` variable (and a
+# THROW guarding against a step of 0); `range(n)` and `range(a, b)` need neither.
+_RANGE_STEP_PREFIX = "$for_step_"
 NUMBER_RANGE = "numbers bigger than 32767 or smaller than -32768"
 BOOL_OUTSIDE_CONDITIONS = "true and false outside if and while"
 NULL_VALUES = "null values"
@@ -50,7 +54,7 @@ TOO_BIG = "programs too big to fit in memory with room for the stack"
 # A stand-in until a later task teaches the translator calls.
 FUNCTIONS_FOR_NOW = "calls to your own functions (coming soon)"
 
-_SINGULAR = frozenset({TEXT_BRACES, TEXT_OUTSIDE_PRINT, NULL_USED})
+_SINGULAR = frozenset({TEXT_BRACES, TEXT_OUTSIDE_PRINT, NULL_USED, RANGE_STEP})
 
 _OPCODE_FEATURES: dict[str, str] = {
     OpCode.DIVIDE: DIVIDE,
@@ -315,7 +319,10 @@ class _CodeChecker:
             if feature is not None:
                 self._problem(feature, self.places[index])
             if instruction.opcode == OpCode.STORE_NAME:
-                self._store(str(instruction.operand), self.places[index])
+                name = str(instruction.operand)
+                if name.startswith(_RANGE_STEP_PREFIX):
+                    self._problem(RANGE_STEP, self.places[index])
+                self._store(name, self.places[index])
         self._follow_every_path()
         if self.problems:
             first = min(self.problems, key=_Problem.key)
@@ -341,6 +348,9 @@ class _CodeChecker:
         while todo:
             index = min(todo)
             todo.remove(index)
+            if index == len(instructions):
+                self._fall_off_the_end(seen[index])
+                continue
             instruction = instructions[index]
             # A refused instruction's effect on the stack is not followed (most are
             # refused precisely because PyCPU has no idea what they would do).
@@ -351,8 +361,23 @@ class _CodeChecker:
                 if self._arrive(target, stack, seen):
                     todo.add(target)
 
+    def _fall_off_the_end(self, stack: _Stack) -> None:
+        """Play a jump to just past the last instruction: Pebble returns null there.
+
+        When a function body ends in `return`, Pebble leaves out the usual closing
+        `LOAD_CONST None; RETURN`, but an `if` inside can still jump to where it would
+        have been. The Pebble VM returns null when it runs off the end, so we do too.
+        """
+        place = self.places[-1]
+        self.stack = list(stack)
+        self._push(Kind.NULL, place)
+        self._play(len(self.code.instructions), Instruction(OpCode.RETURN), place)
+
     def _arrive(self, target: int, stack: _Stack, seen: dict[int, _Stack]) -> bool:
         """Bring a stack to instruction `target`; return True if what it sees changed."""
+        if not 0 <= target <= len(self.code.instructions):
+            msg = f"translator bug: a jump in {self.name} goes to instruction {target}, outside it"
+            raise PebbleCPUError(msg)
         before = seen.get(target)
         if before is None:
             seen[target] = stack

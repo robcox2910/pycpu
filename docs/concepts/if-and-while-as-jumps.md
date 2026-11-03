@@ -155,6 +155,59 @@ if it is 0, jumps to `__main_13`, past the loop. The very last card of the loop,
 __main_2`, sends the machine back up to the question. The `JUMP 2` comment says line 2
 because Pebble counts the jump back as part of the `while` line.
 
+An `if`/`else` is two jumps. Here are the cards from the `if`'s question onwards for a
+small program where the condition is false, so the `else` block runs:
+
+```python
+from pycpu.translator import run_pebble, translate
+
+source = """let n = 7
+if n == 1 {
+    print(1)
+} else {
+    print(0)
+}"""
+
+assembly = translate(source).assembly
+start = assembly.index("    ; line 2: JUMP_IF_FALSE")
+stop = assembly.index("; ==== runtime")
+print(assembly[start:stop].rstrip())
+print("It printed:", run_pebble(source).output, end="")
+# Output:
+#     ; line 2: JUMP_IF_FALSE 9
+#     pop  r1                 ; r1 = the condition
+#     cmp  r1, r0             ; is it 0 (false)?
+#     br   ne, __main_go_on_5 ; no, it is true: carry on
+#     jmp  __main_9           ; yes, false: go to instruction 9
+# __main_go_on_5:
+#     ; line 3: LOAD_CONST 1
+#     li   r1, 1              ; r1 = 1
+#     push r1                 ; onto the stack
+#     ; line 3: PRINT
+#     pop  r1                 ; r1 = the thing to print
+#     call __print_int        ; print it and a newline
+#     ; line 3: JUMP 11
+#     jmp  __main_11          ; go to instruction 11
+# __main_9:
+#     ; line 5: LOAD_CONST 0
+#     li   r1, 0              ; r1 = 0
+#     push r1                 ; onto the stack
+#     ; line 5: PRINT
+#     pop  r1                 ; r1 = the thing to print
+#     call __print_int        ; print it and a newline
+# __main_11:
+#     ; line 5: HALT
+#     halt 0                  ; the program has finished
+# It printed: 0
+```
+
+Follow the machine. `n == 1` is false, so the condition on the stack is 0, the `br ne`
+does not hop, and `jmp __main_9` skips the whole "then" block, landing on the `else`
+block's cards. If `n` had been 1, the `br ne` would have hopped over the `jmp` into the
+"then" block, and at its end `jmp __main_11` would have skipped over the `else` block to
+the end. Either way, exactly one `print` runs. (The `HALT` says line 5 because the
+compiler made it itself, so it borrows the last line it can find.)
+
 `and` and `or` take a short cut, just as they do on Pebble's VM: if the left side
 already decides the answer, the right side is never worked out at all. Below, `z` is 0,
 so `10 // z` would stop the machine with a divide-by-zero fault, but it never runs. And
@@ -279,12 +332,25 @@ decision*, but refuses to store, print or calculate with one. A number in a cond
 fine, though: `let x = 0 or 5` keeps whichever number decides the answer, and prints 5
 on both machines.
 
+Text cannot steer a decision either. Pebble says empty text, `""`, is false and any
+other text is true. But on PyCPU a piece of text on the stack is the *address* where its
+letters are stored, and no text is ever stored at address 0, so the word would never be
+0 and `""` would wrongly count as true. So `if "a" { ... }`, or `"" or "b"`, is refused
+as "text outside print" rather than risk going the wrong way.
+
 **What about `for`?** Pebble's compiler turns `for i in range(3) { ... }` into a
 `while` loop before PyCPU ever sees it: it stores the limit in a hidden variable called
 `$for_limit_0` (the `$` means "the compiler made this, you cannot type it"), sets `i` to
 0, and loops while `i < $for_limit_0`, adding 1 to `i` at the end of each pass. Every
-instruction in that is one this page has already translated, so `for` loops over
-`range` just work. The hidden variable gets a slot in the frame like any other.
+instruction in that is one this page has already translated, so `for i in range(n)` and
+`for i in range(a, b)` (which starts `i` at `a` instead of 0) just work. The hidden
+variable gets a slot in the frame like any other.
+
+A range with a step, such as `range(5, 0, -1)` or `range(0, 10, 3)`, is different.
+Pebble's compiler adds a guard that stops the program with an error if the step is 0,
+using `throw`, which PyCPU cannot do yet. So the translator refuses it as "range with a
+step", pointing at the `for`. Write the loop with `while` instead: `let i = 5`, then
+`while i > 0 { ... i = i - 1 }`.
 
 ## Why Does This Matter?
 
@@ -302,6 +368,7 @@ not just for speed, either: programmers rely on it every day, writing things lik
 
 ## What's Next
 
-You have seen `__mul` and `__divmod` at work in these programs. Find out how a machine
-with no multiply or divide instruction builds them out of shifting and adding, in
+Our loops counted with `+` and `-`, which the ALU does in one instruction. But a loop
+that asks "is `n` even?" needs `n % 2`, and PyCPU has no multiply or divide instruction at all.
+Find out how the machine builds them out of nothing but shifting and adding, in
 [Multiply and Divide](multiply-and-divide.md).
