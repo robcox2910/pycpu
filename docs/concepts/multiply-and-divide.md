@@ -99,8 +99,9 @@ assembly text called `RUNTIME`. Every label in it starts with two underscores
 (`__mul`, `__divmod_loop`), so it can never be confused with a label somebody else
 writes. The rules for using a routine are the same for both: the two inputs go in
 `r1` and `r2`, you `call` it, and the answer comes back in `r1` (`__divmod` also
-answers in `r2`). The routines never touch `r0` (always 0) or `r7` (a register the
-translator will keep for its own bookkeeping), but they use `r1` to `r6` freely.
+answers in `r2`). The routines never touch `r0` (always 0) or `r7` (a register kept for the
+**translator**, the part coming later in this section that turns a Pebble program into
+instructions like these, which uses it to find its place on the stack), but they use `r1` to `r6` freely.
 
 ### Multiplying: shift and add
 
@@ -146,7 +147,8 @@ Read the answer bits top to bottom: `010` is 2, with a leftover of 1. So 7 divid
 is 2 remainder 1. `__divmod` does this 16 times, one for each bit of the number
 (`r6` counts down from 16). It slides the top bit of `r1` out with `shl r1, r1`: the bit
 lands in the **carry flag** (a little lamp the CPU keeps that remembers the bit that fell
-off the end, from [The ALU](the-alu.md)), and `br ltu` ("lower than, unsigned"), which
+off the end, from [The ALU](the-alu.md)), and `br ltu` ("lower than, unsigned": **unsigned** means we read the bits as a plain
+number with no minus sign), which
 looks at that lamp, tells us whether it was 0 or 1. Then `cmp r4, r2` asks "does it fit?"
 and a second `br ltu` skips the subtraction when the leftover is smaller. In the first
 round above you can see the shape: `r4` is the leftover, `r5` the answer bits.
@@ -161,8 +163,8 @@ number line, never toward zero.
 ```
    -5     -4     -3     -2     -1      0      1      2
  ---+------+------+------+------+------+------+------+---
-           ^   ^
-          -4  -3.5   <- -7 / 2 sits here, halfway; "down" is to the left
+           ^  ^
+          -4 -3.5   <- -7 / 2 sits here, halfway; "down" is to the left
 ```
 
 `-7 / 2` is `-3.5`. Rounding *down* from `-3.5` lands on `-4`, so `-7 // 2` is `-4`. The
@@ -172,7 +174,7 @@ remainder from floor division has the same sign as the divisor (`7 % -2` is `-1`
 The cheap way to get this: first do the sum on the sizes, as if both were positive, then
 patch the signs. If the signs of the two numbers are the same, the answer is already right
 (`-7 // -2` is `3` because 7 // 2 is 3). If they differ, the exact answer is negative; we
-negate the quotient (this is rounding toward zero), and if there was a leftover we step
+negate the quotient (**negate** means flip its sign, so 5 becomes -5; this is rounding toward zero), and if there was a leftover we step
 one further down (`addi r5, -1`) and move the remainder across by adding the divisor
 (`add r4, r4, r2`). The routine uses `push` and `pop` to keep the original numbers while
 the loop uses up `r1` and `r2`. `RUNTIME_STACK_WORDS` is the deepest the routines reach

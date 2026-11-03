@@ -133,7 +133,6 @@ def test_runtime_stack_words_covers_the_deepest_use() -> None:
         for words in (MUL, DIVMOD)
         for a, b in [(1, 1), (-7, 2), (7, -2), (-32768, -1), (0, 5)]
     )
-    assert deepest <= RUNTIME_STACK_WORDS
     assert deepest == RUNTIME_STACK_WORDS
 
 
