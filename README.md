@@ -127,8 +127,10 @@ The docs are the heart of the project; the code exists to back them up.
 
 ## Developing alongside a sibling
 
-PyCPU uses PyWeb from a pinned git tag. To work on a PyWeb checkout at the
-same time, install it editable and tell `uv` not to re-sync over it:
+PyCPU uses PyWeb, Pebble and PyNet from PyPI (`fromscratch-pyweb`,
+`fromscratch-pebble` and `fromscratch-pynet`). To work on a sibling
+checkout at the same time, install it editable and tell `uv` not to
+re-sync over it:
 
 ```bash
 uv pip install -e ../pyweb
@@ -139,17 +141,19 @@ uv run --no-sync pytest
 
 PyCPU has no release yet. Its first release, `v0.1.0`, comes when the whole
 climb is finished, from gates to Pebble programs running in the Cockpit. From
-then on it follows the series' release steps:
+then on, other projects in the series use a released version of it from PyPI
+(`fromscratch-pycpu`), not whatever is on `main`. To publish a change for them:
 
 1. Merge the change to `main`.
-2. Tag it: `git tag -a vX.Y.Z -m vX.Y.Z && git push origin vX.Y.Z`.
+2. Release it: `gh release create vX.Y.Z --target main --generate-notes`
+   (or push a `vX.Y.Z` tag); the release workflow publishes it to PyPI.
    A change to the public API bumps the minor version (`v0.1.0` → `v0.2.0`);
    anything else bumps the patch (`v0.1.0` → `v0.1.1`).
-3. In each project that uses it, edit the tag in `[tool.uv.sources]`, run
-   `uv lock --upgrade-package pycpu`, and open a pull request so CI checks
-   the pair together.
+3. In each project that uses it, raise the `fromscratch-pycpu>=X.Y.Z` floor in
+   `pyproject.toml`, run `uv lock --upgrade-package fromscratch-pycpu`, and open
+   a pull request so CI checks the pair together.
 
-Docs-only and tooling-only changes do not get a release tag.
+Docs-only and tooling-only changes do not get a release.
 
 ## License
 

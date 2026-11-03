@@ -21,6 +21,7 @@
 - Test classes and methods also require docstrings
 - Use named constants instead of magic values (PLR2004)
 - Run `uv run pytest` before committing
+- Property-based tests (Hypothesis) live in `tests/test_properties.py` and `tests/test_model.py`; the shared profiles are in the root `conftest.py` (owned by `series sync`). Run `uv run pytest --hypothesis-profile=thorough` before a release.
 
 ## Commits
 
@@ -32,7 +33,7 @@
 - Package manager: uv
 - Run `uv sync --all-extras` after modifying dependencies
 - `uv.lock` is committed; CI and pre-commit audit it with pip-audit through `uvx`, so pip-audit is not a project dependency
-- Sibling projects, where used, are pinned release tags in `[tool.uv.sources]` (git + tag); never use `path` sources
+- Sibling projects, where used, are their PyPI releases (`fromscratch-<name>>=X.Y.Z`); never use `path` or git sources
 
 ## Releasing
 
@@ -55,3 +56,5 @@ PyCPU is an educational computer simulated from NAND gates. Teaching comes first
 - Add each new page to `mkdocs.yml` and to `KEY_IDEAS` in `tests/test_docs.py`.
 - Coverage floor is 90%. Slow tests carry `@pytest.mark.slow` and are skipped by default.
 - Do not publish yet: no GitHub Pages, no `series.yml` entry, no version tags until Plan 5.
+- PyCPU's Hypothesis tests are named by subject (`test_lockstep.py` and the like) rather than `test_properties.py`.
+- `.github/workflows/release.yml` only runs on a `v*.*.*` tag, and PyCPU gets no tag until Plan 5, so nothing publishes yet.

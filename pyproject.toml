@@ -1,5 +1,5 @@
 [project]
-name = "pycpu"
+name = "fromscratch-pycpu"
 dynamic = ["version"]
 description = "An educational computer simulated from NAND gates in Python"
 readme = "README.md"
@@ -19,11 +19,10 @@ classifiers = [
 ]
 keywords = ["cpu", "logic-gates", "nand", "education", "learning"]
 dependencies = [
-    "pyweb",
+    "fromscratch-pyweb>=0.4.0",
+    "fromscratch-pebble>=0.4.0",
+    "fromscratch-pynet>=0.2.0",
 ]
-
-[tool.uv.sources]
-pyweb = { git = "https://github.com/robcox2910/pyweb", tag = "v0.3.1" }
 
 [project.urls]
 Homepage = "https://github.com/robcox2910/pycpu"
