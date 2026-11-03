@@ -83,7 +83,7 @@ print("stack words the routines need:", RUNTIME_STACK_WORDS)
 # -7 // 2 = -4 and -7 % 2 = 1
 # steps for 6 * 7: 32
 # steps for 60000 * 60000: 127
-# stack words the routines need: 3
+# stack words the routines need: 9
 ```
 
 Some things to notice. `300 * 300` is really 90000, but a register only holds 16 bits
@@ -178,8 +178,10 @@ negate the quotient (**negate** means flip its sign, so 5 becomes -5; this is ro
 one further down (`addi r5, -1`) and move the remainder across by adding the divisor
 (`add r4, r4, r2`). The routine uses `push` and `pop` to keep the original numbers while
 the loop uses up `r1` and `r2`. `RUNTIME_STACK_WORDS` is the deepest the routines reach
-into the stack: 1 word for the return address that `call` pushes, plus the 2 pushes
-in `__divmod`, so 3. A test steps the real machine and checks that figure. One odd
+into the stack. For multiply and divide alone that is 3: 1 word for the return address
+that `call` pushes, plus the 2 pushes in `__divmod`. The printing routines in
+[Printing a Number](printing-a-number.md) go deeper, so the constant is 9 once they are
+counted. A test steps the real machine and checks that figure. One odd
 corner: `-32768 // -1` should be `32768`, which does not fit in 16 bits, so it wraps
 to `-32768`. The machine never divides by zero here: whoever calls `__divmod` checks for
 zero first.
@@ -201,5 +203,5 @@ program writes `*`, `//` or `%`.
 ## What's Next
 
 You have seen the machine build multiplying and dividing out of nothing but shifts, adds
-and comparisons. Next, do all of this with buttons, and watch the whole running computer,
-on [The Bench](the-bench.md).
+and comparisons. Next, use that division to show a number on the screen, one digit at a
+time, in [Printing a Number](printing-a-number.md).

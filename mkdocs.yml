@@ -69,6 +69,7 @@ nav:
       - Pausing and Rewinding: concepts/pausing-and-rewinding.md
   - Pebble on the CPU:
       - Multiply and Divide: concepts/multiply-and-divide.md
+      - Printing a Number: concepts/printing-a-number.md
   - The Bench: concepts/the-bench.md
   - Reference:
       - Instruction Set: reference/instruction-set.md

@@ -1,4 +1,4 @@
-"""Check the multiply and divide routines by running them on the fast engine.
+"""Check the runtime routines (multiply, divide, print) by running them on the fast engine.
 
 Each test builds a tiny caller (`call` the routine, then `halt`), appends the runtime
 assembly, loads the numbers into registers and runs the real machine.
@@ -29,6 +29,8 @@ def _program(routine: str) -> tuple[int, ...]:
 
 MUL = _program("__mul")
 DIVMOD = _program("__divmod")
+PRINT_INT = _program("__print_int")
+MESSAGE = "message"
 
 
 def _start(words: tuple[int, ...], a: int, b: int) -> MachineState:
@@ -61,6 +63,30 @@ def _signed(value: int) -> int:
 def _wrap(value: int) -> int:
     """Wrap any whole number to a signed 16-bit one."""
     return _signed(value & WORD_MASK)
+
+
+def _print_text_program(text: str) -> tuple[tuple[int, ...], int]:
+    """Assemble a caller of `__print_text` with `text` as data; return words and its address."""
+    source = f'call __print_text\nhalt\n{RUNTIME}\n{MESSAGE}: .string "{text}"'
+    program = assemble(source, words=RAM)
+    return program.words, program.labels[MESSAGE]
+
+
+def printed_number(value: int) -> str:
+    """Return the text `__print_int` sends to the output port for `value`."""
+    final, _ = _run(PRINT_INT, value, 0)
+    assert final.halted
+    assert final.halt_code == 0
+    return final.output_text
+
+
+def printed_text(text: str) -> str:
+    """Return the text `__print_text` sends to the output port for `text`."""
+    words, address = _print_text_program(text)
+    final, _ = _run(words, address, 0)
+    assert final.halted
+    assert final.halt_code == 0
+    return final.output_text
 
 
 def multiply(a: int, b: int) -> int:
@@ -111,9 +137,57 @@ def test_divmod_pinned_values() -> None:
     assert divmod_(-32768, -32768) == (1, 0)
 
 
+@settings(max_examples=300)
+@given(st.integers(INT_MIN, INT_MAX))
+def test_print_int_writes_the_decimal_number_and_a_newline(value: int) -> None:
+    """Any signed 16-bit number prints as its decimal text followed by a newline."""
+    assert printed_number(value) == f"{value}\n"
+
+
+def test_print_int_pinned_values() -> None:
+    """The edges: zero, minus one, the biggest, the smallest, and exact tens."""
+    assert printed_number(0) == "0\n"
+    assert printed_number(-1) == "-1\n"
+    assert printed_number(INT_MAX) == "32767\n"
+    assert printed_number(INT_MIN) == "-32768\n"
+    assert printed_number(-10) == "-10\n"
+    assert printed_number(-100) == "-100\n"
+    assert printed_number(100) == "100\n"
+
+
+def test_print_int_sends_character_codes() -> None:
+    """305 goes out as the codes for '3', '0', '5' and a newline."""
+    final, _ = _run(PRINT_INT, 305, 0)
+    assert final.output == (51, 48, 53, 10)
+
+
+def test_print_text_writes_the_text_and_a_newline() -> None:
+    """A .string "Hi" prints Hi and a newline."""
+    assert printed_text("Hi") == "Hi\n"
+    assert printed_text("Hello, PyCPU!") == "Hello, PyCPU!\n"
+
+
+def test_print_text_of_an_empty_string_is_just_a_newline() -> None:
+    """An empty string prints nothing but the newline."""
+    assert printed_text("") == "\n"
+
+
+def _all_programs() -> list[tuple[tuple[int, ...], int, int]]:
+    """Return (words, r1, r2) for a spread of calls to every routine."""
+    hi_words, hi_address = _print_text_program("Hi")
+    return [
+        (MUL, 1234, 567),
+        (DIVMOD, -1234, 57),
+        (DIVMOD, 99, -7),
+        (PRINT_INT, -32768, 0),
+        (PRINT_INT, 0, 0),
+        (hi_words, hi_address, 0),
+    ]
+
+
 def test_routines_keep_r0_and_r7() -> None:
-    """r0 stays 0 and r7 (the frame pointer) is untouched by both routines."""
-    for words, a, b in [(MUL, 1234, 567), (DIVMOD, -1234, 57), (DIVMOD, 99, -7)]:
+    """r0 stays 0 and r7 (the frame pointer) is untouched by every routine."""
+    for words, a, b in _all_programs():
         final, _ = _run(words, a, b)
         assert final.registers[R0] == 0
         assert final.registers[R7] == 0x1234  # noqa: PLR2004
@@ -121,19 +195,30 @@ def test_routines_keep_r0_and_r7() -> None:
 
 def test_routines_leave_the_stack_as_they_found_it() -> None:
     """After a routine returns, sp is back where it was before the call."""
-    for words in (MUL, DIVMOD):
-        final, _ = _run(words, -9, 4)
+    for words, a, b in _all_programs():
+        final, _ = _run(words, a, b)
         assert final.sp == RAM
 
 
 def test_runtime_stack_words_covers_the_deepest_use() -> None:
-    """The constant is at least the deepest stack measured, and exactly it for divmod."""
-    deepest = max(
-        _run(words, a, b)[1]
+    """The constant is exactly the deepest stack measured across every routine."""
+    hi_words, hi_address = _print_text_program("Hi")
+    cases = [
+        (words, a, b)
         for words in (MUL, DIVMOD)
         for a, b in [(1, 1), (-7, 2), (7, -2), (-32768, -1), (0, 5)]
-    )
+    ]
+    cases += [(PRINT_INT, value, 0) for value in (0, 7, -7, 12345, -12345, -32768, 32767)]
+    cases.append((hi_words, hi_address, 0))
+    deepest = max(_run(words, a, b)[1] for words, a, b in cases)
     assert deepest == RUNTIME_STACK_WORDS
+
+
+def test_a_five_digit_negative_number_is_the_deepest_print() -> None:
+    """-12345 needs more stack than 12345, and more than any shorter number."""
+    depth = {value: _run(PRINT_INT, value, 0)[1] for value in (7, 45, -7, -45, 12345, -12345)}
+    assert depth[-12345] == max(depth.values())
+    assert depth[-12345] == RUNTIME_STACK_WORDS
 
 
 def test_runtime_labels_all_start_with_two_underscores() -> None:

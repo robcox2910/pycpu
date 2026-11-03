@@ -4,19 +4,23 @@ Imagine a kitchen with a card that says "to whisk eggs, do these twelve steps". 
 recipe that needs whisked eggs just says "whisk (see card)" instead of repeating the
 twelve steps. The CPU has no multiply or divide instruction, so these cards are the
 twelve steps: `__mul` multiplies by shifting and adding, and `__divmod` divides by
-shifting and subtracting. They are plain PyCPU assembly text in `RUNTIME`, to be pasted
+shifting and subtracting. A second pair of cards, `__print_int` and `__print_text`, post
+characters one at a time through the output port, like a cash register with a slot for
+one letter, so a number is broken into digits first. They are plain PyCPU assembly text in `RUNTIME`, to be pasted
 after any program's code, so they run on the machine like everything else and the Bench
 can show them.
 
-The calling rules: put the two inputs in `r1` and `r2`, `call` the routine, and find the
-answer in `r1` (and `r2`). `r0` (always 0) and `r7` (the frame pointer) are never
+The calling rules: put the inputs in `r1` and `r2` (`__print_int` and `__print_text` take
+just `r1`), `call` the routine, and find the answer in `r1` (and `r2`). `r0` (always 0) and `r7` (the frame pointer) are never
 changed; `r1` to `r6` may be. Every label starts with two underscores, so it can never
 clash with a label a translator generates.
 """
 
-# One push (2 words) in __divmod, plus the return address that `call` pushes. __mul uses
-# only the return address. A test measures the real deepest use and checks this number.
-RUNTIME_STACK_WORDS = 3
+# The deepest case is __print_int on a 5-digit negative number: 1 word for its return
+# address, 1 for the sentinel, 4 digits already waiting while the 5th is being worked
+# out, 1 for the return address of the `call __divmod`, and 2 pushes inside __divmod.
+# A test measures the real deepest use of every routine and checks this number.
+RUNTIME_STACK_WORDS = 9
 
 RUNTIME = """
 ; ---------------------------------------------------------------------------
@@ -90,5 +94,72 @@ __divmod_rem:
 __divmod_done:
     mov  r1, r5             ; the quotient goes back in r1
     mov  r2, r4             ; the remainder goes back in r2
+    ret                     ; return to whoever called us
+
+; ---------------------------------------------------------------------------
+; __print_int: print r1 as a signed decimal number, then a newline ("\\n").
+; Divides by ten again and again with __divmod; each remainder is the next digit,
+; found last digit first, so the digits wait on the stack and come back reversed.
+; Uses r1 to r6, and up to 9 words of stack, counting its return address.
+; ---------------------------------------------------------------------------
+__print_int:
+    push r0                 ; sentinel: a 0 on the stack marks "no more digits"
+    cmp  r1, r0             ; is the number negative?
+    br   ge, __print_int_digits ; no: go straight to the digits loop
+    li   r3, '-'            ; yes: first print the minus sign
+    li   r6, 0              ; r6 = 0 ...
+    addi r6, -1             ; ... minus 1 = 0xFFFF, the address of the output port
+    store r3, [r6]          ; post the '-' card through the slot
+    li   r2, 10             ; divide the negative number itself by ten (floor division)
+    call __divmod           ; r1 = quotient (rounded down), r2 = remainder (0 to 9)
+    cmp  r2, r0             ; was it an exact multiple of ten?
+    br   eq, __print_int_exact ; yes: last digit is 0 and the quotient is right already
+    li   r3, 10             ; no: rounding down went one step too far, so
+    sub  r2, r3, r2         ; the last digit of the size is 10 - remainder
+    addi r1, 1              ; and the quotient steps back one
+__print_int_exact:
+    sub  r1, r0, r1         ; r1 = the rest of the number, now without its minus sign
+    addi r2, 48             ; digit + 48 = the character code of that digit
+    push r2                 ; keep it on the stack for later
+    cmp  r1, r0             ; is there anything left to print?
+    br   eq, __print_int_out ; no: a one-digit number, go and print what we have
+__print_int_digits:
+    li   r2, 10             ; divide by ten ...
+    call __divmod           ; ... r1 = what is left, r2 = the last digit (0 to 9)
+    addi r2, 48             ; digit + 48 = the character code of that digit
+    push r2                 ; stack it: last digit goes in first, so it comes out last
+    cmp  r1, r0             ; has the number run out?
+    br   ne, __print_int_digits ; no: peel off the next digit (a 0 still prints once)
+__print_int_out:
+    li   r6, 0              ; r6 = 0 ...
+    addi r6, -1             ; ... minus 1 = 0xFFFF, the output port
+__print_int_pop:
+    pop  r3                 ; take the top card: the leftmost digit not yet printed
+    cmp  r3, r0             ; is it the sentinel 0?
+    br   eq, __print_int_end ; yes: every digit is out
+    store r3, [r6]          ; no: post it through the output port
+    jmp  __print_int_pop    ; and take the next card
+__print_int_end:
+    li   r3, 10             ; 10 is the character code of a newline
+    store r3, [r6]          ; post the newline
+    ret                     ; return to whoever called us
+
+; ---------------------------------------------------------------------------
+; __print_text: print the 0-terminated words starting at address r1, then a newline.
+; Uses r1 (stepped along the text), r3 and r6. No stack beyond the return address.
+; ---------------------------------------------------------------------------
+__print_text:
+    li   r6, 0              ; r6 = 0 ...
+    addi r6, -1             ; ... minus 1 = 0xFFFF, the output port
+__print_text_loop:
+    load r3, [r1]           ; r3 = the next character code of the text
+    cmp  r3, r0             ; is it the 0 that ends the text?
+    br   eq, __print_text_end ; yes: stop
+    store r3, [r6]          ; no: post it through the output port
+    addi r1, 1              ; step on to the next character
+    jmp  __print_text_loop  ; and go round again
+__print_text_end:
+    li   r3, 10             ; 10 is the character code of a newline
+    store r3, [r6]          ; post the newline
     ret                     ; return to whoever called us
 """
