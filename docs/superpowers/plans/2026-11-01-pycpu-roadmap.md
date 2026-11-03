@@ -100,6 +100,47 @@ was caught by the random-state test.
 - Add a full-size test touching address 4095.
 - Make the Bench "Read more" entries real links once a site exists.
 
+## Notes for Plan 3
+
+What Plan 2 learned, measured on the same Intel Core i7-9750H laptop (macOS 26.5, Python
+3.14.3) unless stated.
+
+- **Gate steps per instruction.** Running the Bench's `DEMO_PROGRAM` to its halt, one
+  instruction took 6,988 to 43,045 gate steps at full size (4K words), and 6,736 to 15,213
+  on a 64-word machine. Writes to RAM are the slow ones: each changed data wire wakes a
+  gate in every word. Pinned by the slow tests in `tests/test_bench.py`. A Pebble line will
+  be several instructions, so the Cockpit's "step a line on gates" can mean 100,000+ gate
+  steps; step by beat or instruction there, not by gate.
+- **Engine speeds** (from the Engine result above): the fast engine runs about 150,000 to
+  177,000 instructions per second, the gate engine about 42 (0.024 s per instruction).
+  Plan 3's conformance runs against the Pebble VM must use the fast engine; gate runs are
+  for lockstep spot checks only.
+- **`halt_code` is 8 bits** (`HALT imm8`, `HALT_CODE_MAX`), on both engines. Plan 3's error
+  codes (`STACK_OVERFLOW = 2`, `DIVIDE_BY_ZERO = 3` and any more) must fit in 0 to 255.
+- **The Bench at full size.** `create_bench()` measured 3.05 to 3.10 s over three fresh
+  builds (the `GateMachine` is built once and kept; loading a new program reuses it).
+  Through PyWeb's `TestClient`: `GET /api/machine` 0.016 s (reading `state()` peeks all
+  4,096 words), a cycle step 0.026 s, 100 gate steps 0.015 s, 100,000 gate steps 0.32 s.
+  `python -m pycpu` prints "Building the computer from NAND gates..." before the address.
+- **Bench API shape.** Every route answers with the same machine picture. The current
+  instruction is read at `instruction_start.pc` from `instruction_start.memory`, because
+  half way through an instruction `pc` has moved on. A gate step takes a `count` (1 to
+  100,000) and stops early on a halt; cycle and instruction steps refuse any count but 1.
+  `POST /api/program` reuses the built machine (`Computer.load_program`) instead of
+  building a new one. The Cockpit should keep this shape and add the Pebble source map.
+- **Carried from the Plan 2 ledger:**
+  - `FastMachine.step` still rebuilds its opcode handler dict on every step
+    (`FastMachine._handlers`). Not fixed: the engine clears its 50,000 floor more than
+    three times over. Fix it if Plan 3's conformance runs are too slow.
+  - `scripts/measure_engines.py` keeps its own copy of the limits in `tests/test_engine_speed.py`;
+    a change to one can drift from the other. Move them into `proof.py` and import both.
+  - The ledger noted that `assemble` used `splitlines`, so `\x0b`, `\x0c` and similar would
+    count as line breaks. Checked for this note: `assemble` splits on `"\n"` only (since
+    33b6055), so line numbers match an editor's; `li r0, 1\x0bli r1, 2` is one bad line 1.
+    Text with `\r\n` line ends also assembles. Nothing to carry.
+- The Bench's "Read more" entries are still plain text; make them real links when the site
+  is published (carried from the Plan 2 notes).
+
 ## Rule #1: docs ship with the code
 
 Documentation is as important as code, and it outranks everything else in these plans. The

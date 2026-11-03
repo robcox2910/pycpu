@@ -67,9 +67,9 @@ Here it is as a picture. Read it from the bottom up.
   ├──────────────────────────────────────────────────────┤
   │  Pebble           programs, translated to numbers    │  coming later in the climb
   ├──────────────────────────────────────────────────────┤
-  │  The assembler    readable words -> numbers          │  coming later in the climb
+  │  The assembler    readable words -> numbers          │  built and working
   ├──────────────────────────────────────────────────────┤
-  │  The CPU          follows a list of instructions     │  coming later in the climb
+  │  The CPU          follows a list of instructions     │  built and working
   ├──────────────────────────────────────────────────────┤
   │  Memory           latches, registers, RAM            │  built and working
   ├──────────────────────────────────────────────────────┤
@@ -81,18 +81,29 @@ Here it is as a picture. Read it from the bottom up.
   └──────────────────────────────────────────────────────┘
 ```
 
-Each layer is built only from the layer beneath it. NAND, gates, arithmetic and
-memory now exist and work; the rungs marked "coming later" do not exist yet.
+Each layer is built only from the layer beneath it. Everything from NAND up to the
+CPU and the assembler now exists and works; Pebble and the Cockpit, the rungs marked
+"coming later", do not exist yet.
 
 ## Where We Are Today
 
-The bottom of the ladder is built: gates, adders, the ALU, registers and a 4,096-word
-RAM, every bit of it made of real NAND gates. There is also a first piece of the
-Cockpit, called **the Bench**: a page on your own computer where you set two numbers,
-pick what the ALU should do, and then click down from the whole ALU, through its
-adders, to a single gate, watching the real 0s and 1s on its wires. Registers and RAM
-join the Bench when the CPU does. Start it with `uv run python -m pycpu`, or
-read [The Bench](concepts/the-bench.md). The processor, assembler and Pebble come next.
+The bottom six rungs are built. Gates, adders, the ALU, registers and a 4,096-word RAM
+are all made of real NAND gates, and on top of them sits a whole **CPU**, also made of
+NAND gates, that fetches instructions from memory and obeys them, one after another. You can write programs for it in **assembly language** (short
+words such as `add` and `store`), and the assembler turns them into the numbers the CPU obeys.
+
+Running a program on gates is slow, so there is also a **fast engine** that follows
+the same rules with ordinary Python arithmetic, and the tests check after every
+instruction that the two always agree. A program runs fast, and you can **pause** it,
+which carries the whole machine over to the gates, so you can step through an
+instruction one gate at a time and **rewind** it to watch again.
+
+You can do all of that on **the Bench**, a page on your own computer: it shows the
+registers, the memory with the current instruction marked, and buttons to step by a
+gate, a clock beat or an instruction, and to rewind and run. Its zoom panel goes from
+the whole CPU down to a single gate, with the real 0s and 1s on its wires. Start it
+with `uv run python -m pycpu`, or read [The Bench](concepts/the-bench.md). Pebble and
+the full Cockpit come next.
 
 ## By the End of the Climb
 
@@ -111,8 +122,10 @@ the instruction that is running right now. You will be able to **pause at any mo
 and click down through the layers (the ALU, the adder, a single bit, a single gate)
 and see the real circuit, with real wires carrying real values.
 
-The full Cockpit does not exist yet, but its zoom panel does: that is the Bench. The rest of
-the Cockpit is where the climb is heading.
+The full Cockpit does not exist yet, but a good part of it does: the Bench already shows
+the registers, the memory and the running instruction, and zooms down to the gates.
+What it cannot show yet is a Pebble program, because Pebble does not run on PyCPU yet.
+That is where the climb is heading.
 
 ## Start Here
 
