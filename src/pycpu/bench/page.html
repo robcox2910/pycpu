@@ -100,6 +100,7 @@ const PATHS = {
   "": ["The whole circuit: the CPU and the RAM, filed into named parts.", "Looking Inside a Circuit (looking-inside.md)"],
   "cpu.flags": ["The flags register: four bits remembering whether the last result was zero, negative, carried or overflowed.", "Machine Code (machine-code.md)"],
   "cpu.operand": ["The operand chooser: picks what goes into the ALU's second input for this instruction.", "The Control Unit (the-control-unit.md)"],
+  "cpu.alu.control": ["The ALU's control: works out from the op dial whether this job is a subtraction.", "The ALU (the-alu.md)"],
   "cpu.alu.flags": ["The ALU's flags part: it holds the zero check, which lights up when the result is all 0s.", "The ALU (the-alu.md)"],
 };
 const LEVELS = {
@@ -261,7 +262,8 @@ function showMachine(m) {
   const memory = document.getElementById("memory");
   memory.replaceChildren();
   m.memory.forEach((cell) => {
-    const row = el("tr", undefined, cell.address === i.address ? "here" : "");
+    // Once halted nothing runs next, so no row is marked.
+    const row = el("tr", undefined, !m.halted && cell.address === i.address ? "here" : "");
     row.append(el("td", String(cell.address)), el("td", hex(cell.word)), el("td", cell.text));
     memory.append(row);
   });

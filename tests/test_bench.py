@@ -243,6 +243,19 @@ class TestStepping:
         assert bench.step("instruction", 1)["at_boundary"] is True
 
 
+class TestBrokenBodies:
+    """A body that is not JSON at all, or is empty, is refused rather than crashing."""
+
+    @pytest.mark.parametrize("path", ["/api/step", "/api/run", "/api/program"])
+    @pytest.mark.parametrize("body", [b"{nope", b""], ids=["broken", "empty"])
+    def test_a_broken_or_empty_body_is_a_400(self, path: str, body: bytes) -> None:
+        """Broken JSON and an empty body both get 400, and the machine does not move."""
+        bench = Bench()
+        response = _run(bench.client.post(path, body=body))
+        assert response.status == BAD_REQUEST
+        assert bench.machine()["pc"] == 0
+
+
 class TestRewindAndRun:
     """POST /api/rewind goes back to the instruction's start; POST /api/run runs fast."""
 

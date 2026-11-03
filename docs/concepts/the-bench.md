@@ -20,6 +20,16 @@ panel lets you **zoom** (move from a big part into the smaller parts it is made 
 from the whole CPU down to a single NAND gate, with the real 0s and 1s on its wires.
 Nothing on it is drawn from memory or faked.
 
+The page in your browser and the Bench app behind it talk by sending each other short
+messages, like notes passed through a hatch. Each kind of note goes to its own address,
+called a **route**, such as `/api/machine` ("tell me about the machine") or `/api/step`
+("move it forward"). A note marked **GET** asks for something and changes nothing; a
+note marked **POST** sends something, such as which button you pressed. The answers
+travel as **JSON**, a plain text way of writing numbers, words and lists that both
+Python and the browser can read, like `{"pc": 1, "halted": false}`. When a note makes
+no sense, the answer is a number instead: **400** means "bad request, I can't do
+that", and **404** means "not found, there is no such thing".
+
 | The workbench | In PyCPU |
 |---------------|----------|
 | The radio with its lid off | The Bench page, served by `python -m pycpu` |
@@ -191,7 +201,8 @@ anywhere else. Across the top are the step buttons (**1 gate**, **100 gates**,
 **1 cycle**, **1 instruction**), **Rewind**, and **Run** with a box for how many
 instructions. Below them are the registers and flags, the program's printed output, and
 the memory window, where each word is shown as a number and as assembly, with the
-current instruction highlighted. A text box takes your own assembly, and **Load**
+current instruction highlighted. Once the machine has halted, no row is highlighted,
+because nothing runs next. A text box takes your own assembly, and **Load**
 sends it. Under all that is the zoom panel: it opens on `cpu`, lists the parts inside
 with their gate counts, and draws each gate with its two inputs and its output, a wire
 holding a 1 highlighted. Each level is labelled in one plain sentence, with the name of
