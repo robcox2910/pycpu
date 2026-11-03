@@ -144,7 +144,9 @@ Early computers had no printing routine built in, so programmers wrote this loop
 themselves. Here it also decides how much stack we must keep spare: a 5-digit negative
 number is the deepest use, which is why `RUNTIME_STACK_WORDS` is now 9 (it was 3 before
 the printing routines): the return address, the sentinel, four digits waiting, the `call` into `__divmod` and its
-two pushes. Soon, a Pebble `print(x)` will become a `call __print_int`.
+two pushes. This is the routine behind every Pebble `print(x)`: as you saw in
+[From Pebble to Machine Code](from-pebble-to-machine-code.md), it becomes `pop r1` and
+`call __print_int`.
 
 ## What's Next
 

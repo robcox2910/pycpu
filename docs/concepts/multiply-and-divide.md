@@ -99,9 +99,9 @@ assembly text called `RUNTIME`. Every label in it starts with two underscores
 (`__mul`, `__divmod_loop`), so it can never be confused with a label somebody else
 writes. The rules for using a routine are the same for both: the two inputs go in
 `r1` and `r2`, you `call` it, and the answer comes back in `r1` (`__divmod` also
-answers in `r2`). The routines never touch `r0` (always 0) or `r7` (a register kept for the
-**translator**, the part coming later in this section that turns a Pebble program into
-instructions like these, which uses it to find its place on the stack), but they use `r1` to `r6` freely.
+answers in `r2`). The routines never touch `r0` (always 0) or `r7` (the frame pointer that
+the [translator](from-pebble-to-machine-code.md) uses to find a program's variables, from
+[Variables in Memory](variables-in-memory.md)), but they use `r1` to `r6` freely.
 
 ### Multiplying: shift and add
 
@@ -197,7 +197,7 @@ up side by side instead of one after another. So building it in assembly shows w
 It also means everything bigger can be built from a very small kit. A computer that can
 add, shift, compare and jump can do any arithmetic at all, only more slowly. That is the
 idea behind the [calling convention](calling-and-returning.md) too: write a recipe once,
-call it from everywhere. The next steps will use these two routines whenever a Pebble
+call it from everywhere. The translator calls these two routines whenever a Pebble
 program writes `*`, `//` or `%`.
 
 ## What's Next

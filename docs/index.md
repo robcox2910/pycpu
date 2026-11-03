@@ -82,8 +82,9 @@ Here it is as a picture. Read it from the bottom up.
 ```
 
 Each layer is built only from the layer beneath it. Everything from NAND up to the
-CPU and the assembler now exists and works; Pebble does not run on PyCPU yet, and the Cockpit is still to come; those are the
-rungs marked "coming later".
+CPU and the assembler now exists and works. Pebble has started to arrive: simple Pebble
+programs with variables, sums and `print` already run on PyCPU, and the rest of Pebble and
+the Cockpit are still to come; those are the rungs marked "coming later".
 
 ## Where We Are Today
 
@@ -124,7 +125,7 @@ and see the real circuit, with real wires carrying real values.
 
 The full Cockpit does not exist yet, but a good part of it does: the Bench already shows
 the registers, the memory and the running instruction, and zooms down to the gates.
-What it cannot show yet is a Pebble program, because Pebble does not run on PyCPU yet.
+What it cannot show yet is a Pebble program, because the Bench cannot load one yet.
 That is where the climb is heading.
 
 ## Start Here

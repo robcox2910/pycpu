@@ -203,5 +203,5 @@ problem, then switch to the slow, detailed view.
 ## What's Next
 
 Now you can freeze the computer and creep through an instruction one gate at a time.
-Next, see how a machine with no multiply instruction can still multiply, in
-[Multiply and Divide](multiply-and-divide.md).
+Next, give it a real program to run: see how a line of Pebble becomes machine code, in
+[From Pebble to Machine Code](from-pebble-to-machine-code.md).
