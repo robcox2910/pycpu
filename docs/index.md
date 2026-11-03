@@ -55,17 +55,18 @@ explained the first time it appears.
    the ALU to do sums and registers and RAM to remember things.
 6. **The assembler**, which turns instructions written in readable words into **machine
    code**, the plain numbers the processor actually obeys.
-7. **Pebble**, a small programming language that already exists in the same series. Pebble
-   programs get **compiled**, which means translated, into PyCPU machine code.
+7. **Pebble**, a small programming language that already exists in the same series. Pebble's
+   own **compiler** (a translating program) turns a Pebble program into simple steps, and
+   PyCPU's **translator** turns those steps into PyCPU machine code.
 8. **The Cockpit**, the screen where you watch it all run.
 
 Here it is as a picture. Read it from the bottom up.
 
 ```
   ┌──────────────────────────────────────────────────────┐
-  │  The Cockpit      watch a program run, zoom to gates │  coming later in the climb
+  │  The Cockpit      watch a program run, zoom to gates │  coming later; the Bench is its start
   ├──────────────────────────────────────────────────────┤
-  │  Pebble           programs, translated to numbers    │  coming later in the climb
+  │  Pebble           programs, translated to numbers    │  built for part of Pebble
   ├──────────────────────────────────────────────────────┤
   │  The assembler    readable words -> numbers          │  built and working
   ├──────────────────────────────────────────────────────┤
@@ -82,12 +83,15 @@ Here it is as a picture. Read it from the bottom up.
 ```
 
 Each layer is built only from the layer beneath it. Everything from NAND up to the
-CPU and the assembler now exists and works; Pebble does not run on PyCPU yet, and the Cockpit is still to come; those are the
-rungs marked "coming later".
+CPU and the assembler exists and works, and Pebble programs now run on top of it: whole
+numbers, variables, `if`, `while`, `for` over a range, functions (even ones that call
+themselves) and `print`. That is only part of Pebble. Decimal numbers, lists, text kept in
+variables and the rest are refused with a friendly message naming the line, so that rung
+says "built for part of Pebble". The Cockpit is still to come.
 
 ## Where We Are Today
 
-The bottom six rungs are built. Gates, adders, the ALU, registers and a 4,096-word RAM
+The bottom seven rungs are built, the seventh only for part of Pebble. Gates, adders, the ALU, registers and a 4,096-word RAM
 are all made of real NAND gates, and on top of them sits a whole **CPU**, also made of
 NAND gates, that fetches instructions from memory and obeys them, one after another. You can write programs for it in **assembly language** (short
 words such as `add` and `store`), and the assembler turns them into the numbers the CPU obeys.
@@ -102,8 +106,17 @@ You can do all of that on **the Bench**, a page on your own computer: it shows t
 registers, the memory with the current instruction marked, and buttons to step by a
 gate, a clock beat or an instruction, and to rewind and run. Its zoom panel goes from
 the whole CPU down to a single gate, with the real 0s and 1s on its wires. Start it
-with `uv run python -m pycpu`, or read [The Bench](concepts/the-bench.md). Pebble and
-the full Cockpit come next.
+with `uv run python -m pycpu`, or read [The Bench](concepts/the-bench.md).
+
+And you can write programs in **Pebble**. The section "Pebble on the CPU", starting at
+[From Pebble to Machine Code](concepts/from-pebble-to-machine-code.md), shows how each
+piece of a Pebble program becomes machine code: variables become places in memory,
+`if` and `while` become jumps, a function call builds a **frame** (its own patch of
+memory) on the stack, and multiplying, dividing and printing are small routines written
+in assembly, because the CPU itself can only add, shift and compare. When a program goes
+wrong, for example by dividing by zero, PyCPU stops and names the Pebble line to blame.
+Load a Pebble program on the Bench and it shows the line that is running, next to the
+machine code.
 
 ## By the End of the Climb
 
@@ -123,9 +136,10 @@ and click down through the layers (the ALU, the adder, a single bit, a single ga
 and see the real circuit, with real wires carrying real values.
 
 The full Cockpit does not exist yet, but a good part of it does: the Bench already shows
-the registers, the memory and the running instruction, and zooms down to the gates.
-What it cannot show yet is a Pebble program, because Pebble does not run on PyCPU yet.
-That is where the climb is heading.
+the registers, the memory and the running instruction, zooms down to the gates, and
+loads a Pebble program and marks the line that is running. What is missing is the
+Cockpit itself: one screen laid out for all of it, and a button that steps a whole
+Pebble line at a time. That is where the climb is heading.
 
 ## Start Here
 

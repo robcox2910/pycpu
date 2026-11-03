@@ -116,6 +116,10 @@ class AssemblyError(ValueError):
         self.line = line
 
 
+class ProgramTooLongError(AssemblyError):
+    """Say that the program does not fit in the memory it was assembled for."""
+
+
 @dataclass(frozen=True)
 class Program:
     """The finished stack of number cards, plus the bookmarks and where each came from.
@@ -352,7 +356,7 @@ def _pass_one(source: str, words: int) -> tuple[list[_Item], dict[str, int]]:
             continue
         size = _size(name, operands, number)
         if address + size > words:
-            raise AssemblyError(
+            raise ProgramTooLongError(
                 number,
                 f"the program is too long: it must fit in {words} words of memory, and this line goes past the end",
             )

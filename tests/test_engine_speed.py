@@ -14,7 +14,7 @@ import pytest
 from pycpu import proof
 from pycpu.fast import FastMachine
 from pycpu.memory import RAM_ADDRESS_BITS
-from pycpu.proof import measure_engines
+from pycpu.proof import ENGINE_LIMITS, measure_engines
 
 ROOT = Path(__file__).parent.parent
 SMALL_BITS = 6
@@ -29,12 +29,15 @@ KEYS = {
     "fast_instructions_per_second",
 }
 
-BUILD_LIMIT_SECONDS = 30
-MEMORY_LIMIT_MIB = 1024
-PAUSE_LIMIT_SECONDS = 2
-READ_STATE_LIMIT_SECONDS = 2
-GATE_INSTRUCTION_LIMIT_SECONDS = 0.5
-FAST_INSTRUCTIONS_PER_SECOND_FLOOR = 50_000
+# The limits as the Two Engines page prints them, so the page and the code cannot drift.
+LIMITS_ON_THE_PAGE = {
+    "build_seconds": (30, "under"),
+    "memory_mib": (1024, "under"),
+    "pause_seconds": (2, "under"),
+    "read_state_seconds": (2, "under"),
+    "gate_instruction_seconds": (0.5, "under"),
+    "fast_instructions_per_second": (50_000, "over"),
+}
 
 
 def _script_main() -> Callable[[list[str] | None], int]:
@@ -46,6 +49,19 @@ def _script_main() -> Callable[[list[str] | None], int]:
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return cast("Callable[[list[str] | None], int]", module.main)
+
+
+def test_the_limits_are_the_ones_the_two_engines_page_gives() -> None:
+    """Every limit, and which side of it a figure must be, matches the page's table."""
+    on_the_page = {name: (limit, side) for name, (limit, _, side) in ENGINE_LIMITS.items()}
+    assert on_the_page == LIMITS_ON_THE_PAGE
+
+
+def test_under_means_less_than_and_over_means_more_than() -> None:
+    """Each limit's comparison agrees with the word the table prints for it."""
+    for limit, passes, side in ENGINE_LIMITS.values():
+        assert passes(limit - 1, limit) is (side == "under")
+        assert passes(limit + 1, limit) is (side == "over")
 
 
 def test_a_small_measurement_fills_in_every_figure() -> None:
@@ -106,9 +122,9 @@ def test_the_script_exits_non_zero_when_a_limit_is_missed(
 def test_both_engines_are_quick_enough_at_full_size() -> None:
     """The whole computer, with its full 4K RAM, meets every limit on both engines."""
     result = measure_engines(RAM_ADDRESS_BITS)
-    assert result["build_seconds"] < BUILD_LIMIT_SECONDS
-    assert result["memory_mib"] < MEMORY_LIMIT_MIB
-    assert result["pause_seconds"] < PAUSE_LIMIT_SECONDS
-    assert result["read_state_seconds"] < READ_STATE_LIMIT_SECONDS
-    assert result["gate_instruction_seconds"] < GATE_INSTRUCTION_LIMIT_SECONDS
-    assert result["fast_instructions_per_second"] > FAST_INSTRUCTIONS_PER_SECOND_FLOOR
+    missed = [
+        name
+        for name, (limit, passes, _side) in ENGINE_LIMITS.items()
+        if not passes(result[name], limit)
+    ]
+    assert missed == []

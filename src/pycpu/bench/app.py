@@ -2,29 +2,33 @@
 
 Think of a workshop with a single radio on the bench, switched on, its lid off.
 Visitors can freeze it, nudge it forward (`/api/step`), wind it back (`/api/rewind`),
-let it play (`/api/run`), put a new song on (`/api/program`), read its dials
-(`/api/machine`) and ask what any part is carrying (`/api/view`). The radio is always
-the same real one. Here it is a `Computer` whose paused gate engine is the CPU and RAM
-built from NAND gates, and every answer is read from it, never from a copy.
+let it play (`/api/run`), put a new song on (`/api/program`, or `/api/pebble` for a
+song that comes with its lyric sheet), read its dials (`/api/machine`) and ask what
+any part is carrying (`/api/view`). The radio is always the same real one. Here it is
+a `Computer` whose paused gate engine is the CPU and RAM built from NAND gates, and
+every answer is read from it, never from a copy.
 """
 
 from collections.abc import Mapping
 from importlib import resources
 
+from pebble import PebbleError
 from pyweb.app import App
-from pyweb.messages import HTTPError, HttpRequest, HttpResponse, html, json
+from pyweb.messages import HTTPError, HttpRequest, HttpResponse, JsonValue, html, json
 
 from pycpu.assembler import AssemblyError, assemble, disassemble
 from pycpu.computer import Computer, StepSize
 from pycpu.isa import Fault
 from pycpu.memory import RAM_ADDRESS_BITS
 from pycpu.state import MachineState
+from pycpu.translator import PebbleRun, TranslatedProgram, UnsupportedFeature, translate
 from pycpu.view import circuit_view
 
 BAD_REQUEST = 400
 NOT_FOUND = 404
 MAX_RUN = 10_000  # the most instructions one press of Run may ask for
 MAX_GATE_STEPS = 100_000  # the most gate steps one request may ask for
+MAX_PEBBLE_CHARACTERS = 65_536  # far more Pebble than fits in 4K words once translated
 WINDOW_WORDS = 16  # how many words of memory the page shows
 WINDOW_BEHIND = 4  # how many of them sit before pc
 
@@ -72,7 +76,38 @@ def _cell(state: MachineState, address: int) -> dict[str, object]:
     return {"address": address, "word": word, "text": disassemble(word, address)}
 
 
-def machine_picture(computer: Computer) -> dict[str, object]:
+def pebble_picture(computer: Computer, translated: TranslatedProgram) -> dict[str, object]:
+    """Describe the Pebble program on the Bench: its lines and the one running now.
+
+    The running line is the Pebble line of the current instruction, the one that
+    started at `instruction_start.pc` (half way through an instruction `pc` has moved
+    on). It is None inside the ready-made runtime routines, which belong to no line.
+    Once the machine has halted nothing runs next, so the line is the one a fault is
+    blamed on (None after a normal finish), and `message` says how the run ended in
+    one sentence, such as "Division by zero at line 2". Before that `message` is None.
+
+    Args:
+        computer: The paused computer running the program.
+        translated: The program it is running, with its source map.
+
+    Returns:
+        `source` (a list of the Pebble lines), `line` and `message`.
+
+    """
+    state = computer.state()
+    if state.halted:
+        # steps=0 is not a count: the Bench does not count instructions, and a halted
+        # run's sentence never mentions one.
+        ended = PebbleRun.from_state(translated, state, steps=0)
+        line, message = ended.line, ended.describe()
+    else:
+        line, message = translated.line_at(computer.instruction_start.pc), None
+    return {"source": translated.source.splitlines(), "line": line, "message": message}
+
+
+def machine_picture(
+    computer: Computer, translated: TranslatedProgram | None = None
+) -> dict[str, object]:
     """Describe the paused computer the way the Bench page draws it.
 
     Everything is read from the gate engine while paused. The current instruction
@@ -83,10 +118,12 @@ def machine_picture(computer: Computer) -> dict[str, object]:
     slides back so it never runs past the last word: a `pc` far outside memory still
     shows the final 16 words. `fault` is the name of the `Fault` (such as
     `"BAD_ADDRESS"`) when the machine has halted with one of those codes, else None;
-    a program's own `halt 1` to `halt 3` shares those codes.
+    a program's own `halt 1` to `halt 3` shares those codes. `pebble` is the
+    `pebble_picture` when the program came from Pebble, and None for assembly.
 
     Args:
         computer: The computer to describe.
+        translated: The Pebble program it is running, or None for an assembly program.
 
     Returns:
         A dictionary ready to send as JSON; the Bench page's routes all answer with it.
@@ -115,6 +152,7 @@ def machine_picture(computer: Computer) -> dict[str, object]:
         "output": state.output_text,
         "instruction": instruction,
         "memory": [_cell(state, address) for address in range(first, last)],
+        "pebble": None if translated is None else pebble_picture(computer, translated),
     }
 
 
@@ -164,6 +202,65 @@ def load_source(computer: Computer, source: object) -> None:
     computer.pause()
 
 
+def load_pebble(computer: Computer, source: object) -> TranslatedProgram:
+    """Translate a Pebble program, load it and pause at its start, or refuse it.
+
+    Args:
+        computer: The computer to load; it is left as it was when the program is refused.
+        source: The Pebble text from the request.
+
+    Returns:
+        The translated program, whose source map the machine picture reads.
+
+    Raises:
+        HTTPError: 400 if `source` is not text, is longer than
+            `MAX_PEBBLE_CHARACTERS`, or the program (with room for its stack) needs more words than
+            this Bench's memory has (only a small Bench; the full 4K is what the
+            translator itself checks against).
+        PebbleError: If Pebble itself finds a mistake in the program.
+        UnsupportedFeature: If the program uses something PyCPU cannot do yet.
+
+    """
+    if not isinstance(source, str):
+        raise HTTPError(BAD_REQUEST, "source must be the Pebble program's text")
+    # Refuse a huge text before Pebble's compiler spends time on it: anything this long
+    # could never fit in memory once translated.
+    if len(source) > MAX_PEBBLE_CHARACTERS:
+        msg = f"a Pebble program may be at most {MAX_PEBBLE_CHARACTERS:,} characters long"
+        raise HTTPError(BAD_REQUEST, msg)
+    translated = translate(source)
+    needed, words = len(translated.program.words), computer.gate.words
+    if needed > words:
+        msg = f"this program needs {needed} words, but this Bench's memory has only {words}"
+        raise HTTPError(BAD_REQUEST, msg)
+    # Main's first frame sits just past the program; without room it would stop at once.
+    if translated.memory_needed > words:
+        msg = (
+            f"this program needs room for its stack too ({translated.memory_needed} words in all), "
+            f"but this Bench's memory has only {words}"
+        )
+        raise HTTPError(BAD_REQUEST, msg)
+    computer.load_program(translated.program)
+    computer.pause()
+    return translated
+
+
+def refusal(error: PebbleError | UnsupportedFeature) -> HttpResponse:
+    """Answer 400 with the error's message and the line and column it points at.
+
+    The body has the same `error` and `message` as every other 400 from the Bench,
+    plus `line` and `column` (1-based, or null when nobody knows) so the page could
+    point at the place.
+    """
+    body: dict[str, JsonValue] = {
+        "error": "Bad Request",
+        "message": str(error),
+        "line": error.line,
+        "column": error.column,
+    }
+    return json(body, BAD_REQUEST)
+
+
 def create_bench(address_bits: int = RAM_ADDRESS_BITS) -> App:
     """Build the Bench app around one `Computer` running `DEMO_PROGRAM`, paused at its start.
 
@@ -174,18 +271,23 @@ def create_bench(address_bits: int = RAM_ADDRESS_BITS) -> App:
 
     Returns:
         A PyWeb `App` with the routes `GET /` (the page), `GET /api/machine`,
-        `GET /api/view`, `POST /api/step`, `POST /api/rewind`, `POST /api/run`
-        and `POST /api/program`. See the Bench page in the docs for each one.
+        `GET /api/view`, `POST /api/step`, `POST /api/rewind`, `POST /api/run`,
+        `POST /api/program` and `POST /api/pebble`. See the Bench page in the docs
+        for each one.
 
     """
     computer = Computer(assemble(DEMO_PROGRAM, words=1 << address_bits), address_bits)
     computer.pause()
     page = resources.files("pycpu.bench").joinpath("page.html").read_text(encoding="utf-8")
     app = App()
+    # The Pebble program on the Bench, if the program came from Pebble; a dict so the
+    # routes below can change it.
+    loaded: dict[str, TranslatedProgram] = {}
 
     def answer() -> HttpResponse:
         """Answer with the machine picture, as every route that moves the machine does."""
-        return json(machine_picture(computer))  # pyright: ignore[reportArgumentType]
+        picture = machine_picture(computer, loaded.get("pebble"))
+        return json(picture)  # pyright: ignore[reportArgumentType]
 
     @app.get("/")
     def front_page(_request: HttpRequest) -> HttpResponse:  # pyright: ignore[reportUnusedFunction]
@@ -233,6 +335,17 @@ def create_bench(address_bits: int = RAM_ADDRESS_BITS) -> App:
     def program(request: HttpRequest) -> HttpResponse:  # pyright: ignore[reportUnusedFunction]
         """Assemble new source and load it, or answer 400 naming the faulty line."""
         load_source(computer, _object(request, "the assembly text as source").get("source"))
+        loaded.clear()
+        return answer()
+
+    @app.post("/api/pebble")
+    def pebble(request: HttpRequest) -> HttpResponse:  # pyright: ignore[reportUnusedFunction]
+        """Translate a Pebble program and load it, or answer 400 naming the line and column."""
+        source = _object(request, "the Pebble program as source").get("source")
+        try:
+            loaded["pebble"] = load_pebble(computer, source)
+        except (PebbleError, UnsupportedFeature) as error:
+            return refusal(error)
         return answer()
 
     return app

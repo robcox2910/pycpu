@@ -67,6 +67,15 @@ nav:
       - Calling and Returning: concepts/calling-and-returning.md
       - Two Engines: concepts/two-engines.md
       - Pausing and Rewinding: concepts/pausing-and-rewinding.md
-      - The Bench: concepts/the-bench.md
+  - Pebble on the CPU:
+      - From Pebble to Machine Code: concepts/from-pebble-to-machine-code.md
+      - Variables in Memory: concepts/variables-in-memory.md
+      - Why 16-Bit Numbers Wrap: concepts/why-16-bit-numbers-wrap.md
+      - If and While as Jumps: concepts/if-and-while-as-jumps.md
+      - How a Function Call Really Works: concepts/how-a-function-call-really-works.md
+      - Multiply and Divide: concepts/multiply-and-divide.md
+      - Printing a Number: concepts/printing-a-number.md
+      - What Happens When Things Go Wrong: concepts/what-happens-when-things-go-wrong.md
+  - The Bench: concepts/the-bench.md
   - Reference:
       - Instruction Set: reference/instruction-set.md

@@ -177,9 +177,12 @@ in a proper language.
 
 The real world works the same way. Every program on your phone began as text that a
 translator turned into numbers. The first assemblers, written in the 1940s and 1950s,
-were exactly this idea: let people write `ADD` instead of `0110`. Later in this climb we
-build a compiler that writes assembly for us, and its output goes through the assembler
-you just met.
+were exactly this idea: let people write `ADD` instead of `0110`. Later in the story, a
+program written in **Pebble** (a small programming language from the same series) is
+first turned into simpler instructions by Pebble's own **compiler** (a program that
+translates a whole language into simpler steps). Then our translator writes PyCPU
+assembly for each of those steps, and that assembly goes through the assembler you just
+met. [From Pebble to Machine Code](from-pebble-to-machine-code.md) shows how.
 
 ## What's Next
 

@@ -36,6 +36,7 @@
   tr.here { background:var(--here); font-weight:700; }
   tr.here td:first-child::before { content:"> "; color:var(--accent); }
   #output { font-family:ui-monospace,monospace; white-space:pre-wrap; min-height:1.5rem; }
+  td.code { white-space:pre; }
   nav#crumbs { display:flex; flex-wrap:wrap; gap:.3rem; align-items:center; }
   nav#crumbs button { background:transparent; color:var(--accent); border-color:var(--line); }
   #level { background:var(--card); border:1px solid var(--line); border-left:4px solid var(--accent); border-radius:6px; padding:.6rem .8rem; margin:.6rem 0; }
@@ -48,7 +49,7 @@
 <body>
 <main>
   <h1>The Bench</h1>
-  <p class="muted">A whole computer made of NAND gates, paused, with the lid off. Step it forward, rewind it, run it, then click down through its parts to a single gate. Everything shown is read from the real circuit; a wire carrying a 1 is highlighted.</p>
+  <p class="muted">A whole computer made of NAND gates, paused, with the lid off. Step it forward, rewind it, run it, then click down through its parts to a single gate. Load a Pebble program and the line that is running is marked beside its machine code. Everything shown is read from the real circuit; a wire carrying a 1 is highlighted.</p>
 
   <div class="card row" role="group" aria-label="Controls">
     <button type="button" data-size="gate" data-count="1">1 gate</button>
@@ -70,16 +71,29 @@
   <div class="card" id="output"></div>
 
   <div class="split">
+    <section aria-label="Pebble program">
+      <h2>Pebble</h2>
+      <p class="muted" id="pebble-note"></p>
+      <table><thead><tr><th>line</th><th>Pebble</th></tr></thead><tbody id="pebble"></tbody></table>
+    </section>
     <section>
-      <h2>Memory</h2>
+      <h2>Memory: the machine code</h2>
       <p class="muted" id="current"></p>
       <table><thead><tr><th>address</th><th>word</th><th>as assembly</th></tr></thead><tbody id="memory"></tbody></table>
     </section>
-    <section>
-      <h2>Load your own program</h2>
-      <textarea id="source" spellcheck="false" aria-label="Assembly program" placeholder="li r0, 7&#10;halt"></textarea>
-      <div class="row" style="margin-top:.4rem"><button type="button" id="load">Load</button><span class="muted">Assembled, put in memory, and paused at its start.</span></div>
-    </section>
+  </div>
+
+  <h2>Load your own program</h2>
+  <textarea id="source" spellcheck="false" aria-label="Your program, in Pebble or assembly">let n = 3
+while n > 0 {
+    print(n)
+    n = n - 1
+}
+</textarea>
+  <div class="row" style="margin-top:.4rem">
+    <button type="button" id="load-pebble">Load Pebble</button>
+    <button type="button" id="load" class="quiet">Load assembly</button>
+    <span class="muted">Translated (for Pebble) or assembled, put in memory, and paused at its start.</span>
   </div>
 
   <h2>Where you are</h2>
@@ -272,6 +286,29 @@ function showMachine(m) {
   });
 }
 
+function showPebble(m) {
+  const note = document.getElementById("pebble-note");
+  const lines = document.getElementById("pebble");
+  lines.replaceChildren();
+  const p = m.pebble;
+  if (!p) {
+    note.textContent = "This program is written in assembly, so there is no Pebble to show. Write some Pebble below and press Load Pebble.";
+    return;
+  }
+  if (m.halted) {
+    note.textContent = p.message + "." + (p.line ? " The marked line is the one to blame." : "");
+  } else if (p.line === null) {
+    note.textContent = "Inside a ready-made routine (multiply, divide or print). It has no Pebble line of its own.";
+  } else {
+    note.textContent = "Running line " + p.line + ". One line is many instructions: step and watch the machine code move while this mark waits.";
+  }
+  p.source.forEach((text, i) => {
+    const row = el("tr", undefined, p.line === i + 1 ? "here" : "");
+    row.append(el("td", String(i + 1)), el("td", text, "code"));
+    lines.append(row);
+  });
+}
+
 async function send(url, body) {
   if (busy) return;
   busy = true;
@@ -285,7 +322,9 @@ async function send(url, body) {
       return;
     }
     showError("");
-    showMachine(await response.json());
+    const machine = await response.json();
+    showMachine(machine);
+    showPebble(machine);
     await load(path);
   } catch (e) {
     showError("Could not reach the Bench");
@@ -305,6 +344,7 @@ document.querySelectorAll("button[data-size]").forEach((b) => {
 document.getElementById("rewind").addEventListener("click", () => send("/api/rewind", {}));
 document.getElementById("run").addEventListener("click", () => send("/api/run", { instructions: Number(document.getElementById("count").value) }));
 document.getElementById("load").addEventListener("click", () => send("/api/program", { source: document.getElementById("source").value }));
+document.getElementById("load-pebble").addEventListener("click", () => send("/api/pebble", { source: document.getElementById("source").value }));
 send("/api/machine");
 </script>
 </body>

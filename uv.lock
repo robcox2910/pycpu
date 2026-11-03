@@ -355,6 +355,89 @@ wheels = [
 ]
 
 [[package]]
+name = "fromscratch-pebble"
+version = "0.4.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/c7/4e/311666ed9ff3dfcf3ca02e9bd8aaab446e2066a9b0083b012c0fcfd33a2a/fromscratch_pebble-0.4.0.tar.gz", hash = "sha256:2c9954e22811bf58b25ab5ff4bc988f1924dbed43691459aeac591187f0550ed", size = 410293, upload-time = "2026-11-03T00:53:53.833Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/ee/60/1f9e04d27fb5676a5977d2d61168385007d19049732601b98449108798bd/fromscratch_pebble-0.4.0-py3-none-any.whl", hash = "sha256:2f30f244388f20646abcf84b78f407f1b47096e42b33782a4aa94df66009e14e", size = 110837, upload-time = "2026-11-03T00:53:52.518Z" },
+]
+
+[[package]]
+name = "fromscratch-pycpu"
+source = { editable = "." }
+dependencies = [
+    { name = "fromscratch-pebble" },
+    { name = "fromscratch-pynet" },
+    { name = "fromscratch-pyweb" },
+]
+
+[package.optional-dependencies]
+dev = [
+    { name = "commitizen" },
+    { name = "hypothesis" },
+    { name = "pip-audit" },
+    { name = "pre-commit" },
+    { name = "pyright" },
+    { name = "pytest" },
+    { name = "pytest-cov" },
+    { name = "pytest-timeout" },
+    { name = "ruff" },
+]
+docs = [
+    { name = "mkdocs-material" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "commitizen", marker = "extra == 'dev'", specifier = ">=4.4.0" },
+    { name = "fromscratch-pebble", specifier = ">=0.4.0" },
+    { name = "fromscratch-pynet", specifier = ">=0.2.0" },
+    { name = "fromscratch-pyweb", specifier = ">=0.4.0" },
+    { name = "hypothesis", marker = "extra == 'dev'", specifier = ">=6.100" },
+    { name = "mkdocs-material", marker = "extra == 'docs'", specifier = ">=9.5" },
+    { name = "pip-audit", marker = "extra == 'dev'", specifier = ">=2.10.0" },
+    { name = "pre-commit", marker = "extra == 'dev'", specifier = ">=4.0.1" },
+    { name = "pyright", marker = "extra == 'dev'", specifier = ">=1.1.400" },
+    { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.3.4" },
+    { name = "pytest-cov", marker = "extra == 'dev'", specifier = ">=6.0.0" },
+    { name = "pytest-timeout", marker = "extra == 'dev'", specifier = ">=2.3.1" },
+    { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.9.3" },
+]
+provides-extras = ["dev", "docs"]
+
+[[package]]
+name = "fromscratch-pycrypt"
+version = "0.2.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/52/34/996a121630ae21aee86381c945bb8ac59a90e5f75b860b29cdcb7e605565/fromscratch_pycrypt-0.2.0.tar.gz", hash = "sha256:4497a39b5e6d380e24d3681ee340038bee0ffa507a00b1c70371bcda2d4825fb", size = 70786, upload-time = "2026-10-26T11:54:46.737Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/1c/c6/7b9929f6d6a3ce4d68b17196d2e15d7c6689ad708d37ac1a59f14b505445/fromscratch_pycrypt-0.2.0-py3-none-any.whl", hash = "sha256:a81117449b551abd0cefa3a996ce332607429fdedd4f2580c19b8e42c8cdf70a", size = 13343, upload-time = "2026-10-26T11:54:45.472Z" },
+]
+
+[[package]]
+name = "fromscratch-pynet"
+version = "0.2.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/70/ee/ae041491adb4ce50d19fbc3d572417151a4ddced76332030a306a7b99cc1/fromscratch_pynet-0.2.0.tar.gz", hash = "sha256:01a040ede10b56b7860e4034a4ee22942a8539ddb60512a77bbb1c99afc6888e", size = 281429, upload-time = "2026-10-26T11:54:50.064Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/78/2d/53b36eab586a75f972d4e277d91bc64802a0647c803d646ad1302c554e3c/fromscratch_pynet-0.2.0-py3-none-any.whl", hash = "sha256:6cf61a2c756ea17598c091dfc52a7c432a20cbb62a896f08909b1adff8812caa", size = 95331, upload-time = "2026-10-26T11:54:48.526Z" },
+]
+
+[[package]]
+name = "fromscratch-pyweb"
+version = "0.4.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "fromscratch-pycrypt" },
+    { name = "fromscratch-pynet" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/26/ff/f2b0c7e33ae6c5cb8f00e8dea2d0786ed2ca9aa4ddc8e3b637318972d830/fromscratch_pyweb-0.4.0.tar.gz", hash = "sha256:8f03bf08884a5c004442d7c01264b44c82b4f4e9253b0d6b65702388984ee461", size = 223815, upload-time = "2026-10-26T12:04:39.701Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/c3/20/df06cc31f6ad5df1fa69ce833fbaefea7c57b2c8945ed7f6f319a43fe8c2/fromscratch_pyweb-0.4.0-py3-none-any.whl", hash = "sha256:16f3b4a61978fe8d5bc778a8a08c7be629e052af803599b7cecc246b9e9e3cc1", size = 68175, upload-time = "2026-10-26T12:04:38.311Z" },
+]
+
+[[package]]
 name = "ghp-import"
 version = "2.1.0"
 source = { registry = "https://pypi.org/simple" }
@@ -878,50 +961,6 @@ wheels = [
 ]
 
 [[package]]
-name = "pycpu"
-source = { editable = "." }
-dependencies = [
-    { name = "pyweb" },
-]
-
-[package.optional-dependencies]
-dev = [
-    { name = "commitizen" },
-    { name = "hypothesis" },
-    { name = "pip-audit" },
-    { name = "pre-commit" },
-    { name = "pyright" },
-    { name = "pytest" },
-    { name = "pytest-cov" },
-    { name = "pytest-timeout" },
-    { name = "ruff" },
-]
-docs = [
-    { name = "mkdocs-material" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "commitizen", marker = "extra == 'dev'", specifier = ">=4.4.0" },
-    { name = "hypothesis", marker = "extra == 'dev'", specifier = ">=6.100" },
-    { name = "mkdocs-material", marker = "extra == 'docs'", specifier = ">=9.5" },
-    { name = "pip-audit", marker = "extra == 'dev'", specifier = ">=2.10.0" },
-    { name = "pre-commit", marker = "extra == 'dev'", specifier = ">=4.0.1" },
-    { name = "pyright", marker = "extra == 'dev'", specifier = ">=1.1.400" },
-    { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.3.4" },
-    { name = "pytest-cov", marker = "extra == 'dev'", specifier = ">=6.0.0" },
-    { name = "pytest-timeout", marker = "extra == 'dev'", specifier = ">=2.3.1" },
-    { name = "pyweb", git = "https://github.com/robcox2910/pyweb?tag=v0.3.1" },
-    { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.9.3" },
-]
-provides-extras = ["dev", "docs"]
-
-[[package]]
-name = "pycrypt"
-version = "0.1.1"
-source = { git = "https://github.com/robcox2910/pycrypt?tag=v0.1.1#a67e801e3d123a3e359935077c783b95e1a642d4" }
-
-[[package]]
 name = "pygments"
 version = "2.21.0"
 source = { registry = "https://pypi.org/simple" }
@@ -942,11 +981,6 @@ sdist = { url = "https://files.pythonhosted.org/packages/f3/fe/ac50ee24a80a1b344
 wheels = [
     { url = "https://files.pythonhosted.org/packages/8a/d0/758afe732c2da502c051b4d03ff88daa3c0fc1a1e671e6c5a6318177bab4/pymdown_extensions-12.3-py3-none-any.whl", hash = "sha256:345493a8e3497e24382902903a1c43a28e34a52f2b7571a1c9641429b820ca74", size = 277597, upload-time = "2026-10-14T22:40:41.543Z" },
 ]
-
-[[package]]
-name = "pynet"
-version = "0.1.1"
-source = { git = "https://github.com/robcox2910/pynet?tag=v0.1.1#824795ac00dddddad64621ab869a0a7b1f85befb" }
 
 [[package]]
 name = "pyparsing"
@@ -1034,15 +1068,6 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/86/15/0405206e0cfe0c14b91ac038d31f30d1dd78139b3b2a285e6be41bf6e5af/python_discovery-1.9.0.tar.gz", hash = "sha256:88beb57e51b919c30f303b053ec41359298ca349192035b0a802c76347ae96d7", size = 125151, upload-time = "2026-10-30T23:24:24.91Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/cb/3c/da1cae963a076132dbc4d3c1f0292dd2f373b9d3e072d42f4620801159c1/python_discovery-1.9.0-py3-none-any.whl", hash = "sha256:fb65edfff3541b7ceb3a39be334a0f69f4cb5148287a053e1874748742fda93b", size = 39841, upload-time = "2026-10-30T23:24:23.452Z" },
-]
-
-[[package]]
-name = "pyweb"
-version = "0.3.1"
-source = { git = "https://github.com/robcox2910/pyweb?tag=v0.3.1#015d2e473383bfd09f177d0d383307efa239742f" }
-dependencies = [
-    { name = "pycrypt" },
-    { name = "pynet" },
 ]
 
 [[package]]

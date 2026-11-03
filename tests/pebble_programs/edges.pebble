@@ -1,0 +1,10 @@
+# The biggest and smallest 16-bit numbers, which both machines agree on.
+let big = 32767
+let small = -32768
+print(big)
+print(small)
+print(small + 1)
+print(big - 1)
+print(small // 2)
+print(big % 10)
+print(-big)

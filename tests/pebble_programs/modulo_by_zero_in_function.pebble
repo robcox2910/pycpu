@@ -1,0 +1,9 @@
+# A remainder by zero, two calls deep, stops both machines on line 3.
+fn inner(n) {
+    return 100 % n
+}
+fn outer(n) {
+    return inner(n - 3)
+}
+print(outer(5))
+print(outer(3))

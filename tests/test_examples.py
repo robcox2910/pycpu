@@ -16,6 +16,7 @@ EXPECTED = {
     "alu_tour.py": "SUB    ->     7   flags: carry",
     "counter.py": "beats: 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 0 1 2 3 4",
     "run_assembly.py": "Hi",
+    "run_pebble.py": "printed: 6 4 2",
 }
 
 

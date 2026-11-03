@@ -11,7 +11,7 @@ from hypothesis import given
 from hypothesis import strategies as st
 
 from pycpu.arithmetic import AluOp
-from pycpu.assembler import AssemblyError, Program, assemble, disassemble
+from pycpu.assembler import AssemblyError, Program, ProgramTooLongError, assemble, disassemble
 from pycpu.fast import FastMachine
 from pycpu.isa import Condition, Instruction, Opcode, decode, encode
 from pycpu.memory import RAM_WORDS
@@ -343,3 +343,9 @@ def test_disassembly_assembles_back_to_the_same_word_at_the_same_address(
     text = disassemble(word, address)
     program = assemble(".word 0\n" * address + text)
     assert program.words[address] == word, text
+
+
+def test_a_program_longer_than_memory_raises_program_too_long() -> None:
+    """Code that runs past the last word raises the dedicated `ProgramTooLongError` error."""
+    with pytest.raises(ProgramTooLongError, match="too long"):
+        assemble("halt\nhalt\nhalt", words=2)

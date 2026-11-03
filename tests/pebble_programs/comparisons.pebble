@@ -1,0 +1,23 @@
+# Each comparison asks a yes-or-no question; the answer picks what to print.
+let x = 3
+let y = 7
+if x < y {
+    print("less")
+}
+if x <= 3 {
+    print("at most")
+}
+if y > x {
+    print("greater")
+}
+if y >= 8 {
+    print("wrong")
+} else {
+    print("not at least 8")
+}
+if x == 3 {
+    print("equal")
+}
+if x != y {
+    print("different")
+}

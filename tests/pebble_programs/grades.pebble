@@ -1,0 +1,19 @@
+# An if / else if / else ladder picks one grade for each score.
+fn grade(score) {
+    let g = 0
+    if score >= 90 {
+        g = 1
+    } else if score >= 70 {
+        g = 2
+    } else if score >= 50 {
+        g = 3
+    } else {
+        g = 4
+    }
+    return g
+}
+for s in range(40, 101) {
+    if s % 15 == 0 {
+        print(grade(s))
+    }
+}

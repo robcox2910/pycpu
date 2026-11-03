@@ -1,0 +1,18 @@
+# Euclid's greatest common divisor, with a loop and with recursion.
+fn gcd_loop(a, b) {
+    while b != 0 {
+        let t = a % b
+        a = b
+        b = t
+    }
+    return a
+}
+fn gcd(a, b) {
+    if b == 0 {
+        return a
+    }
+    return gcd(b, a % b)
+}
+print(gcd_loop(1071, 462))
+print(gcd(1071, 462))
+print(gcd(17, 5))

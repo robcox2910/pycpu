@@ -46,7 +46,15 @@ KEY_IDEAS: dict[str, list[str]] = {
     "concepts/calling-and-returning.md": ["call", "return", "return address"],
     "concepts/two-engines.md": ["fast engine", "gate engine", "lockstep"],
     "concepts/pausing-and-rewinding.md": ["pause", "rewind", "resume"],
-    "concepts/the-bench.md": ["bench", "register", "gate", "instruction"],
+    "concepts/from-pebble-to-machine-code.md": ["bytecode", "translator", "assembly"],
+    "concepts/variables-in-memory.md": ["variable", "frame", "frame pointer"],
+    "concepts/why-16-bit-numbers-wrap.md": ["wrap", "16-bit", "overflow"],
+    "concepts/if-and-while-as-jumps.md": ["jump", "condition", "loop"],
+    "concepts/how-a-function-call-really-works.md": ["argument", "frame", "recursion"],
+    "concepts/multiply-and-divide.md": ["multiply", "shift", "remainder"],
+    "concepts/printing-a-number.md": ["digit", "character", "output port"],
+    "concepts/what-happens-when-things-go-wrong.md": ["fault", "halt", "source map"],
+    "concepts/the-bench.md": ["bench", "register", "gate", "instruction", "pebble", "source map"],
 }
 
 
