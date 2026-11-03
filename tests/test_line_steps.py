@@ -37,10 +37,13 @@ while n > 0 {
 }
 """
 COUNTDOWN_TRACE = [1, 2, 3, 4, 2, 3, 4, 2]
+SECOND_LINE = 2
 LINE_AFTER_WHILE = 3
 DOUBLE = "fn double(n) {\n    return n * 2\n}\nprint(double(3))\n"
-DOUBLE_CALL_LINE = 4
 DOUBLE_BODY_LINE = 2
+DOUBLE_X = "fn double(n) {\n    return n * 2\n}\nlet x = 3\nprint(double(x))\n"
+DOUBLE_X_CALL_LINE = 5
+MAX_INSTRUCTION_STEPS = 100
 RECURSION = """\
 fn f(n) {
     if n == 0 {
@@ -120,14 +123,19 @@ class TestStepOverLines:
     """A line step runs to the next line of the same code, and stops ready to look inside."""
 
     def test_the_countdown_visits_the_same_lines_as_a_full_run(self) -> None:
-        """Stepping until halted reaches each line a straight run visits, in order."""
+        """Stepping until halted reaches each line a straight run visits after the first, in order.
+
+        The trace's first entry is the line the program starts on, where the
+        Cockpit already is after the load; every line step reaches the next entry.
+        """
         assert _trace(COUNTDOWN) == COUNTDOWN_TRACE
         cockpit = _pebble(COUNTDOWN)
+        assert _line(cockpit) == COUNTDOWN_TRACE[0]
         reached: list[int | None] = []
         while (step := cockpit.step_line(into=False)).stopped == "line":
             reached.append(_line(cockpit))
         assert step.stopped == "halted"
-        assert reached == COUNTDOWN_TRACE
+        assert reached == COUNTDOWN_TRACE[1:]
         assert cockpit.computer.state().output == tuple(b"2\n1\n")
 
     def test_every_stop_is_paused_on_a_ready_located_word(self) -> None:
@@ -147,13 +155,20 @@ class TestStepOverLines:
         """A step that reaches a line says how many instructions it ran and where it got to."""
         cockpit = _pebble(COUNTDOWN)
         step = cockpit.step_line(into=False)
-        assert cockpit.note == f"Ran {step.instructions} instructions to reach line 1."
+        assert cockpit.note == f"Ran {step.instructions} instructions to reach line 2."
+
+    def test_the_first_step_after_a_load_reaches_the_second_line(self) -> None:
+        """Just after a load main's frame is not made yet, and one step still reaches line 2."""
+        cockpit = _pebble(COUNTDOWN)
+        assert cockpit.translated is not None
+        assert cockpit.translated.frames[cockpit.computer.instruction_start.pc] is None
+        assert cockpit.step_line(into=False).stopped == "line"
+        assert _line(cockpit) == SECOND_LINE
 
     def test_a_step_started_part_way_through_an_instruction_finishes_it_first(self) -> None:
         """After 50 gate steps, a line step finishes the instruction and stops at the next line."""
         cockpit, fresh = _pebble(COUNTDOWN), _pebble(COUNTDOWN)
         for session in (cockpit, fresh):
-            session.step_line(into=False)
             session.step_line(into=False)
         cockpit.step(StepSize.GATE, GATE_STEPS)
         assert not cockpit.computer.gate.at_boundary
@@ -179,25 +194,48 @@ class TestOverAndInto:
     def test_step_into_stops_on_the_functions_first_line(self) -> None:
         """From the `print(double(3))` line, step into stops on `return n * 2`, in a lower frame."""
         cockpit = _pebble(DOUBLE)
-        cockpit.step_line(into=False)
-        assert _line(cockpit) == DOUBLE_CALL_LINE
-        main_fp = _fp(cockpit)
         assert cockpit.step_line(into=True).stopped == "line"
         assert _line(cockpit) == DOUBLE_BODY_LINE
-        assert _fp(cockpit) < main_fp
+        assert cockpit.translated is not None
+        assert cockpit.translated.frames[cockpit.computer.instruction_start.pc] is not None
+        assert _fp(cockpit) < cockpit.computer.gate.words - 1
 
     def test_step_over_runs_the_whole_call(self) -> None:
-        """From the same place, step over never stops inside `double` and finishes with 6."""
+        """From the same place, step over never stops inside `double`: it halts with 6 printed."""
         cockpit = _pebble(DOUBLE)
-        cockpit.step_line(into=False)
-        main_fp = _fp(cockpit)
-        step = cockpit.step_line(into=False)
-        if step.stopped == "line":
-            assert _fp(cockpit) >= main_fp
-            assert _line(cockpit) != DOUBLE_BODY_LINE
-            cockpit.run(1000)
-        assert cockpit.computer.state().halted
+        assert cockpit.step_line(into=False).stopped == "halted"
         assert bytes(cockpit.computer.state().output) == b"6\n"
+
+    @pytest.mark.parametrize("into", [False, True])
+    def test_a_step_from_any_prologue_word_stops_at_the_next_different_line(
+        self, *, into: bool
+    ) -> None:
+        """Started on any word of `double`'s prologue, a step runs on to line 5, back in main."""
+        cockpit = _pebble(DOUBLE_X)
+        cockpit.step_line(into=False)
+        assert _line(cockpit) == DOUBLE_X_CALL_LINE
+        main_fp = _fp(cockpit)
+        translated = cockpit.translated
+        assert translated is not None
+        # Count the instruction steps from line 5 to each word of the prologue, which
+        # the translator files under line 2 with no ready frame.
+        prologue: list[int] = []
+        for steps in range(1, MAX_INSTRUCTION_STEPS):
+            cockpit.step(StepSize.INSTRUCTION)
+            pc = cockpit.computer.instruction_start.pc
+            if translated.line_at(pc) == DOUBLE_BODY_LINE:
+                if translated.frames[pc] is not None:
+                    break
+                prologue.append(steps)
+        assert len(prologue) > 1
+        for steps in prologue:
+            cockpit.load_pebble(DOUBLE_X)  # start again, on the same machine
+            cockpit.step_line(into=False)
+            for _ in range(steps):
+                cockpit.step(StepSize.INSTRUCTION)
+            assert cockpit.step_line(into=into).stopped == "line"
+            assert _line(cockpit) == DOUBLE_X_CALL_LINE
+            assert _fp(cockpit) == main_fp
 
     def test_step_over_a_recursive_call_stops_back_in_the_caller(self) -> None:
         """Over `return f(n - 1)` stops in a caller's frame, never in a callee or its prologue."""
@@ -229,7 +267,6 @@ class TestStepsThatCannotReachALine:
     def test_an_endless_one_line_loop_stops_at_the_limit(self) -> None:
         """`while true { }` runs exactly the limit, then pauses with a note naming 10,000."""
         cockpit = _pebble(ENDLESS)
-        cockpit.step_line(into=False)  # make main's frame first
         step = cockpit.step_line(into=False)
         assert step == LineStep(MAX_LINE_INSTRUCTIONS, "limit")
         assert MAX_LINE_INSTRUCTIONS == 10_000  # noqa: PLR2004 - the page says 10,000
@@ -265,6 +302,19 @@ class TestStepsThatCannotReachALine:
         with pytest.raises(CockpitRefusal, match="need a Pebble program"):
             cockpit.step_line(into=False)
 
+    def test_a_step_that_goes_wrong_still_pauses(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Even if the fast engine fails mid-step, the computer is paused again afterwards."""
+        cockpit = _pebble(COUNTDOWN)
+
+        def broken() -> bool:
+            """Fail the way an unexpected bug would."""
+            raise RuntimeError
+
+        monkeypatch.setattr(cockpit.computer.fast, "step", broken)
+        with pytest.raises(RuntimeError):
+            cockpit.step_line(into=False)
+        assert cockpit.computer.paused
+
     def test_a_line_step_while_playing_is_busy(self) -> None:
         """While the computer plays, a line step is refused and the machine is left alone."""
         cockpit = _pebble(COUNTDOWN)
@@ -281,7 +331,7 @@ class TestTheRoute:
     def test_a_line_step_answers_the_picture_with_its_note(self) -> None:
         """The answer is the machine picture, paused on the new line, with the step's note."""
         client = TestClient(create_cockpit(address_bits=BITS))
-        _post(client, "/api/pebble", {"source": DOUBLE})
+        _post(client, "/api/pebble", {"source": DOUBLE_X})
         _post(client, "/api/step", {"size": "line"})
         response = _post(client, "/api/step", {"size": "line_into"})
         assert response.status == OK

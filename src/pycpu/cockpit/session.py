@@ -223,7 +223,15 @@ class Cockpit:
         pointer at or above the start's, so it runs a whole call; a step into stops
         on the called function's first line. Runtime routine words have no line, so
         they never stop a step. It also stops when the program halts, or after
-        `MAX_LINE_INSTRUCTIONS` instructions, then pauses. `note` says why it stopped.
+        `MAX_LINE_INSTRUCTIONS` instructions, and it always pauses at the end.
+        `note` says why it stopped, and `instructions` counts only the fast engine's
+        instructions, not one the gates finish first.
+
+        A step that starts where no frame is ready (a prologue word, a return's `ret`
+        or a routine) has no frame of its own to compare against. Its `start_fp` is
+        taken from the first ready word it reaches instead, so it stops at the next
+        *different* line: pressing it just after a load reaches the program's second
+        line, and a step over from a function's prologue runs on past its first line.
 
         Args:
             into: True to step into a call; False to step over it.
@@ -244,27 +252,32 @@ class Cockpit:
             self.note = FINISHED_NOTE
             return LineStep(0, "halted")
         start = self.computer.instruction_start
-        start_line, start_fp = translated.line_at(start.pc), start.registers[FRAME_POINTER]
         frames = translated.frames
+        start_line, start_fp = translated.line_at(start.pc), start.registers[FRAME_POINTER]
+        settled = start.pc < len(frames) and frames[start.pc] is not None
         self.computer.resume()
         fast = self.computer.fast
         ran, stopped, line = 0, "limit", None
-        while True:
-            if fast.halted:
-                stopped = "halted"
-                break
-            pc, fp = fast.pc, fast.register(FRAME_POINTER)
-            line = translated.line_at(pc)
-            ready = pc < len(frames) and frames[pc] is not None
-            moved = line != start_line or fp != start_fp
-            if ready and line is not None and moved and (into or fp >= start_fp):
-                stopped = "line"
-                break
-            if ran == MAX_LINE_INSTRUCTIONS:
-                break
-            fast.step()
-            ran += 1
-        self.computer.pause()
+        try:
+            while True:
+                if fast.halted:
+                    stopped = "halted"
+                    break
+                pc, fp = fast.pc, fast.register(FRAME_POINTER)
+                line = translated.line_at(pc)
+                ready = pc < len(frames) and frames[pc] is not None
+                if ready and not settled:
+                    start_fp, settled = fp, True  # the start's own frame, now made
+                moved = line != start_line or fp != start_fp
+                if ready and line is not None and moved and (into or fp >= start_fp):
+                    stopped = "line"
+                    break
+                if ran == MAX_LINE_INSTRUCTIONS:
+                    break
+                fast.step()
+                ran += 1
+        finally:
+            self.computer.pause()
         self.note = _line_note(ran, stopped, line)
         return LineStep(ran, stopped)
 

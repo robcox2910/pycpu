@@ -71,8 +71,7 @@ async def step_lines() -> None:
 run(step_lines())
 # Output:
 # loaded: line 1 with r7 = 0
-# line 1 with r7 = 255: Ran 10 instructions to reach line 1.
-# line 2 with r7 = 255: Ran 4 instructions to reach line 2.
+# line 2 with r7 = 255: Ran 14 instructions to reach line 2.
 # line 3 with r7 = 255: Ran 13 instructions to reach line 3.
 # line 4 with r7 = 255: Ran 174 instructions to reach line 4.
 # line 2 with r7 = 255: Ran 10 instructions to reach line 2.
@@ -84,18 +83,18 @@ run(step_lines())
 # The program has finished, so there is no next line.
 ```
 
-The very first step stays on line 1, and that is not a mistake. When the program is
-loaded, the machine is about to *make main's frame* (the room for `n`), and those words
-belong to line 1 too. The frame pointer `r7` is still 0, which points at no frame at all.
-After 10 instructions the frame is made, `r7` holds 255, and line 1's real work, putting
-2 into `n`, is next. The step stops there because the frame has changed, even though the
-line has not.
+The first step costs 14 instructions, more than you might expect for `let n = 2`. When
+the program is loaded, the machine is about to *make main's frame* (the room for `n`),
+and the translator files those words under line 1 too. While they run, the frame
+pointer `r7` changes from 0 (no frame at all) to 255 (main's frame). Ten instructions
+make the frame, and four more put 2 into `n`; then line 2 is next, and the step stops.
 
-Then each press moves on by one line. Each note counts the instructions of the line just
-finished: "Ran 174 instructions to reach line 4" is the price of line 3, `print(n)`. That
-is its own 4 instructions, and
-170 inside the ready-made printing routine, which has no Pebble line of its own, so the
-step carries on through it without stopping. The second check of `while n > 0` takes one
+Each note counts the instructions of the line just finished, as the fast engine ran
+them: "Ran 174 instructions to reach line 4" is the price of line 3, `print(n)`. The
+second Try It on [The Cockpit](the-cockpit.md) splits that up, one instruction at a
+time: 4 instructions of the line's own, then 170 inside the ready-made printing routine.
+That routine has no Pebble line of its own, so the step carries on through it without
+stopping. The second check of `while n > 0` takes one
 more instruction than the first (14, not 13). The jump at the bottom of the loop, back
 up to the check, was made by the `while` line, so the translator filed it under line 2:
 the step from line 4 stops just before that jump, and the next step runs the jump and
@@ -114,7 +113,8 @@ DOUBLE = """\
 fn double(n) {
     return n * 2
 }
-print(double(3))
+let x = 3
+print(double(x))
 """
 
 
@@ -137,29 +137,31 @@ async def into_and_over() -> None:
 
 run(into_and_over())
 # Output:
-# on line 4 with r7 = 255
+# on line 5 with r7 = 255
 # line_into -> Ran 12 instructions to reach line 2.
-#    inside double with r7 = 252
+#    inside double with r7 = 251
 #    parameter n = 3
-# on line 4 with r7 = 255
+# on line 5 with r7 = 255
 # line -> Ran 223 instructions, and then the program stopped.
 #    the program printed '6\n'
 ```
 
-Both times we first press "next line" once, which makes main's frame and stops on line 4,
-`print(double(3))`. Then "step into" follows the call: 12 instructions later the machine
-is paused on line 2, `return n * 2`, inside `double`, with its own frame (`r7` is 252,
-lower down the stack than main's 255) and its parameter `n` holding 3. "Next line" from
-the same place steps *over* the call: it runs `double`, the multiply routine, the printing
-routine and the program's end, 223 instructions, without ever stopping inside `double`.
-The line after `print(double(3))` is the end of the program, so it halts with `6` printed.
+Both times we first press "next line" once, which makes main's frame, runs `let x = 3`
+and stops on line 5, `print(double(x))`. (Line 1, `fn double(n) {`, only names the
+function; main's own code starts at line 4.) Then "step into" follows the call: 12
+instructions later the machine is paused on line 2, `return n * 2`, inside `double`, with
+its own frame (`r7` is 251, lower down the stack than main's 255) and its parameter `n`
+holding 3. "Next line" from the same place steps *over* the call: it runs `double`, the
+multiply routine, the printing routine and the program's end, 223 instructions, without
+ever stopping inside `double`. The line after `print(double(x))` is the end of the
+program, so it halts with `6` printed.
 
 ## How It Works
 
 ### A line is many instructions
 
-One Pebble line becomes many machine instructions, and the Try It shows it: 4, 10, 13,
-174. Over the 15 test programs in `tests/pebble_programs/`, run to the end on the
+One Pebble line becomes many machine instructions, and the Try It shows it: 14, 13,
+174, 10. Over the 15 test programs in `tests/pebble_programs/`, run to the end on the
 project laptop on 2026-11-03, the middle-sized line step (the **median**: half are
 smaller, half bigger) ran 22 instructions.
 
@@ -180,6 +182,7 @@ The code is `Cockpit.step_line` in `src/pycpu/cockpit/session.py`.
         |
         |  1. remember where we start: start_line = the line of this instruction,
         |     start_fp = r7 at the start of this instruction
+        |     (if no frame is ready here, start_fp waits for the first ready word)
         |  2. computer.resume(): finish the instruction in the gates,
         |     copy everything to the fast engine
         v
@@ -187,6 +190,7 @@ The code is `Cockpit.step_line` in `src/pycpu/cockpit/session.py`.
    |  fast engine, before each instruction:                        |
    |                                                               |
    |   halted?  ---------------------------------> stop "halted"   |
+   |   first ready word, and start_fp still waiting? set it to r7  |
    |   word has a ready frame, and a Pebble line, and              |
    |     (line != start_line or r7 != start_fp), and               |
    |     (step into, or r7 >= start_fp)  ------> stop "line"       |
@@ -203,7 +207,10 @@ Step 2 matters when you have been stepping gate by gate. Say you pressed **100 g
 in the middle of an `add`. The step first finishes that `add` in the gates, exactly as
 it would have gone on, and only then hands over to the fast engine. Nothing is skipped
 and nothing is done twice; this is the same `resume` and `pause` from
-[Pausing and Rewinding](pausing-and-rewinding.md).
+[Pausing and Rewinding](pausing-and-rewinding.md). The "Ran N instructions" in the note
+counts only what the fast engine ran, so that finished `add` is not part of N. Whatever
+happens inside the loop, the step always ends with `pause`, so the Cockpit is never left
+running on the fast engine.
 
 ### Which word counts as "a line"
 
@@ -220,6 +227,15 @@ stops only on a word that has both:
   the other. Stopping there would show the wrong variables, so those words never stop a
   step.
 
+What if the step *starts* on one of those words? That happens just after a load, when
+main is about to make its frame, or after you have pressed **1 instruction** into a
+function's prologue. Then the start has no frame of its own yet: `r7` still points at
+the old one. So the step waits, and takes `start_fp` from the first ready word it
+reaches, the moment the new frame is made. From there it stops at the next *different*
+line. That is why the first press after a load lands on line 2 and not on line 1 again,
+and why a step over begun in `double`'s prologue (which the translator files under line
+2) runs `double` to the end and stops back on line 5, in main.
+
 ### Step over and the frame pointer
 
 Every function call makes a new frame lower down the stack (the stack grows down, from
@@ -227,8 +243,8 @@ Every function call makes a new frame lower down the stack (the stack grows down
 That one fact is all step over needs:
 
 ```text
-  r7 = 255   main         print(double(3))      <- start: start_fp = 255
-  r7 = 252     double       return n * 2        <- r7 < 255: a call, step over runs on
+  r7 = 255   main         print(double(x))      <- start: start_fp = 255
+  r7 = 251     double       return n * 2        <- r7 < 255: a call, step over runs on
   r7 = 255   main         (back again)          <- r7 >= 255: step over may stop here
 ```
 
