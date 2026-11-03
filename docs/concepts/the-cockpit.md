@@ -50,6 +50,8 @@ that", and **404** means "not found, there is no such thing".
 | Loading a plan that comes with a written briefing | `POST /api/pebble`, with a Pebble program that the translator turns into machine code |
 | The briefing, held up beside the plan | The Pebble pane, next to the memory window |
 | The line of the briefing being flown right now | `pebble.line`: the Pebble line of the current instruction |
+| The program, in full | `GET /api/listing`: one row for each word, with its source line, labels and Pebble line |
+| Circled differences | `changed`: what the last move altered |
 | A part you point at | A **scope**, such as `cpu.alu.adder` (see [Looking Inside a Circuit](looking-inside.md)) |
 | The smallest part you can find | One NAND gate, with its two inputs and one output |
 | The cockpit door | `create_cockpit()` in `src/pycpu/cockpit/app.py` |
@@ -412,6 +414,215 @@ every level you visit. These are the main ones.
 | `adder`, `bit0`, `full_adder`, `half_adder` | Adding, one column at a time | [Adding](adding.md) |
 | `xor`, `and`, `or` | A gate built from NANDs | [Logic Gates from NAND](gates.md) |
 | A gate | One NAND: its output is 0 only if both inputs are 1 | [Switches and NAND](switches-and-nand.md) |
+
+### What Just Changed
+
+Imagine a spot-the-difference puzzle: two photographs of the same room, one taken just
+before you moved and one after. Circle everything that is different and the answer
+leaps out. The Cockpit does this after every move. Before it moves the machine it
+keeps a copy of the whole state (the session's `before`). Afterwards it compares
+`before` with the machine as it is now, field by field, and the picture carries the
+answer in a key called `changed`:
+
+| Key in `changed` | What it lists |
+|------------------|---------------|
+| `registers` | The numbers of the registers whose value differs, such as `[1]` for `r1` |
+| `pc`, `sp` | `true` if the program counter or the stack pointer moved |
+| `flags` | The names of the flag lamps that differ: `zero`, `negative`, `carry`, `overflow` |
+| `memory` | The addresses of the words of memory that differ |
+
+The page uses these to mark the changed values, so your eye goes straight to what the
+last button did. The marks always compare with the state *before the last move*,
+whatever that move was: after a rewind they show what the rewind undid, and after you
+load a new program they show how the new machine differs from the old one.
+
+```python
+from pynet.loop import run
+from pyweb.testing import TestClient
+
+from pycpu.cockpit.app import create_cockpit
+
+
+async def what_changed() -> None:
+    client = TestClient(create_cockpit(address_bits=6))
+    machine = (await client.get("/api/machine")).json()
+    print("at the start:", machine["changed"])
+    machine = (await client.post("/api/step", json={"size": "instruction"})).json()
+    print("after one instruction:", machine["changed"])
+
+
+run(what_changed())
+# Output:
+# at the start: {'registers': [], 'pc': False, 'sp': False, 'flags': [], 'memory': []}
+# after one instruction: {'registers': [1], 'pc': True, 'sp': False, 'flags': [], 'memory': []}
+```
+
+The demo program's first instruction is `li r1, 255`. It changes `r1` and moves `pc`
+on to the next instruction, and nothing else: the stack pointer, the flags and memory
+are untouched, so those lists are empty. At the very start nothing has moved yet, so
+nothing is marked.
+
+**The stack window.** The page also shows the top of the **stack**, the pile of words
+that `push` and `call` add to (see [The Stack](the-stack.md)). The picture's `stack`
+holds up to 16 words, starting at `sp` (the top) and going up through memory, so the
+newest word comes first. It is `[]` when `sp` is at the very end of memory, which is
+where it starts: nothing has been pushed. Like every word, a stack word is only a
+number: its `text` is that number read as if it were an instruction, which is rarely
+meaningful, so look at its `word`.
+
+### The Whole Program
+
+The memory window shows 16 words at a time, which is a keyhole. `GET /api/listing`
+shows the whole loaded program at once. It answers with `rows`, one for each word of
+machine code the program was turned into, and `pebble`, which is the Pebble program as
+a list of lines (or `null` for an assembly program). Each row has:
+
+- `address` and `word`: where the word sits and its number.
+- `text`: the line of source the word came from, as it was written. A shortcut such as
+  `set r1, 0xFFFF` becomes *two* words, so both rows show the same line.
+- `first`: `true` for the first word of its source line, `false` for the rest, so the
+  page can show each line once.
+- `labels`: the names of the **labels** (named bookmarks for an address, such as
+  `loop`) that mark this address.
+- `pebble_line`: the Pebble line that made this word, or `null` for assembly and for
+  the ready-made routines.
+
+```python
+from pynet.loop import run
+from pyweb.testing import TestClient
+
+from pycpu.cockpit.app import create_cockpit
+
+COUNTDOWN = """\
+let n = 2
+while n > 0 {
+    print(n)
+    n = n - 1
+}
+"""
+
+
+async def whole_program() -> None:
+    client = TestClient(create_cockpit(address_bits=8))
+    await client.post("/api/pebble", json={"source": COUNTDOWN})
+    listing = (await client.get("/api/listing")).json()
+    print(len(listing["rows"]), "words from", len(listing["pebble"]), "lines of Pebble")
+    for row in listing["rows"][:3]:
+        print(row["address"], row["word"], row["pebble_line"], row["labels"])
+    print(listing["rows"][0]["text"])
+
+    demo = TestClient(create_cockpit(address_bits=6))
+    for row in (await demo.get("/api/listing")).json()["rows"][:4]:
+        print(row["address"], row["first"], row["labels"])
+
+
+run(whole_program())
+# Output:
+# 142 words from 5 lines of Pebble
+# 0 49664 1 ['__main']
+# 1 9358 1 []
+# 2 13312 1 []
+# getsp r1                ; r1 = the top of the stack, where the frame starts
+# 0 True []
+# 1 False []
+# 2 True []
+# 3 True ['loop']
+```
+
+Five lines of Pebble became 142 words, and the first three words all belong to line 1
+(the frame, as in the Try It above). The translator's own label `__main` marks address 0.
+In the demo, the two words at addresses 0 and 1 come from one `set` line, so `first` is
+`true` and then `false`, and the word at address 3 carries the label `loop`.
+
+### Zooming From Anything
+
+Every value on the page is a number that lives somewhere real in the circuit, so every
+value can be a doorway to it. The picture's `parts` key says where each one lives, as
+a **scope** path that `/api/view` understands:
+
+| Value | Where it lives |
+|-------|----------------|
+| Register `i` | `parts["registers"][i]`, such as `cpu.registers.r1` |
+| `pc`, `sp`, the flags | `parts["pc"]` is `cpu.pc`, `parts["sp"]` is `cpu.sp`, `parts["flags"]` is `cpu.flags` |
+| A word of memory or of the stack | The cell's own `part`, such as `ram.word4` |
+| The current instruction | `parts["instruction"]`, chosen by what the instruction does (below) |
+
+An instruction does not live in one place, so the Cockpit picks the part that does its
+main work, using `part_for_instruction(word)` in `src/pycpu/cockpit/picture.py`:
+
+| Instruction | Part |
+|-------------|------|
+| `add` and its cousins, `cmp`, `addi` | `cpu.alu`, which does the sums |
+| `li`, `lhi` | `cpu.write_back`, which chooses what goes into the register |
+| `load`, `store` | `cpu.address_mux`, which chooses the memory address |
+| `jmp`, `br`, `call`, `ret` | `cpu.next_pc`, which works out where to go next |
+| `push`, `pop`, `getsp`, `setsp` | `cpu.next_sp`, which works out the new stack pointer |
+| `halt` | `cpu.halt`, the lamp that stops the machine |
+
+```python
+from pynet.loop import run
+from pyweb.testing import TestClient
+
+from pycpu.cockpit.app import create_cockpit
+
+
+async def zoom() -> None:
+    client = TestClient(create_cockpit(address_bits=6))
+    for _ in range(5):
+        machine = (await client.post("/api/step", json={"size": "instruction"})).json()
+    print(machine["instruction"]["text"], "is zoomed to", machine["parts"]["instruction"])
+    seen = (await client.get("/api/view", query={"path": machine["parts"]["instruction"]})).json()
+    print([part["name"] for part in seen["children"]])
+    print(machine["parts"]["registers"][1], machine["memory"][0]["part"])
+
+
+run(zoom())
+# Output:
+# add r3, r3, r2 is zoomed to cpu.alu
+# ['control', 'operand', 'adder', 'overflow', 'and_bus']
+# cpu.registers.r1 ram.word4
+```
+
+Five instructions in, the demo is about to run `add r3, r3, r2`, so its zoom target is
+the ALU, and `/api/view` shows the parts inside it. The test suite checks that every
+path the picture can name is a real scope of the circuit, so a doorway never opens on
+a wall.
+
+### Following a Gate
+
+When you step by a single gate, the picture says which gate just thought, in
+`last_gate`: its `id`, its `value` (the new output) and its `path`, the part of the
+circuit it belongs to, read from the circuit's own filing (`Circuit.scope_of`). Paste
+the `path` into `/api/view` and you are standing at that gate. A move that is not one
+gate thinking, such as an instruction step or a clock wire moving, leaves `last_gate`
+as `null`, because nothing is faked.
+
+```python
+from pynet.loop import run
+from pyweb.testing import TestClient
+
+from pycpu.cockpit.app import create_cockpit
+
+
+async def follow() -> None:
+    client = TestClient(create_cockpit(address_bits=6))
+    machine = (await client.post("/api/step", json={"size": "gate", "count": 100})).json()
+    print(machine["last_gate"])
+    machine = (await client.post("/api/step", json={"size": "instruction"})).json()
+    print(machine["last_gate"])
+
+
+run(follow())
+# Output:
+# {'id': 10016, 'path': 'cpu.sp.bit12.slave', 'value': 0}
+# None
+```
+
+After 100 gate steps the last gate to think was number 10,016, a part of the stack
+pointer's own wiring, and it settled on 0. Then an instruction step ran many gates at
+once, so there is no single last one to name and the answer goes back to `null`. The
+picture also carries a `note`, one sentence about the last move, which is `null` for
+now; later pages use it to say why a line step stopped.
 
 ## Why Does This Matter?
 

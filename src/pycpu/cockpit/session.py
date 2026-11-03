@@ -59,6 +59,7 @@ class Cockpit:
         computer: The real computer, paused at an instruction boundary unless playing.
         translated: The Pebble program on it, or None for an assembly program.
         assembly: The assembly text shown in the listing.
+        program: The assembled program on the machine, for the listing.
         before: The state just before the last move, for marking what changed.
         last_gate: The micro step of the last gate step, else None.
         note: One sentence about the last move, else None.
@@ -68,7 +69,8 @@ class Cockpit:
 
     def __init__(self, address_bits: int = RAM_ADDRESS_BITS) -> None:
         """Build the computer with `DEMO_PROGRAM` loaded and paused at its start."""
-        self.computer = Computer(assemble(DEMO_PROGRAM, words=1 << address_bits), address_bits)
+        self.program = assemble(DEMO_PROGRAM, words=1 << address_bits)
+        self.computer = Computer(self.program, address_bits)
         self.computer.pause()
         self.translated: TranslatedProgram | None = None
         self.assembly = DEMO_PROGRAM
@@ -101,6 +103,7 @@ class Cockpit:
         self.computer.pause()
         self.translated = None
         self.assembly = source
+        self.program = assembled
 
     def load_pebble(self, source: str) -> None:
         """Translate a Pebble program, load it and pause at its start.
@@ -134,6 +137,7 @@ class Cockpit:
         self.computer.pause()
         self.translated = translated
         self.assembly = translated.assembly
+        self.program = translated.program
 
     def step(self, size: StepSize, count: int = 1) -> None:
         """Step the paused computer by `size`, `count` times.

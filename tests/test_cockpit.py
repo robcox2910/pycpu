@@ -1,6 +1,8 @@
 """Tests for the Cockpit: the local page for watching the running computer."""
 
+import time
 from collections.abc import Coroutine
+from dataclasses import replace
 from typing import Any, cast
 
 import pytest
@@ -11,7 +13,9 @@ from pyweb.testing import TestClient, TestResponse
 from pycpu import __main__ as entry
 from pycpu.__main__ import HOST, banner, open_cockpit
 from pycpu.assembler import assemble
+from pycpu.cockpit import picture as picture_module
 from pycpu.cockpit.app import create_cockpit
+from pycpu.cockpit.picture import listing, machine_picture, part_for_instruction
 from pycpu.cockpit.session import (
     DEMO_PROGRAM,
     MAX_GATE_STEPS,
@@ -20,6 +24,7 @@ from pycpu.cockpit.session import (
 )
 from pycpu.cockpit.session import Cockpit as Session
 from pycpu.computer import Computer, StepSize
+from pycpu.cpu import GateMachine
 from pycpu.fast import FastMachine
 from pycpu.memory import RAM_ADDRESS_BITS
 from pycpu.state import REGISTER_COUNT
@@ -167,7 +172,12 @@ class TestTheMachinePicture:
         memory = Cockpit().machine()["memory"]
         words = assemble(DEMO_PROGRAM, words=WORDS).words
         assert [cell["address"] for cell in memory] == list(range(WINDOW))
-        assert memory[1] == {"address": 1, "word": words[1], "text": "lhi r1, 255"}
+        assert memory[1] == {
+            "address": 1,
+            "word": words[1],
+            "text": "lhi r1, 255",
+            "part": "ram.word1",
+        }
 
     def test_the_memory_window_starts_four_words_behind_pc(self) -> None:
         """Paused before the add at address 8, the window shows addresses 4 to 19."""
@@ -320,7 +330,7 @@ class TestRewindAndRun:
         cockpit.step("cycle")
         response = cockpit.post("/api/rewind", {})
         assert response.status == OK
-        assert _json(response) == start
+        assert _without_changed(_json(response)) == _without_changed(start)
 
     def test_running_to_the_end_prints_the_countdown(self) -> None:
         """The demo program counts 3, 2, 1 and halts normally."""
@@ -465,7 +475,7 @@ class TestPebbleOnTheCockpit:
         cockpit = self._cockpit()
         start = cockpit.step("instruction")
         cockpit.step("cycle")
-        assert _json(cockpit.post("/api/rewind", {})) == start
+        assert _without_changed(_json(cockpit.post("/api/rewind", {}))) == _without_changed(start)
 
     def test_an_unsupported_feature_is_a_400_with_its_line_and_column(self) -> None:
         """`/` is refused with the translator's message, line and column; nothing is loaded."""
@@ -716,3 +726,322 @@ class TestSessionSeams:
         response = _run(client.post("/api/rewind", json={}))  # pyright: ignore[reportArgumentType]
         assert response.status == CONFLICT
         assert _json(response) == {"error": "Conflict", "message": BUSY}
+
+
+# --- Changed marks, the stack, the listing and zoom targets (Task 3) ---
+
+FIRST_REGISTER = 1
+NO_CHANGE: dict[str, object] = {
+    "registers": [],
+    "pc": False,
+    "sp": False,
+    "flags": [],
+    "memory": [],
+}
+PUSH_PROGRAM = "li r1, 7\npush r1\npush r1\nhalt\n"
+STACK_LIMIT = 16
+BIG_BITS = 12
+SCAN_BUDGET = 0.05  # seconds the full-size memory scan may take
+SCAN_REPEATS = 20
+DEMO_LOOP_ADDRESS = 3  # set takes two words, then li, then the label `loop`
+SET_ROWS = (0, 1)
+HALT_ONE = "halt 1\n"
+SOME_GATE_STEPS = 40
+ONE_OF_EACH = {
+    "add r1, r2, r3": "cpu.alu",
+    "cmp r1, r2": "cpu.alu",
+    "addi r1, 1": "cpu.alu",
+    "li r1, 5": "cpu.write_back",
+    "lhi r1, 5": "cpu.write_back",
+    "load r1, [r2]": "cpu.address_mux",
+    "store r1, [r2]": "cpu.address_mux",
+    "jmp 0": "cpu.next_pc",
+    "br eq, 0": "cpu.next_pc",
+    "call 0": "cpu.next_pc",
+    "ret": "cpu.next_pc",
+    "push r1": "cpu.next_sp",
+    "pop r1": "cpu.next_sp",
+    "getsp r1": "cpu.next_sp",
+    "setsp r1": "cpu.next_sp",
+    "halt 0": "cpu.halt",
+}
+
+
+def _without_changed(picture: dict[str, Any]) -> dict[str, Any]:
+    """Return a picture minus its `changed` marks, which depend on the move just made."""
+    return {key: value for key, value in picture.items() if key != "changed"}
+
+
+def _paused(source: str, bits: int = SMALL) -> Session:
+    """Return a small session with the assembly `source` loaded."""
+    session = Session(bits)
+    session.load_assembly(source)
+    return session
+
+
+class TestChangedMarks:
+    """The picture marks what the last move changed, by comparing before with now."""
+
+    def test_nothing_is_marked_at_power_on(self) -> None:
+        """Before any move, nothing differs."""
+        assert machine_picture(Session(SMALL))["changed"] == NO_CHANGE
+
+    def test_li_marks_its_register_and_pc(self) -> None:
+        """After `li r1, 5` register 1 and the pc are marked."""
+        session = _paused("li r1, 5\nhalt\n")
+        session.step(StepSize.INSTRUCTION)
+        assert machine_picture(session)["changed"] == {
+            "registers": [1],
+            "pc": True,
+            "sp": False,
+            "flags": [],
+            "memory": [],
+        }
+
+    def test_a_push_marks_the_stack_pointer_and_the_pushed_address(self) -> None:
+        """A push changes sp and the word it wrote at the new top of the stack."""
+        session = _paused(PUSH_PROGRAM)
+        session.step(StepSize.INSTRUCTION)
+        session.step(StepSize.INSTRUCTION)
+        picture = machine_picture(session)
+        changed = cast("dict[str, Any]", picture["changed"])
+        assert changed["sp"] is True
+        assert changed["memory"] == [picture["sp"]]
+
+    def test_flags_are_named(self) -> None:
+        """A compare that makes the zero lamp light names it."""
+        session = _paused("cmp r1, r2\nhalt\n")
+        session.step(StepSize.INSTRUCTION)
+        changed = cast("dict[str, Any]", machine_picture(session)["changed"])
+        assert changed["flags"] == ["zero", "carry"]  # 0 - 0 sets zero, and no borrow sets carry
+
+    def test_a_rewind_compares_with_the_state_before_the_rewind(self) -> None:
+        """Rewinding half way through an instruction marks the pc that moved back."""
+        session = _paused("li r1, 5\nhalt\n")
+        session.step(StepSize.INSTRUCTION)
+        session.step(StepSize.CYCLE)
+        moved_on = machine_picture(session)["pc"]
+        session.rewind()
+        picture = machine_picture(session)
+        assert moved_on != picture["pc"]
+        assert cast("dict[str, Any]", picture["changed"])["pc"] is True
+
+    def test_a_rewind_that_changes_nothing_marks_nothing(self) -> None:
+        """Rewinding at an instruction boundary leaves the machine as it was."""
+        session = _paused("li r1, 5\nhalt\n")
+        session.rewind()
+        assert machine_picture(session)["changed"] == NO_CHANGE
+
+    def test_loading_compares_with_the_old_machine_and_clears_the_notes(self) -> None:
+        """A load part-way through an instruction forgets the gate step and the note."""
+        session = _paused("li r1, 5\nhalt\n")
+        session.step(StepSize.INSTRUCTION)
+        session.step(StepSize.GATE, SOME_GATE_STEPS)
+        session.note = "something about the old program"
+        session.load_assembly("li r2, 9\nhalt\n")
+        picture = machine_picture(session)
+        assert picture["last_gate"] is None
+        assert picture["note"] is None
+        changed = cast("dict[str, Any]", picture["changed"])
+        assert changed["registers"] == [1]  # the old machine had r1 = 5, the new one has 0
+        listing_rows = cast("list[dict[str, Any]]", listing(session)["rows"])
+        assert [row["text"] for row in listing_rows] == ["li r2, 9", "halt"]
+
+    def test_loading_after_a_fault_leaves_nothing_of_the_old_program(self) -> None:
+        """After a Pebble fault, loading assembly clears the Pebble pane, notes and listing."""
+        session = Session(PEBBLE_BITS)
+        session.load_pebble(DIVIDE_BY_ZERO)
+        session.run(1000)
+        assert machine_picture(session)["fault"] == "DIVIDE_BY_ZERO"
+        session.load_assembly("li r1, 1\nhalt\n")
+        picture = machine_picture(session)
+        assert picture["pebble"] is None
+        assert picture["fault"] is None
+        assert picture["last_gate"] is None
+        assert listing(session)["pebble"] is None
+        assert [row["text"] for row in cast("list[dict[str, Any]]", listing(session)["rows"])] == [
+            "li r1, 1",
+            "halt",
+        ]
+
+    def test_loading_pebble_after_assembly_gives_the_new_listing(self) -> None:
+        """Loading Pebble replaces the demo's listing, labels and all."""
+        session = Session(PEBBLE_BITS)
+        session.load_pebble(COUNTDOWN)
+        rows = cast("list[dict[str, Any]]", listing(session)["rows"])
+        assert len(rows) == len(session.program.words)
+        assert all(row["text"] != "call show         ; print the digit for r2" for row in rows)
+
+    @pytest.mark.slow
+    def test_the_memory_scan_is_quick_at_full_size(self) -> None:
+        """Comparing two full-size (4,096 word) states takes under 0.05 seconds."""
+        # pycpu.cockpit.picture._changed is private: reach it through the module.
+        scan = picture_module._changed
+        before = FastMachine(1 << BIG_BITS).state()
+        machine = FastMachine(1 << BIG_BITS)
+        machine.load_program(assemble("li r1, 1\nhalt\n", words=1 << BIG_BITS).words)
+        now = machine.state()
+        start = time.perf_counter()
+        for _ in range(SCAN_REPEATS):
+            scan(before, now)
+        assert (time.perf_counter() - start) / SCAN_REPEATS < SCAN_BUDGET
+
+
+class TestStack:
+    """The stack window shows words from sp upwards, top first."""
+
+    def test_it_is_empty_at_power_on(self) -> None:
+        """With sp at the end of memory there is nothing on the stack."""
+        assert machine_picture(Session(SMALL))["stack"] == []
+
+    def test_two_pushes_show_two_cells_top_first(self) -> None:
+        """Two pushes give two cells, the top (at sp) first."""
+        session = _paused(PUSH_PROGRAM)
+        for _ in range(3):
+            session.step(StepSize.INSTRUCTION)
+        picture = machine_picture(session)
+        stack = cast("list[dict[str, Any]]", picture["stack"])
+        assert [cell["address"] for cell in stack] == [WORDS - 2, WORDS - 1]
+        assert stack[0]["address"] == picture["sp"]
+        assert [cell["word"] for cell in stack] == [SEVEN, SEVEN]
+        assert stack[0]["part"] == f"ram.word{WORDS - 2}"
+
+    def test_it_is_never_longer_than_sixteen_cells(self) -> None:
+        """A deep stack shows only its top 16 words."""
+        session = _paused("li r1, 1\nloop:\npush r1\njmp loop\n", bits=SMALL)
+        session.run(40)
+        assert len(cast("list[Any]", machine_picture(session)["stack"])) == STACK_LIMIT
+
+
+class TestZoomTargets:
+    """Every value links to a real part of the circuit."""
+
+    def test_each_opcode_follows_the_table(self) -> None:
+        """One word of each opcode maps to its part in the contract's table."""
+        for source, part in ONE_OF_EACH.items():
+            word = assemble(f"{source}\n", words=WORDS).words[0]
+            assert part_for_instruction(word) == part, source
+
+    def test_every_path_in_the_picture_exists_in_the_circuit(self) -> None:
+        """Every `parts` path, every cell `part` and every table entry passes `has_scope`."""
+        circuit = GateMachine(SMALL).simulator.circuit
+        picture = machine_picture(Session(SMALL))
+        parts = cast("dict[str, Any]", picture["parts"])
+        paths = [
+            *parts["registers"],
+            parts["pc"],
+            parts["sp"],
+            parts["flags"],
+            parts["instruction"],
+        ]
+        cells = [*cast("list[Any]", picture["memory"]), *cast("list[Any]", picture["stack"])]
+        paths.extend(cell["part"] for cell in cells)
+        paths.extend(ONE_OF_EACH.values())
+        assert all(circuit.has_scope(path) for path in paths)
+        assert len(parts["registers"]) == REGISTER_COUNT
+
+    def test_every_memory_cell_part_exists(self) -> None:
+        """Every word of a small RAM has its own scope, ram.word0 to the last."""
+        circuit = GateMachine(SMALL).simulator.circuit
+        assert all(circuit.has_scope(f"ram.word{a}") for a in range(WORDS))
+
+    def test_the_picture_names_the_instruction_part(self) -> None:
+        """For the demo's first word (li) the zoom target is the write-back."""
+        parts = cast("dict[str, Any]", machine_picture(Session(SMALL))["parts"])
+        assert parts["instruction"] == "cpu.write_back"
+
+    def test_a_fetch_fault_zooms_to_the_whole_cpu(self) -> None:
+        """When the instruction is outside memory there is no word, so the target is `cpu`."""
+        session = Session(SMALL)
+        session.computer.resume()
+        session.computer.fast.load_state(replace(session.computer.fast.state(), pc=OUTSIDE))
+        session.computer.pause()
+        parts = cast("dict[str, Any]", machine_picture(session)["parts"])
+        assert parts["instruction"] == "cpu"
+
+
+class TestLastGate:
+    """A gate step says which gate thought, and which part of the circuit it belongs to."""
+
+    def test_a_gate_step_names_the_gate_and_its_part(self) -> None:
+        """`last_gate.path` is the circuit's own scope for that gate."""
+        session = Session(SMALL)
+        circuit = session.computer.gate.simulator.circuit
+        for _ in range(SOME_GATE_STEPS):
+            session.step(StepSize.GATE)
+            micro = session.last_gate
+            assert micro is not None
+            picture_gate = cast("dict[str, Any] | None", machine_picture(session)["last_gate"])
+            if micro.kind == "gate":
+                assert picture_gate is not None
+                assert picture_gate["id"] == micro.gate
+                assert picture_gate["path"] == circuit.scope_of(micro.gate)
+                assert picture_gate["value"] == micro.value
+            else:
+                assert picture_gate is None
+
+    def test_an_instruction_step_leaves_it_null(self) -> None:
+        """After a gate step, an instruction step clears the last gate."""
+        session = Session(SMALL)
+        session.step(StepSize.GATE)
+        session.step(StepSize.INSTRUCTION)
+        assert machine_picture(session)["last_gate"] is None
+
+    def test_the_route_carries_it(self) -> None:
+        """GET /api/machine after a gate step includes `last_gate` with a real path."""
+        cockpit = Cockpit()
+        picture = cockpit.step("gate", SOME_GATE_STEPS)
+        assert picture["note"] is None
+        assert picture["last_gate"] is None or picture["last_gate"]["path"]
+
+
+class TestPlayingPicture:
+    """While the fast engine is live the picture reads it and shows no gate detail."""
+
+    def test_it_reads_the_fast_engine(self) -> None:
+        """Playing: phase is fetch, at a boundary, instruction is the word at pc."""
+        session = Session(SMALL)
+        session.computer.resume()
+        session.computer.run(1)
+        session.playing = True
+        picture = machine_picture(session)
+        assert picture["running"] is True
+        assert picture["phase"] == "fetch"
+        assert picture["at_boundary"] is True
+        assert picture["last_gate"] is None
+        assert cast("dict[str, Any]", picture["instruction"])["address"] == picture["pc"]
+        assert picture["registers"] == list(session.computer.fast.state().registers)
+
+    def test_a_paused_picture_is_not_running(self) -> None:
+        """`running` follows `playing`."""
+        assert machine_picture(Session(SMALL))["running"] is False
+
+
+class TestListing:
+    """GET /api/listing describes the whole loaded program."""
+
+    def test_the_demo_has_a_row_for_each_word(self) -> None:
+        """One row per word, the label at its address, `set` giving two rows."""
+        cockpit = Cockpit()
+        body = _json(_run(cockpit.client.get("/api/listing")))
+        words = assemble(DEMO_PROGRAM, words=WORDS).words
+        rows = body["rows"]
+        assert len(rows) == len(words)
+        assert [row["word"] for row in rows] == list(words)
+        assert body["pebble"] is None
+        assert rows[DEMO_LOOP_ADDRESS]["labels"] == ["loop"]
+        assert [rows[i]["first"] for i in SET_ROWS] == [True, False]
+        assert rows[0]["text"].startswith("set r1, 0xFFFF")
+        assert rows[SET_ROWS[1]]["text"] == rows[0]["text"]
+        assert all(row["pebble_line"] is None for row in rows)
+
+    def test_a_pebble_program_lists_its_lines(self) -> None:
+        """Every row's pebble_line is the translator's `line_at`, and `pebble` is the source."""
+        cockpit = Cockpit(PEBBLE_BITS)
+        assert cockpit.pebble(COUNTDOWN).status == OK
+        body = _json(_run(cockpit.client.get("/api/listing")))
+        translated = translate(COUNTDOWN)
+        assert body["pebble"] == COUNTDOWN.splitlines()
+        assert len(body["rows"]) == len(translated.program.words)
+        for row in body["rows"]:
+            assert row["pebble_line"] == translated.line_at(row["address"])

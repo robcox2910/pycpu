@@ -17,7 +17,7 @@ from pebble import PebbleError
 from pyweb.app import App
 from pyweb.messages import HTTPError, HttpRequest, HttpResponse, JsonValue, html, json
 
-from pycpu.cockpit.picture import machine_picture
+from pycpu.cockpit.picture import listing, machine_picture
 from pycpu.cockpit.session import MAX_GATE_STEPS, MAX_RUN, Cockpit, CockpitBusy, CockpitRefusal
 from pycpu.computer import StepSize
 from pycpu.memory import RAM_ADDRESS_BITS
@@ -122,7 +122,7 @@ def create_cockpit(address_bits: int = RAM_ADDRESS_BITS, start_example: str | No
 
     Returns:
         A PyWeb `App` with the routes `GET /` (the page), `GET /api/machine`,
-        `GET /api/view`, `POST /api/step`, `POST /api/rewind`, `POST /api/run`,
+        `GET /api/listing`, `GET /api/view`, `POST /api/step`, `POST /api/rewind`, `POST /api/run`,
         `POST /api/program` and `POST /api/pebble`. See the Cockpit page in the docs
         for each one.
 
@@ -150,6 +150,11 @@ def create_cockpit(address_bits: int = RAM_ADDRESS_BITS, start_example: str | No
     def machine(_request: HttpRequest) -> HttpResponse:  # pyright: ignore[reportUnusedFunction]
         """Describe the computer as it is now."""
         return answer()
+
+    @app.get("/api/listing")
+    def program_listing(_request: HttpRequest) -> HttpResponse:  # pyright: ignore[reportUnusedFunction]
+        """List every word of the loaded program with its source line and labels."""
+        return json(listing(cockpit))  # pyright: ignore[reportArgumentType]
 
     @app.get("/api/view")
     def view(request: HttpRequest) -> HttpResponse:  # pyright: ignore[reportUnusedFunction]
