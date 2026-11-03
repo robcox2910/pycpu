@@ -93,9 +93,12 @@ def function_label(name: str) -> str:
     plain letters A to Z, digits and `_`. So plain letters and digits stay, `_` is
     written twice, and any other character becomes `_x`, its number in hex, and `_`
     (`café` becomes `__fn_caf_xe9_`). The other labels of the function add `_` and a
-    number or a word to this one. Inside the name, a single `_` is only ever followed
-    by `x`, and none of those additions start with `_` or `x`, so no label of one
-    function can ever be spelled the same as a label of another.
+    number or a word to this one. Read a label left to right after `__fn_`: a letter
+    or digit is itself; a `_` followed by `_` is an underscore; a `_` followed by `x`
+    starts an escape, which runs over hex digits to its closing `_`. Any other `_` must
+    be the start of an addition, because none of them begin with `_` or `x`. So every
+    label reads back in exactly one way, and no label of one function can ever be
+    spelled the same as a label of another.
     """
     pieces = [
         char if char in _ASCII_LETTERS_AND_DIGITS else "__" if char == "_" else f"_x{ord(char):x}_"

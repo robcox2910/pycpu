@@ -185,8 +185,8 @@ print(repr(run.fault), "at line", run.line)
 The machine stopped itself with fault code 2, **stack overflow**, and the translator's
 source map points at line 2, where `f`'s code starts. Nothing was printed, and nothing
 in the program was overwritten. Pebble's own VM keeps its frames in a Python list with
-no limit, so on the VM this program just keeps going (we gave up waiting after two
-minutes). PyCPU's memory is only 4,096 words, so it finds out much sooner.
+no limit, so on the VM this program just keeps going (we gave up
+waiting). PyCPU's memory is only 4,096 words, so it finds out much sooner.
 
 ## How It Works
 

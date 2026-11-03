@@ -295,6 +295,13 @@ class TestFunctionErrors:
         assert (error.feature, error.line) == (TOO_MANY_PARAMETERS, SECOND_LINE)
         assert str(error).startswith("more than 29 parameters are not supported")
 
+    def test_too_many_parameters_with_no_line_names_the_function(self) -> None:
+        """An empty body has no line to point at, so the message names the function."""
+        params = ", ".join(f"p{n}" for n in range(MAX_PARAMETERS + 1))
+        error = refusal(f"fn wide({params}) {{\n}}")
+        assert (error.feature, error.line) == (f"{TOO_MANY_PARAMETERS} (in wide)", None)
+        assert str(error) == "more than 29 parameters (in wide) are not supported on PyCPU yet"
+
     def test_thirty_three_variables_in_a_function_are_too_many(self) -> None:
         """The 33rd variable of a function has no slot left below r7."""
         body = "\n".join(f"    let v{n} = {n}" for n in range(MAX_VARIABLES + 1))

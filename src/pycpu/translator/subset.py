@@ -368,7 +368,9 @@ class _CodeChecker:
         if len(self.code.parameters) > MAX_PARAMETERS:
             # A frame has no place of its own in the source, so use its first line.
             first = next((place for place in self.places if place is not None), None)
-            self._problem(TOO_MANY_PARAMETERS, first)
+            # With no line to point at (an empty body), name the function instead.
+            where = "" if first else f" (in {self.name})"
+            self._problem(TOO_MANY_PARAMETERS + where, first)
         for index, instruction in enumerate(self.code.instructions):
             feature = self._opcode_problem(instruction)
             if feature is not None:
