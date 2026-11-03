@@ -67,6 +67,8 @@ nav:
       - Calling and Returning: concepts/calling-and-returning.md
       - Two Engines: concepts/two-engines.md
       - Pausing and Rewinding: concepts/pausing-and-rewinding.md
-      - The Bench: concepts/the-bench.md
+  - Pebble on the CPU:
+      - Multiply and Divide: concepts/multiply-and-divide.md
+  - The Bench: concepts/the-bench.md
   - Reference:
       - Instruction Set: reference/instruction-set.md
