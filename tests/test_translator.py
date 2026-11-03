@@ -350,9 +350,9 @@ class TestFriendlyErrors:
         """Defining a function is allowed; main still runs."""
         assert run_and_compare("fn f(a) { return a }\nprint(1)").output == "1\n"
 
-    def test_calling_your_own_function_is_refused_for_now(self) -> None:
-        """Calls to user functions are not translated yet, and say so politely."""
-        assert refusal("fn f(a) { return a }\nprint(f(2))").line == SECOND_LINE
+    def test_calling_your_own_function_runs(self) -> None:
+        """Calls to your own functions are translated (tests/test_functions.py has more)."""
+        assert run_and_compare("fn f(a) { return a }\nprint(f(2))").output == "2\n"
 
     def test_a_problem_inside_a_function_is_found_too(self) -> None:
         """A function body is checked even if nobody calls it."""

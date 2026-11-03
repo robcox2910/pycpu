@@ -13,7 +13,7 @@ variable a piece of code stores, so each one can get a place in memory, and the 
 the stack ever gets, so the program can check there is room before it starts.
 """
 
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from enum import Enum, auto
 
@@ -22,6 +22,9 @@ from pebble import CodeObject, CompiledProgram, Instruction, OpCode, SourceLocat
 INT_MIN = -32768
 INT_MAX = 32767
 MAX_VARIABLES = 32
+# A function's parameter i of N sits at [r7 + 2 + (N - 1 - i)], and a `load` reaches only
+# [r7+31]. The contract keeps one word spare and allows 29.
+MAX_PARAMETERS = 29
 WORD_MAX = 0xFFFF
 
 # The feature names the friendly errors use (see the Pebble Subset Contract).
@@ -48,11 +51,10 @@ NULL_VALUES = "null values"
 NULL_USED = "using the result of a function that does not always return a number"
 OUTSIDE_VARIABLES = "variables from outside a function"
 TOO_MANY_VARIABLES = f"more than {MAX_VARIABLES} variables in one function"
+TOO_MANY_PARAMETERS = f"more than {MAX_PARAMETERS} parameters"
 BIG_CHARACTERS = "emoji and other characters too big for one 16-bit word"
 ZERO_CHARACTER = "the \\0 character inside text"
 TOO_BIG = "programs too big to fit in memory with room for the stack"
-# A stand-in until a later task teaches the translator calls.
-FUNCTIONS_FOR_NOW = "calls to your own functions (coming soon)"
 
 _SINGULAR = frozenset({TEXT_BRACES, TEXT_OUTSIDE_PRINT, NULL_USED, RANGE_STEP})
 
@@ -130,6 +132,7 @@ _SUPPORTED = frozenset(
         OpCode.HALT,
         OpCode.RETURN,
         OpCode.NOT,
+        OpCode.CALL,
         *ARITHMETIC,
         *COMPARISONS,
         *JUMPS,
@@ -194,6 +197,9 @@ class CheckedCode:
         prints_text: The positions of its `PRINT` instructions that print text
             rather than a number.
         deepest: The most slots Pebble's stack ever holds while it runs.
+        returns: What its `return`s may give back: `Kind.INT` for a number,
+            `Kind.NULL` for nothing. Both means "maybe a number"; neither means it
+            never comes back at all (like a function that calls itself forever).
 
     """
 
@@ -202,6 +208,7 @@ class CheckedCode:
     variables: tuple[str, ...]
     prints_text: frozenset[int]
     deepest: int
+    returns: frozenset[Kind] = frozenset()
 
 
 @dataclass(frozen=True)
@@ -232,12 +239,15 @@ class _Slot:
 
     `mixed` is True when paths that brought different kinds met in this slot, such as
     the number and the text in `1 or "a"`: such a value cannot be printed as text.
+    `never` is True for the answer of a call that, as far as we know so far, never
+    comes back, so returning it tells the caller nothing new.
     """
 
     kind: Kind
     made_at: SourceLocation | None
     null_literal: bool = False
     mixed: bool = False
+    never: bool = False
 
 
 # How "awkward" each kind is. Where two paths meet, the more awkward kind wins, so a
@@ -245,6 +255,15 @@ class _Slot:
 _AWKWARDNESS = {Kind.INT: 0, Kind.BOOL: 1, Kind.NULL: 2, Kind.MAYBE: 3, Kind.TEXT: 4}
 
 type _Stack = tuple[_Slot, ...]
+
+# What a `return` of each kind of slot tells a caller it may get back.
+_GIVES = {
+    Kind.INT: {Kind.INT},
+    Kind.NULL: {Kind.NULL},
+    Kind.MAYBE: {Kind.INT, Kind.NULL},
+    Kind.BOOL: set[Kind](),
+    Kind.TEXT: set[Kind](),
+}
 
 
 def _place_key(place: SourceLocation | None) -> tuple[int, int]:
@@ -271,6 +290,7 @@ def _meet(first: _Slot, second: _Slot) -> _Slot:
         made_at,
         null_literal=first.null_literal or second.null_literal,
         mixed=first.mixed or second.mixed or first.kind is not second.kind,
+        never=first.never and second.never,
     )
 
 
@@ -299,11 +319,22 @@ class _CodeChecker:
     empty, every path has been followed.
     """
 
-    def __init__(self, name: str, code: CodeObject, program: CompiledProgram) -> None:
-        """Get ready to check `code`, which belongs to `program`."""
+    def __init__(
+        self,
+        name: str,
+        code: CodeObject,
+        program: CompiledProgram,
+        returns: Mapping[str, frozenset[Kind]],
+    ) -> None:
+        """Get ready to check `code`, which belongs to `program`.
+
+        `returns` is our best guess so far of what every function gives back.
+        """
         self.name = name
         self.code = code
         self.program = program
+        self.returns_so_far = returns
+        self.returns: set[Kind] = set()
         self.places = located(code.instructions)
         self.stored = {str(i.operand) for i in code.instructions if i.opcode == OpCode.STORE_NAME}
         self.problems: list[_Problem] = []
@@ -314,16 +345,7 @@ class _CodeChecker:
 
     def check(self) -> CheckedCode:
         """Check every instruction and every path, and return what the translator needs."""
-        for index, instruction in enumerate(self.code.instructions):
-            feature = self._opcode_problem(instruction)
-            if feature is not None:
-                self._problem(feature, self.places[index])
-            if instruction.opcode == OpCode.STORE_NAME:
-                name = str(instruction.operand)
-                if name.startswith(_RANGE_STEP_PREFIX):
-                    self._problem(RANGE_STEP, self.places[index])
-                self._store(name, self.places[index])
-        self._follow_every_path()
+        self.examine()
         if self.problems:
             first = min(self.problems, key=_Problem.key)
             location = first.location
@@ -338,7 +360,25 @@ class _CodeChecker:
             tuple(self.variables),
             frozenset(self.prints_text),
             self.deepest,
+            frozenset(self.returns),
         )
+
+    def examine(self) -> None:
+        """Look at every instruction and every path, noting problems and what comes back."""
+        if len(self.code.parameters) > MAX_PARAMETERS:
+            # A frame has no place of its own in the source, so use its first line.
+            first = next((place for place in self.places if place is not None), None)
+            self._problem(TOO_MANY_PARAMETERS, first)
+        for index, instruction in enumerate(self.code.instructions):
+            feature = self._opcode_problem(instruction)
+            if feature is not None:
+                self._problem(feature, self.places[index])
+            if instruction.opcode == OpCode.STORE_NAME:
+                name = str(instruction.operand)
+                if name.startswith(_RANGE_STEP_PREFIX):
+                    self._problem(RANGE_STEP, self.places[index])
+                self._store(name, self.places[index])
+        self._follow_every_path()
 
     def _follow_every_path(self) -> None:
         """Play the code along every path, mixing kinds where paths meet."""
@@ -413,7 +453,7 @@ class _CodeChecker:
         is_function = name in self.program.functions
         if opcode == OpCode.CALL:
             if is_function:
-                return FUNCTIONS_FOR_NOW
+                return None
             # Pebble's built-in and library functions are lower case; a capital
             # letter means a struct or class being made, like `Point(1, 2)`.
             return STRUCTS if name[:1].isupper() else builtin_function(name)
@@ -428,10 +468,15 @@ class _CodeChecker:
         return self.stack.pop()
 
     def _push(
-        self, kind: Kind, place: SourceLocation | None, *, null_literal: bool = False
+        self,
+        kind: Kind,
+        place: SourceLocation | None,
+        *,
+        null_literal: bool = False,
+        never: bool = False,
     ) -> None:
         """Put a slot on the imagined stack and remember the deepest it has been."""
-        self.stack.append(_Slot(kind, place, null_literal))
+        self.stack.append(_Slot(kind, place, null_literal, never=never))
         self.deepest = max(self.deepest, len(self.stack))
 
     def _need_number(self, slot: _Slot) -> None:
@@ -507,10 +552,37 @@ class _CodeChecker:
                 self.prints_text.add(index)
             else:
                 self._need_number(slot)
+        elif opcode == OpCode.CALL:
+            self._call(str(instruction.operand), place)
         elif opcode == OpCode.RETURN:
-            slot = self._pop()
-            if slot.kind is not Kind.NULL or slot.mixed:
-                self._need_number(slot)
+            self._return(self._pop())
+
+    def _return(self, slot: _Slot) -> None:
+        """Play a `return`: note what kind of thing it gives back to the caller."""
+        if slot.kind is Kind.NULL and not slot.mixed:
+            self.returns.add(Kind.NULL)
+        elif not slot.never:  # `return f()`, where f never comes back, adds nothing.
+            self._need_number(slot)
+            # A maybe passed along is refused, but still means "maybe" to callers.
+            self.returns.update(_GIVES[slot.kind])
+
+    def _call(self, name: str, place: SourceLocation | None) -> None:
+        """Play a call to our own function: its arguments go, its answer comes.
+
+        Pebble's `CALL` does not say how many arguments it takes, so we count the
+        function's parameters (a default value is filled in by the caller, so the count
+        is always the same). Every argument must be a number.
+        """
+        for _ in self.program.functions[name].parameters:
+            self._need_number(self._pop())
+        gives = self.returns_so_far[name]
+        if gives == frozenset({Kind.NULL}):
+            self._push(Kind.NULL, place)
+        elif Kind.NULL in gives:
+            self._push(Kind.MAYBE, place)
+        else:
+            # A number, or (so far) nothing ever comes back, so nobody can use it.
+            self._push(Kind.INT, place, never=not gives)
 
     def _load_constant(self, number: int, place: SourceLocation | None) -> None:
         """Push a constant's kind, complaining about values PyCPU cannot hold."""
@@ -561,16 +633,38 @@ def check_program(compiled: CompiledProgram) -> CheckedProgram:
 
     """
     codes = [("main", compiled.main), *compiled.functions.items()]
+    returns = _return_kinds(compiled)
     problems: list[UnsupportedFeature] = []
     checked: list[CheckedCode] = []
     for name, code in codes:
         try:
-            checked.append(_CodeChecker(name, code, compiled).check())
+            checked.append(_CodeChecker(name, code, compiled, returns).check())
         except UnsupportedFeature as error:
             problems.append(error)
     if problems:
         raise min(problems, key=_error_key)
     return CheckedProgram(checked[0], {code.name: code for code in checked[1:]})
+
+
+def _return_kinds(compiled: CompiledProgram) -> dict[str, frozenset[Kind]]:
+    """Work out what every function may give back, going round until nothing changes.
+
+    What `f` gives back can depend on what `g` gives back, and `g` on `f`, or `f` on
+    itself. So start by guessing that no function ever comes back, play every function
+    with that guess, and note what its `return`s give. Then play them all again with
+    the new guesses. A guess only ever grows (nothing, then a number, then maybe null),
+    and there are only so many kinds, so it soon stops changing.
+    """
+    returns = {name: frozenset[Kind]() for name in compiled.functions}
+    while True:
+        found = dict(returns)
+        for name, code in compiled.functions.items():
+            checker = _CodeChecker(name, code, compiled, returns)
+            checker.examine()
+            found[name] = returns[name] | checker.returns
+        if found == returns:
+            return returns
+        returns = found
 
 
 def _error_key(error: UnsupportedFeature) -> tuple[int, int]:

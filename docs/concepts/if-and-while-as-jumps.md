@@ -368,7 +368,8 @@ not just for speed, either: programmers rely on it every day, writing things lik
 
 ## What's Next
 
-Our loops counted with `+` and `-`, which the ALU does in one instruction. But a loop
-that asks "is `n` even?" needs `n % 2`, and PyCPU has no multiply or divide instruction at all.
-Find out how the machine builds them out of nothing but shifting and adding, in
-[Multiply and Divide](multiply-and-divide.md).
+A program that repeats itself with a loop is useful; a program that can hand a job to a
+named helper, and get an answer back, is far more useful. Pebble calls those helpers
+functions. Find out what really happens on the machine when one function calls another,
+and even calls *itself*, in
+[How a Function Call Really Works](how-a-function-call-really-works.md).

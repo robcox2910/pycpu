@@ -16,6 +16,10 @@ below it. See the Variables in Memory page for the picture.
 Jumps work like page numbers in a choose-your-own-adventure book. Every bytecode
 instruction that some jump goes to gets a label named after its position, such as
 `__main_7`, and a Pebble jump becomes a `jmp` to that label (see If and While as Jumps).
+
+Each Pebble function gets the same treatment as main, starting at its own label such
+as `__fn_double`. A call is "leave the arguments on the stack, `call`, then tidy the
+arguments away and push the answer from `r1`" (see How a Function Call Really Works).
 """
 
 from dataclasses import dataclass
@@ -35,6 +39,13 @@ from pycpu.translator.subset import (
 BYTE_MAX = 255
 COLUMN = 24
 MAIN_LABEL = "__main"
+FUNCTION_PREFIX = "__fn_"
+# A `call` pushes one word, the return address, before the called function's prologue
+# checks for room. That word lands in the room the caller set aside for the routines.
+RETURN_ADDRESS_WORDS = 1
+_ASCII_LETTERS_AND_DIGITS = frozenset(
+    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
+)
 END_LABEL = "__end"
 _ALU = {OpCode.ADD: "add", OpCode.SUBTRACT: "sub"}
 # Each comparison, the signed branch condition that says "yes", and how to say it.
@@ -64,8 +75,33 @@ class Assembly:
 
 
 def frame_words(checked: CheckedCode) -> int:
-    """Count the stack words a piece of code may need: old r7, variables, stack, routines."""
-    return 1 + len(checked.variables) + checked.deepest + RUNTIME_STACK_WORDS
+    """Count the stack words a piece of code may need: old r7, variables, stack, routines.
+
+    The deepest stack already counts the arguments it pushes for a call. On top of
+    that, a call to a routine needs `RUNTIME_STACK_WORDS` and a call to a Pebble
+    function needs just its return address, so the larger of the two is set aside; the
+    called function checks the room for its own frame in its own prologue.
+    """
+    calls = max(RUNTIME_STACK_WORDS, RETURN_ADDRESS_WORDS)
+    return 1 + len(checked.variables) + checked.deepest + calls
+
+
+def function_label(name: str) -> str:
+    """Return the label where the Pebble function `name` starts, such as `__fn_double`.
+
+    A Pebble name may hold letters from any language, but a label may only hold the
+    plain letters A to Z, digits and `_`. So plain letters and digits stay, `_` is
+    written twice, and any other character becomes `_x`, its number in hex, and `_`
+    (`café` becomes `__fn_caf_xe9_`). The other labels of the function add `_` and a
+    number or a word to this one. Inside the name, a single `_` is only ever followed
+    by `x`, and none of those additions start with `_` or `x`, so no label of one
+    function can ever be spelled the same as a label of another.
+    """
+    pieces = [
+        char if char in _ASCII_LETTERS_AND_DIGITS else "__" if char == "_" else f"_x{ord(char):x}_"
+        for char in name
+    ]
+    return FUNCTION_PREFIX + "".join(pieces)
 
 
 def _quote(text: str) -> str:
@@ -91,7 +127,8 @@ class _Writer:
 
     def op(self, instruction: str, comment: str, line: int | None) -> None:
         """Add one indented instruction with a comment lined up beside it."""
-        self.raw(f"    {instruction:<{COLUMN}}; {comment}", line)
+        # A long instruction still gets one space before its comment.
+        self.raw(f"    {instruction:<{COLUMN - 1}} ; {comment}", line)
 
     def text_label(self, text: str) -> str:
         """Return the label of a piece of text, giving it a new one the first time."""
@@ -99,15 +136,22 @@ class _Writer:
 
 
 class _CodeWriter:
-    """Write the assembly for one piece of Pebble code (main, for now)."""
+    """Write the assembly for one piece of Pebble code: main or one function."""
 
-    def __init__(self, writer: _Writer, checked: CheckedCode, label: str) -> None:
+    def __init__(
+        self, writer: _Writer, checked: CheckedCode, label: str, program: CheckedProgram
+    ) -> None:
         """Get ready to write `checked`, whose code starts at `label`."""
         self.out = writer
         self.checked = checked
         self.code = checked.code
         self.label = label
-        self.slots = {name: -1 - j for j, name in enumerate(checked.variables)}
+        self.program = program
+        # Variables sit below r7; parameters above it, where the caller pushed them,
+        # the last one nearest: parameter i of N is at [r7 + 2 + (N - 1 - i)].
+        count = len(self.code.parameters)
+        self.slots = {name: 2 + (count - 1 - i) for i, name in enumerate(self.code.parameters)}
+        self.slots.update({name: -1 - j for j, name in enumerate(checked.variables)})
         self.places = located(self.code.instructions)
         first = next((place for place in self.places if place is not None), None)
         self.first_line = first.line if first else None
@@ -187,24 +231,32 @@ class _CodeWriter:
             self._not(index, line)
         elif opcode in JUMPS:
             self._jump(index, opcode, int(instruction.operand or 0), line)
-        elif opcode == OpCode.NEGATE:
-            out.op("pop  r1", "r1 = the number", line)
-            out.op("sub  r1, r0, r1", "r1 = 0 - r1", line)
-            out.op("push r1", "the answer goes on the stack", line)
-        elif opcode == OpCode.POP:
-            out.op("pop  r1", "the value is not needed: throw it away", line)
-        elif opcode == OpCode.PRINT:
-            routine = "__print_text" if index in self.checked.prints_text else "__print_int"
-            out.op("pop  r1", "r1 = the thing to print", line)
-            out.op(f"call {routine}", "print it and a newline", line)
+        elif opcode in (OpCode.NEGATE, OpCode.POP, OpCode.PRINT):
+            self._one_value(index, opcode, line)
         elif opcode in (OpCode.HALT, OpCode.RETURN):
             self._leave(opcode, line)
+        elif opcode == OpCode.CALL:
+            self._call(str(instruction.operand), line)
         elif opcode == OpCode.CHECK_TYPE:
             out.raw("    ; (no code: Pebble has already checked this is a number)", line)
         else:
             # The subset check should have refused it; writing nothing would be wrong code.
             msg = f"translator bug: no code for {opcode}"
             raise PebbleCPUError(msg)
+
+    def _one_value(self, index: int, opcode: OpCode, line: int | None) -> None:
+        """Write `NEGATE`, `POP` or `PRINT`, which each take one value off the stack."""
+        out = self.out
+        if opcode == OpCode.NEGATE:
+            out.op("pop  r1", "r1 = the number", line)
+            out.op("sub  r1, r0, r1", "r1 = 0 - r1", line)
+            out.op("push r1", "the answer goes on the stack", line)
+        elif opcode == OpCode.POP:
+            out.op("pop  r1", "the value is not needed: throw it away", line)
+        else:
+            routine = "__print_text" if index in self.checked.prints_text else "__print_int"
+            out.op("pop  r1", "r1 = the thing to print", line)
+            out.op(f"call {routine}", "print it and a newline", line)
 
     def _leave(self, opcode: OpCode, line: int | None) -> None:
         """Write `HALT` (stop the machine) or `RETURN` (give a value back to the caller)."""
@@ -217,15 +269,33 @@ class _CodeWriter:
         out.op("pop  r7", "get the caller's frame pointer back", line)
         out.op("ret", "go back to the caller", line)
 
+    def _call(self, name: str, line: int | None) -> None:
+        """Write a call to a Pebble function, whose arguments are already on the stack.
+
+        The function leaves its answer in `r1`. Afterwards the arguments are still on
+        the stack, so the stack pointer is moved up past them in one go.
+        """
+        out = self.out
+        count = len(self.program.functions[name].code.parameters)
+        where = "leaving the return address on the stack"
+        out.op(f"call {function_label(name)}", f"go to {name}, {where}", line)
+        if count:
+            words = "the argument is" if count == 1 else f"the {count} arguments are"
+            plural = "" if count == 1 else "s"
+            out.op("getsp r2", "r2 = the top of the stack", line)
+            out.op(f"addi r2, {count}", f"step over the {count} argument{plural}", line)
+            out.op("setsp r2", f"{words} thrown away", line)
+        out.op("push r1", f"the answer {name} gave back goes on the stack", line)
+
     def _variable(self, opcode: OpCode, name: str, line: int | None) -> None:
         """Write `LOAD_NAME` or `STORE_NAME`: copy between the stack and the name's slot."""
-        out = self.out
+        out, slot = self.out, f"[r7{self.slots[name]:+d}]"
         if opcode == OpCode.LOAD_NAME:
-            out.op(f"load r1, [r7{self.slots[name]}]", f"r1 = {name}", line)
+            out.op(f"load r1, {slot}", f"r1 = {name}", line)
             out.op("push r1", "onto the stack", line)
         else:
             out.op("pop  r1", "r1 = the value on top of the stack", line)
-            out.op(f"store r1, [r7{self.slots[name]}]", f"{name} = r1", line)
+            out.op(f"store r1, {slot}", f"{name} = r1", line)
 
     def _arithmetic(self, index: int, opcode: OpCode, line: int | None) -> None:
         """Write `+`, `-` and `*` here; `//` and `%` need a divide-by-zero check first."""
@@ -328,8 +398,9 @@ class _CodeWriter:
 def generate(program: CheckedProgram) -> Assembly:
     """Write the assembly for a checked Pebble program.
 
-    The layout from address 0 is: main (ending in `halt 0`), the runtime routines, the
-    text data, then the label `__end`, the first word the stack must never reach.
+    The layout from address 0 is: main (ending in `halt 0`), each function, the runtime
+    routines, the text data, then the label `__end`, the first word the stack must
+    never reach.
 
     Args:
         program: A program that passed `check_program`.
@@ -340,7 +411,11 @@ def generate(program: CheckedProgram) -> Assembly:
     """
     out = _Writer()
     out.raw("; ==== main: the Pebble program's own code ====")
-    _CodeWriter(out, program.main, MAIN_LABEL).write()
+    _CodeWriter(out, program.main, MAIN_LABEL, program).write()
+    for name, checked in program.functions.items():
+        parameters = ", ".join(checked.code.parameters)
+        out.raw(f"; ==== function {name}({parameters}): its own frame, like main's ====")
+        _CodeWriter(out, checked, function_label(name), program).write()
     out.raw("; ==== runtime: the ready-made routines for multiply, divide and print ====")
     out.raw(RUNTIME.strip("\n"))
     out.raw("; ==== text: every piece of text, one character per word, ending in 0 ====")
