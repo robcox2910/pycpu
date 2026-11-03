@@ -2,7 +2,13 @@
 
 import pytest
 
-from pycpu.cockpit.session import MAX_GATE_STEPS, Cockpit, CockpitBusy, CockpitRefusal
+from pycpu.cockpit.session import (
+    MAX_GATE_STEPS,
+    MAX_PEBBLE_CHARACTERS,
+    Cockpit,
+    CockpitBusy,
+    CockpitRefusal,
+)
 from pycpu.computer import StepSize
 
 SMALL = 6
@@ -12,6 +18,9 @@ BAD_LINE_NUMBER = "line 2"
 SHORT_RUN = 5
 COUNTDOWN = "let n = 2\nprint(n)\n"
 GATE_BATCH = 7
+BUSY = "the computer is running: press pause first"
+STACK_BITS = 7
+STACK_PRINTS = 3
 
 
 class TestLoading:
@@ -96,3 +105,57 @@ class TestMoves:
         with pytest.raises(CockpitBusy, match="press pause first"):
             cockpit.rewind()
         cockpit.load_assembly("halt")
+
+
+class TestBusyAndLoads:
+    """While playing only loads are allowed; every move, loads included, resets the notes."""
+
+    def test_every_move_is_busy_while_playing_and_changes_nothing(self) -> None:
+        """Each step size and run raise CockpitBusy with the exact message."""
+        cockpit = Cockpit(SMALL)
+        cockpit.playing = True
+        state = cockpit.computer.state()
+        for size in StepSize:
+            with pytest.raises(CockpitBusy) as caught:
+                cockpit.step(size)
+            assert str(caught.value) == BUSY
+        with pytest.raises(CockpitBusy, match=BUSY):
+            cockpit.run(1)
+        assert cockpit.computer.state() == state
+        assert cockpit.before == state
+
+    def test_loads_are_allowed_while_playing(self) -> None:
+        """Both loads work while the session says it is playing."""
+        cockpit = Cockpit(PEBBLE_BITS)
+        cockpit.playing = True
+        cockpit.load_assembly("halt")
+        cockpit.load_pebble(COUNTDOWN)
+        assert cockpit.translated is not None
+
+    def test_loads_set_before_and_clear_notes(self) -> None:
+        """A load records the state it replaced and clears the note and last gate."""
+        cockpit = Cockpit(PEBBLE_BITS)
+        for load in (cockpit.load_assembly, cockpit.load_pebble):
+            source = "halt" if load == cockpit.load_assembly else COUNTDOWN
+            cockpit.step(StepSize.GATE)
+            cockpit.note = "old"
+            old = cockpit.computer.state()
+            load(source)
+            assert cockpit.before == old
+            assert cockpit.note is None
+            assert cockpit.last_gate is None
+
+    def test_pebble_refusals_change_nothing(self) -> None:
+        """Too long, too big and no room for the stack all raise CockpitRefusal."""
+        cases = [
+            (Cockpit(PEBBLE_BITS), "x" * (MAX_PEBBLE_CHARACTERS + 1), "at most"),
+            (Cockpit(SMALL), COUNTDOWN, "needs"),
+            (Cockpit(STACK_BITS), "print(1)\n" * STACK_PRINTS, "room for its stack"),
+        ]
+        for cockpit, source, message in cases:
+            state, assembly = cockpit.computer.state(), cockpit.assembly
+            with pytest.raises(CockpitRefusal, match=message):
+                cockpit.load_pebble(source)
+            assert cockpit.computer.state() == state
+            assert cockpit.assembly == assembly
+            assert cockpit.translated is None

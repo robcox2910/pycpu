@@ -29,6 +29,8 @@ NOT_FOUND = 404
 CONFLICT = 409
 
 
+# The route checks type and range too so the 400 bodies stay byte-identical; the session
+# re-checks so direct callers are safe.
 def _whole_number(body: Mapping[str, object], name: str, largest: int, default: int | None) -> int:
     """Return `body[name]` as a whole number from 1 to `largest`, or raise a 400.
 
@@ -67,14 +69,27 @@ def refusal(error: PebbleError | UnsupportedFeature) -> HttpResponse:
     return json(body, BAD_REQUEST)
 
 
+class _ConflictError(HTTPError):
+    """A 409 whose body says "Conflict": PyWeb has no reason phrase of its own for 409."""
+
+    def __init__(self, message: str) -> None:
+        """Store the 409 and the session's message."""
+        super().__init__(CONFLICT, message)
+
+    def to_response(self, request: HttpRequest) -> HttpResponse:  # noqa: ARG002
+        """Answer with the usual `error` and `message` body, naming the status "Conflict"."""
+        return json({"error": "Conflict", "message": self.message}, CONFLICT)
+
+
 @contextmanager
 def _as_http() -> Generator[None]:
     """Turn a session refusal into the HTTP error a route answers: 409 if busy, else 400."""
     try:
         yield
     except CockpitRefusal as error:
-        status = CONFLICT if isinstance(error, CockpitBusy) else BAD_REQUEST
-        raise HTTPError(status, str(error)) from None
+        if isinstance(error, CockpitBusy):
+            raise _ConflictError(str(error)) from None
+        raise HTTPError(BAD_REQUEST, str(error)) from None
 
 
 def _step_request(request: HttpRequest) -> tuple[StepSize, int]:

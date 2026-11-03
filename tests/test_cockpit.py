@@ -12,7 +12,13 @@ from pycpu import __main__ as entry
 from pycpu.__main__ import HOST, banner, open_cockpit
 from pycpu.assembler import assemble
 from pycpu.cockpit.app import create_cockpit
-from pycpu.cockpit.session import DEMO_PROGRAM, MAX_GATE_STEPS, MAX_PEBBLE_CHARACTERS, MAX_RUN
+from pycpu.cockpit.session import (
+    DEMO_PROGRAM,
+    MAX_GATE_STEPS,
+    MAX_PEBBLE_CHARACTERS,
+    MAX_RUN,
+)
+from pycpu.cockpit.session import Cockpit as Session
 from pycpu.computer import Computer, StepSize
 from pycpu.fast import FastMachine
 from pycpu.memory import RAM_ADDRESS_BITS
@@ -22,6 +28,8 @@ from pycpu.translator import translate
 OK = 200
 BAD_REQUEST = 400
 NOT_FOUND = 404
+CONFLICT = 409
+BUSY = "the computer is running: press pause first"
 SMALL = 6
 WORDS = 1 << SMALL
 WINDOW = 16
@@ -680,3 +688,31 @@ def test_the_cockpit_page_gives_the_real_gate_steps_per_instruction(address_bits
     """The quickest and slowest demo instructions take the gate steps the docs give."""
     counts = _gate_steps_per_instruction(address_bits)
     assert (min(counts), max(counts)) == DEMO_GATE_STEPS[address_bits]
+
+
+class TestSessionSeams:
+    """The app's start example and busy answer, reached without adding public routes."""
+
+    def test_an_unknown_start_example_is_refused(self) -> None:
+        """Until examples exist, any start_example raises ValueError."""
+        with pytest.raises(ValueError, match="anything"):
+            create_cockpit(SMALL, start_example="anything")
+
+    def test_a_busy_session_answers_409(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """A CockpitBusy from the session comes back as 409 with the usual body."""
+        made: list[Session] = []
+
+        class Recording(Session):
+            """A Cockpit that tells the test about itself."""
+
+            def __init__(self, address_bits: int) -> None:
+                """Build as usual and record this session."""
+                super().__init__(address_bits)
+                made.append(self)
+
+        monkeypatch.setattr("pycpu.cockpit.app.Cockpit", Recording)
+        client = TestClient(create_cockpit(SMALL))
+        made[0].playing = True
+        response = _run(client.post("/api/rewind", json={}))  # pyright: ignore[reportArgumentType]
+        assert response.status == CONFLICT
+        assert _json(response) == {"error": "Conflict", "message": BUSY}
