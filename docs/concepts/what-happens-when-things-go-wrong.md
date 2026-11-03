@@ -34,6 +34,7 @@ on purpose.
 ```python
 from pebble import PebbleError, run_source
 
+from pycpu.fast import FastMachine
 from pycpu.isa import Fault
 from pycpu.translator import PebbleRun, run_pebble, translate
 
@@ -67,6 +68,12 @@ print(run_pebble(endless_recursion).describe())
 endless_loop = "let i = 0\nwhile i < 1 {\n    i = i + 0\n}"
 print(run_pebble(endless_loop, max_steps=5000).describe())
 print(run_pebble("print(7)").describe())
+small_program = translate("print(1)")
+small = FastMachine(words=small_program.memory_needed - 1)
+small.load_program(small_program.program.words)
+steps = small.run(1000)
+small_run = PebbleRun.from_state(small_program, small.state(), steps)
+print(f"{small.words} words of memory, {small_program.memory_needed} needed:", small_run.describe())
 broken = PebbleRun("", True, Fault.BAD_ADDRESS, 3, 1)
 print(broken.describe())
 # Output:
@@ -79,16 +86,28 @@ print(broken.describe())
 # The stack ran out of room at line 2 (the call on that line found no room for another frame; does a function keep calling itself?)
 # The program was still running after 5000 steps
 # The program finished
+# 121 words of memory, 122 needed: The program needs more stack room than there is at line 1
 # The program used a memory address that does not exist at line 3
 ```
 
 Both machines name line 2, even though the mistake happened three calls deep and `a(0)`
 is on line 11. The `1` was printed before the whistle, and nothing after it was. The
 `describe()` lines for the other endings say what stopped the machine in plain
-words. The next one is the happy ending: no fault, so there is nothing to explain. The final
-sentence is for a bad address. Our translated programs do not normally reach one, so we
+words. The next one is the happy ending: no fault, so there is nothing to explain. The
+"needs more stack room" sentence comes next, and the paragraph after this one explains it.
+The final sentence is for a bad address. Our translated programs do not normally reach one, so we
 build the ending by hand (a `PebbleRun` made up for the purpose) just to show what it
 says.
+
+**"The program needs more stack room than there is."** This is a different sentence from
+"The stack ran out of room". That one blames a call. This one appears when *no call is to
+blame*: the top of the program could not even fit its own first frame. On the full
+4,096-word computer, `translate` refuses such a program before it runs (it is "too big"), so
+you will only meet this sentence on a computer with less memory, like a small Bench. The
+Try It makes one: `print(1)` needs 122 words (`memory_needed`, the program plus its top
+frame), so we give a `FastMachine` 121. The stack is empty and the first frame still
+does not fit, so there is no return address and no call to point at, and the sentence names
+the first line of the program. A test pins the 122.
 
 ## How It Works
 

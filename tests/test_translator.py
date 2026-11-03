@@ -55,6 +55,7 @@ from pycpu.translator.subset import (
 )
 
 MAX_LOCALS = 32
+PRINT_ONE_WORDS = 122  # pinned: the faults page says so
 TOO_MANY_PRINTS = 1100
 BOUNDARY_SEARCH_START = 980
 STACK_FOR_ONE_PRINT = 1 + 1 + RUNTIME_STACK_WORDS  # old r7, one slot, the routines
@@ -648,3 +649,32 @@ class TestConditionRefusals:
         compiled = pebble.CompiledProgram(main=code, functions={})
         with pytest.raises(PebbleCPUError, match="stack depth"):
             check_program(compiled)
+
+
+class TestOneSizeCheck:
+    """`translate` asks `memory_needed` whether a program fits, and nothing else."""
+
+    def test_a_program_that_fits_reports_a_need_within_memory(self) -> None:
+        """The biggest program that fits has `memory_needed` at or under the RAM size."""
+        prints = BOUNDARY_SEARCH_START
+        while fits("print(1)\n" * (prints + 1)):
+            prints += 1
+        assert translate("print(1)\n" * prints).memory_needed <= RAM_WORDS
+
+    def test_code_too_big_and_no_room_for_the_frame_are_both_refused(self) -> None:
+        """Both ways of not fitting give `TOO_BIG`."""
+        assert refusal("print(1)\n" * TOO_MANY_PRINTS).feature == TOO_BIG
+        prints = BOUNDARY_SEARCH_START
+        while fits("print(1)\n" * (prints + 1)):
+            prints += 1
+        assert refusal("print(1)\n" * (prints + 1)).feature == TOO_BIG
+
+    def test_print_one_needs_122_words_and_one_fewer_gives_the_no_room_sentence(self) -> None:
+        """The faults page says `print(1)` needs 122 words; a machine with 121 cannot start."""
+        program = translate("print(1)")
+        assert program.memory_needed == PRINT_ONE_WORDS
+        machine = FastMachine(words=PRINT_ONE_WORDS - 1)
+        machine.load_program(program.program.words)
+        steps = machine.run(1000)
+        run = PebbleRun.from_state(program, machine.state(), steps)
+        assert run.describe() == "The program needs more stack room than there is at line 1"

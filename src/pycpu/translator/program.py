@@ -155,13 +155,13 @@ def translate(source: str) -> TranslatedProgram:
         program = assemble(assembly.text, words=RAM_WORDS)
     except ProgramTooLongError as error:
         raise UnsupportedFeature(TOO_BIG) from error
+    lines = tuple(assembly.lines[line - 1] for line in program.lines)
+    translated = TranslatedProgram(source, assembly.text, program, lines, frame_words(checked.main))
     # The prologue would stop the machine with STACK_OVERFLOW before printing anything,
     # so a program with no room left for main's frame is refused here instead.
-    main_frame = frame_words(checked.main)
-    if program.labels[END_LABEL] + main_frame > RAM_WORDS:
+    if translated.memory_needed > RAM_WORDS:
         raise UnsupportedFeature(TOO_BIG)
-    lines = tuple(assembly.lines[line - 1] for line in program.lines)
-    return TranslatedProgram(source, assembly.text, program, lines, main_frame)
+    return translated
 
 
 def _fault_line(translated: TranslatedProgram, state: MachineState, fault: Fault) -> int | None:
