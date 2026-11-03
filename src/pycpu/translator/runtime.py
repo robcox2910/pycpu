@@ -6,14 +6,15 @@ twelve steps. The CPU has no multiply or divide instruction, so these cards are 
 twelve steps: `__mul` multiplies by shifting and adding, and `__divmod` divides by
 shifting and subtracting. A second pair of cards, `__print_int` and `__print_text`, post
 characters one at a time through the output port, like a cash register with a slot for
-one letter, so a number is broken into digits first. They are plain PyCPU assembly text in `RUNTIME`, to be pasted
-after any program's code, so they run on the machine like everything else and the Bench
-can show them.
+one letter, so a number is broken into digits first. They are plain PyCPU assembly text
+in `RUNTIME`, to be pasted after any program's code, so they run on the machine like
+everything else and the Bench can show them.
 
-The calling rules: put the inputs in `r1` and `r2` (`__print_int` and `__print_text` take
-just `r1`), `call` the routine, and find the answer in `r1` (and `r2`). `r0` (always 0) and `r7` (the frame pointer) are never
-changed; `r1` to `r6` may be. Every label starts with two underscores, so it can never
-clash with a label a translator generates.
+The calling rules: put the inputs in `r1` and `r2` (`__print_int` and `__print_text`
+take just `r1`), `call` the routine, and find the answer in `r1` (and `r2`). `r0`
+(always 0) and `r7` (the frame pointer) are never changed; `r1` to `r6` may be. Every
+label starts with two underscores, so it can never clash with a label a translator
+generates.
 """
 
 # The deepest case is __print_int on a 5-digit negative number: 1 word for its return

@@ -31,6 +31,7 @@ MUL = _program("__mul")
 DIVMOD = _program("__divmod")
 PRINT_INT = _program("__print_int")
 MESSAGE = "message"
+MULDIV_STACK_WORDS = 3
 
 
 def _start(words: tuple[int, ...], a: int, b: int) -> MachineState:
@@ -212,6 +213,37 @@ def test_runtime_stack_words_covers_the_deepest_use() -> None:
     cases.append((hi_words, hi_address, 0))
     deepest = max(_run(words, a, b)[1] for words, a, b in cases)
     assert deepest == RUNTIME_STACK_WORDS
+
+
+def test_multiply_and_divide_alone_need_three_stack_words() -> None:
+    """The docs say __mul and __divmod reach 3 words deep; this pins that figure."""
+    deepest = max(
+        _run(words, a, b)[1]
+        for words in (MUL, DIVMOD)
+        for a, b in [(1, 1), (-7, 2), (7, -2), (-32768, -1), (0, 5)]
+    )
+    assert deepest == MULDIV_STACK_WORDS
+
+
+def test_print_text_sends_a_character_code_above_127_whole() -> None:
+    """An accented letter goes out as its own code (233), then the newline."""
+    words, address = _print_text_program("\u00e9")
+    final, _ = _run(words, address, 0)
+    assert final.output == (233, 10)
+
+
+def test_print_text_at_the_very_end_of_ram_prints_correctly() -> None:
+    """Text ending one word short of RAM prints; the last word is the call's return address."""
+    source = f'call __print_text\nhalt\n{RUNTIME}\n{MESSAGE}: .string "Hi"'
+    probe = assemble(source, words=RAM)
+    text_start = probe.labels[MESSAGE]
+    shift = RAM - 1 - (text_start + len("Hi") + 1)
+    padded = f'call __print_text\nhalt\n{RUNTIME}\n.word {", ".join(["0"] * shift)}\n{MESSAGE}: .string "Hi"'
+    program = assemble(padded, words=RAM)
+    assert program.labels[MESSAGE] + len("Hi") + 1 == RAM - 1
+    final, _ = _run(program.words, program.labels[MESSAGE], 0)
+    assert final.halt_code == 0
+    assert final.output_text == "Hi\n"
 
 
 def test_a_five_digit_negative_number_is_the_deepest_print() -> None:
