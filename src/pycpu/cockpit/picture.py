@@ -6,6 +6,8 @@ what the plane is doing right now. This module reads the paused computer in a
 line out as a dictionary the page can draw. Everything is read, nothing is changed.
 """
 
+from typing import cast
+
 from pycpu.assembler import disassemble
 from pycpu.cockpit.session import Cockpit
 from pycpu.computer import Computer
@@ -66,8 +68,8 @@ def _changed(before: MachineState, now: MachineState) -> dict[str, object]:
     """List what differs between two states: registers, pc, sp, flags and memory words.
 
     Memory is compared with a plain scan over both tuples. That is fine at 4K words
-    (measured at about 0.3 ms; a slow test pins it under 0.05 s at full size), so there is no need for
-    anything cleverer such as remembering which words were written.
+    (measured at about 0.3 ms; a slow test pins it under 0.05 s at full size), so there is
+    no need for anything cleverer such as remembering which words were written.
     """
     registers = [
         i for i, (a, b) in enumerate(zip(before.registers, now.registers, strict=True)) if a != b
@@ -109,8 +111,8 @@ def _last_gate(cockpit: Cockpit) -> dict[str, object] | None:
 def listing(cockpit: Cockpit) -> dict[str, object]:
     """Describe the whole loaded program, one row for each word of machine code.
 
-    Each row has its `address`, `word`, `text`, `first` (true for the first word that came from its source line, since a line such
-    as `set` makes two), the `labels` that mark this address, and `pebble_line`
+    Each row has its `address`, `word`, `text`, `first` (true for the first word that came
+    from its source line, since a line such as `set` makes two), the `labels` that mark this address, and `pebble_line`
     (the Pebble line that made the word, or None for assembly and runtime words).
     The `text` is the source line the word came from, as the program was written
     (a word made by `set` shows the `set` line, not the `li` it became).
@@ -224,7 +226,7 @@ def machine_picture(cockpit: Cockpit) -> dict[str, object]:
     last = min(first + WINDOW_WORDS, len(state.memory))
     fault = Fault(state.halt_code).name if state.halted and state.halt_code in Fault else None
     translated = cockpit.translated
-    word = instruction["word"]
+    word: int | None = cast("int | None", instruction["word"])
     pebble = None
     if translated is not None:
         pebble = pebble_picture(computer, translated, state=state, start_pc=start_pc)
@@ -253,6 +255,6 @@ def machine_picture(cockpit: Cockpit) -> dict[str, object]:
             "pc": "cpu.pc",
             "sp": "cpu.sp",
             "flags": "cpu.flags",
-            "instruction": "cpu" if word is None else part_for_instruction(int(str(word))),
+            "instruction": "cpu" if word is None else part_for_instruction(word),
         },
     }

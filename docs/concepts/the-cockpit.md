@@ -618,7 +618,8 @@ run(follow())
 # None
 ```
 
-After 100 gate steps the last gate to think was number 10,016, a part of the stack
+After 100 gate steps the last gate to think was number 10,016 (a number that belongs to this small
+6-bit machine and is different on a machine of another size), a part of the stack
 pointer's own wiring, and it settled on 0. Then an instruction step ran many gates at
 once, so there is no single last one to name and the answer goes back to `null`. The
 picture also carries a `note`, one sentence about the last move, which is `null` for

@@ -990,9 +990,16 @@ class TestLastGate:
     def test_the_route_carries_it(self) -> None:
         """GET /api/machine after a gate step includes `last_gate` with a real path."""
         cockpit = Cockpit()
-        picture = cockpit.step("gate", SOME_GATE_STEPS)
+        circuit = GateMachine(SMALL).simulator.circuit
+        picture = cockpit.step("gate")
+        for _ in range(SOME_GATE_STEPS):
+            if picture["last_gate"] is not None:
+                break
+            picture = cockpit.step("gate")
+        last = picture["last_gate"]
+        assert last is not None
+        assert last["path"] == circuit.scope_of(last["id"])
         assert picture["note"] is None
-        assert picture["last_gate"] is None or picture["last_gate"]["path"]
 
 
 class TestPlayingPicture:

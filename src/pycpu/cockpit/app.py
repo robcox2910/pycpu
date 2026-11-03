@@ -153,7 +153,7 @@ def create_cockpit(address_bits: int = RAM_ADDRESS_BITS, start_example: str | No
 
     @app.get("/api/listing")
     def program_listing(_request: HttpRequest) -> HttpResponse:  # pyright: ignore[reportUnusedFunction]
-        """List every word of the loaded program with its source line and labels."""
+        """List every word of the loaded program, with its source line and labels."""
         return json(listing(cockpit))  # pyright: ignore[reportArgumentType]
 
     @app.get("/api/view")
