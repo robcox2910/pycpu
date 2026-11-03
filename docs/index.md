@@ -55,8 +55,8 @@ explained the first time it appears.
    the ALU to do sums and registers and RAM to remember things.
 6. **The assembler**, which turns instructions written in readable words into **machine
    code**, the plain numbers the processor actually obeys.
-7. **Pebble**, a small programming language from the same series. Pebble programs get
-   **compiled**, which means translated, into machine code.
+7. **Pebble**, a small programming language that already exists in the same series. Pebble
+   programs get **compiled**, which means translated, into PyCPU machine code.
 8. **The Cockpit**, the screen where you watch it all run.
 
 Here it is as a picture. Read it from the bottom up.
@@ -82,8 +82,8 @@ Here it is as a picture. Read it from the bottom up.
 ```
 
 Each layer is built only from the layer beneath it. Everything from NAND up to the
-CPU and the assembler now exists and works; Pebble and the Cockpit, the rungs marked
-"coming later", do not exist yet.
+CPU and the assembler now exists and works; Pebble does not run on PyCPU yet, and the Cockpit is still to come; those are the
+rungs marked "coming later".
 
 ## Where We Are Today
 

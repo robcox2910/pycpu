@@ -16,6 +16,7 @@ from pyweb.messages import HTTPError, HttpRequest, HttpResponse, html, json
 
 from pycpu.assembler import AssemblyError, assemble, disassemble
 from pycpu.computer import Computer, StepSize
+from pycpu.isa import Fault
 from pycpu.memory import RAM_ADDRESS_BITS
 from pycpu.state import MachineState
 from pycpu.view import circuit_view
@@ -78,8 +79,11 @@ def machine_picture(computer: Computer) -> dict[str, object]:
     is the one that started at `instruction_start.pc`, read from memory as it was
     then, because half way through an instruction `pc` has already moved on. When
     that address is outside memory (a fetch fault) its word is None and its text
-    is empty. The memory window holds the 16 words from 4 before `pc` (or from 0),
-    stopping at the last word of memory.
+    is empty. The memory window holds 16 words, starting 4 before `pc` (or at 0), and
+    slides back so it never runs past the last word: a `pc` far outside memory still
+    shows the final 16 words. `fault` is the name of the `Fault` (such as
+    `"BAD_ADDRESS"`) when the machine has halted with one of those codes, else None;
+    a program's own `halt 1` to `halt 3` shares those codes.
 
     Args:
         computer: The computer to describe.
@@ -94,8 +98,9 @@ def machine_picture(computer: Computer) -> dict[str, object]:
         instruction = _cell(start, start.pc)
     else:
         instruction = {"address": start.pc, "word": None, "text": ""}
-    first = max(0, state.pc - WINDOW_BEHIND)
+    first = max(0, min(state.pc - WINDOW_BEHIND, len(state.memory) - WINDOW_WORDS))
     last = min(first + WINDOW_WORDS, len(state.memory))
+    fault = Fault(state.halt_code).name if state.halted and state.halt_code in Fault else None
     return {
         "paused": computer.paused,
         "phase": computer.gate.phase.name.lower(),
@@ -106,6 +111,7 @@ def machine_picture(computer: Computer) -> dict[str, object]:
         "flags": state.flags._asdict(),
         "halted": state.halted,
         "halt_code": state.halt_code,
+        "fault": fault,
         "output": state.output_text,
         "instruction": instruction,
         "memory": [_cell(state, address) for address in range(first, last)],

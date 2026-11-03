@@ -15,11 +15,10 @@ from collections.abc import Sequence
 
 from pycpu.circuit import Bus, Circuit, Clock, Wire
 from pycpu.logic import and_, decoder, mux_bus, not_, or_, or_many, xor
-from pycpu.memory import Register
+from pycpu.memory import WORD_BITS, Register
+from pycpu.state import REGISTER_COUNT
 
-REGISTER_COUNT = 8
 REGISTER_SELECT_BITS = 3
-WORD_BITS = 16
 CONDITION_PAIR_BIT = 0  # the lowest condition bit says "the opposite answer"
 
 

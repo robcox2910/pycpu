@@ -188,8 +188,7 @@ program could give its stack a different home. `SETSP` is the third input to the
 
 How much does the stack cost? The second Try It counted it: each adder is 240 gates
 (16 full adders of 15 gates, as on [Adding](adding.md)), so the two together are 480
-of the CPU's 6,029 gates, about one gate in twelve. The choosers that steer `sp`, the
-address and the RAM's data add a few hundred more. Not bad for a whole new way of
+of the CPU's 6,029 gates, about one gate in thirteen. Not bad for a whole new way of
 using memory.
 
 Notice the rule from [RAM](ram.md) at work: the address and the data going into the

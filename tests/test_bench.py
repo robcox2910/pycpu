@@ -15,6 +15,7 @@ from pycpu.bench.app import DEMO_PROGRAM, MAX_GATE_STEPS, MAX_RUN, create_bench
 from pycpu.computer import Computer, StepSize
 from pycpu.fast import FastMachine
 from pycpu.memory import RAM_ADDRESS_BITS
+from pycpu.state import REGISTER_COUNT
 
 OK = 200
 BAD_REQUEST = 400
@@ -23,7 +24,6 @@ SMALL = 6
 WORDS = 1 << SMALL
 WINDOW = 16
 BEHIND = 4
-REGISTER_COUNT = 8
 RUN_TO_ADD = 5  # li, lhi, li, call, li: then the add is next
 GATE_BATCH = 500
 ADD_ADDRESS = 8
@@ -140,15 +140,13 @@ class TestTheMachinePicture:
         assert len(machine["memory"]) == WINDOW
         assert machine["instruction"]["text"] == "add r3, r3, r2"
 
-    def test_the_memory_window_stops_at_the_last_word(self) -> None:
-        """Near the end of memory the window holds only the words that exist."""
+    def test_the_memory_window_slides_back_to_end_at_the_last_word(self) -> None:
+        """Near the end of memory the window still holds 16 words, the last 16."""
         bench = Bench()
         assert bench.load(f".word {JUMP_NEAR_END}").status == OK
         machine = bench.step("instruction")
         assert machine["pc"] == NEAR_END
-        assert [cell["address"] for cell in machine["memory"]] == list(
-            range(NEAR_END - BEHIND, WORDS)
-        )
+        assert [cell["address"] for cell in machine["memory"]] == list(range(WORDS - WINDOW, WORDS))
 
     def test_a_pc_outside_memory_shows_no_word_and_a_fault(self) -> None:
         """Jumping past the end faults on the next fetch; the instruction has no word."""
@@ -159,7 +157,25 @@ class TestTheMachinePicture:
         assert machine["halted"] is True
         assert machine["halt_code"] == 1
         assert machine["instruction"] == {"address": OUTSIDE, "word": None, "text": ""}
-        assert machine["memory"] == []
+        assert machine["fault"] == "BAD_ADDRESS"
+        assert [cell["address"] for cell in machine["memory"]] == list(range(WORDS - WINDOW, WORDS))
+
+    def test_a_normal_halt_names_no_fault(self) -> None:
+        """A program that halts with 0, or with a code that is no `Fault`, has `fault` null."""
+        bench = Bench()
+        assert bench.machine()["fault"] is None
+        assert bench.load("halt").status == OK
+        machine = bench.step("instruction")
+        assert (machine["halted"], machine["halt_code"], machine["fault"]) == (True, 0, None)
+        assert bench.load("halt 7").status == OK
+        machine = bench.step("instruction")
+        assert (machine["halt_code"], machine["fault"]) == (SEVEN, None)
+
+    def test_a_programs_own_halt_one_to_three_shares_the_fault_names(self) -> None:
+        """`halt 2` is indistinguishable from a stack overflow, so it is named as one."""
+        bench = Bench()
+        assert bench.load("halt 2").status == OK
+        assert bench.step("instruction")["fault"] == "STACK_OVERFLOW"
 
 
 class TestStepping:

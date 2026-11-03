@@ -149,7 +149,8 @@ that name inside `cpu`, and every arrow is a bus of real wires.
  ┌──────┐  pc + 1  ┌───────────────┐
  │  pc  ├─────────►│ pc_plus_1     ├──┐   ┌─────────┐
  │      ├─────────►│ branch_target ├──┴──►│ next_pc ├──► new pc
- └──┬───┘ pc+off9  └───────────────┘      └─────────┘
+ └──┬───┘ pc+off9  └───────────────┘      └────▲────┘
+    │  jump_to (JMP, CALL: from ir) ───────────┘
     │ fetch: pc
     ▼                                 ┌────────────┐
  ┌─────────────┐   address            │    RAM     │  ram.out
@@ -183,7 +184,8 @@ go into `decode`, which lights one line per opcode. Those lines steer every choo
 the picture. The ALU's input `a` is window `a`; its input `b` comes through the
 `operand` chooser, which picks window `b`, the 8-bit immediate or the 6-bit offset. The
 ALU's answer goes to `write_back` (and, on an execute beat, to the RAM's address), and
-its four lamps go to `flags`.
+its four lamps go to `flags`. `next_pc` picks the next address from `pc_plus_1`, the
+`branch_target` or `jump_to`, the 12-bit address that `JMP` and `CALL` carry in `ir`.
 
 **1. The fetch beat.** While `phase` is 0 (`Phase.FETCH`), the `address_mux` chooser
 sends `pc` to the RAM's address wires, so `ram.out` shows the word the finger points

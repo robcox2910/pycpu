@@ -15,13 +15,12 @@ the screen plugged into the output port, which listens to the CPU's real
 """
 
 from collections.abc import Sequence
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 from enum import IntEnum
 
 from pycpu.arithmetic import AluOutput, alu, ripple_adder
 from pycpu.circuit import Bus, Circuit, Wire
 from pycpu.cpu_parts import RegisterFile, condition_met, opcode_lines, outside_ram, sign_extend
-from pycpu.fast import validate_state
 from pycpu.isa import (
     ADDR12_BITS,
     IMM8_BITS,
@@ -38,7 +37,7 @@ from pycpu.isa import (
 from pycpu.logic import and_, buffer_into, is_zero, mux_bus, not_, not_bus, or_, or_many
 from pycpu.memory import RAM_ADDRESS_BITS, WORD_BITS, Ram, Register, make_clock
 from pycpu.simulator import NOTHING_WAITING, Simulator
-from pycpu.state import HALT_CODE_MAX, Flags, MachineState, power_on
+from pycpu.state import HALT_CODE_MAX, Flags, MachineState, power_on, program_state, validate_state
 
 HALT_CODE_BITS = HALT_CODE_MAX.bit_length()
 FIELD_BITS = 3
@@ -453,11 +452,7 @@ class GateMachine:
             ValueError: If the program is bigger than memory or holds a non-word.
 
         """
-        if len(words) > self.words:
-            msg = f"a program of {len(words)} words does not fit in {self.words} words of memory"
-            raise ValueError(msg)
-        start = power_on(self.words)
-        self.load_state(replace(start, memory=(*words, *start.memory[len(words) :])))
+        self.load_state(program_state(words, self.words))
 
     def _edge(self) -> MicroStep:
         """Move the clock wire this stage names, and listen to the port on `write`'s rise.

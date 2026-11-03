@@ -79,7 +79,7 @@ sit *on top* of a computer, and PyCPU is the one that sits underneath.
 
 | Project | What it builds | How it relates |
 |---------|----------------|----------------|
-| [Pebble](https://robcox2910.github.io/pebble-lang/) | A small programming language | The language we plan to run on the PyCPU computer |
+| [Pebble](https://robcox2910.github.io/pebble-lang/) | A small programming language | A language we already have; next we run it on the PyCPU computer |
 | [PyOS](https://robcox2910.github.io/py-os/) | An operating system | Software that runs on a computer like this one |
 | [PyWeb](https://robcox2910.github.io/pyweb/) | A web server | Already serves the Bench, and will serve the Cockpit screen |
 | [The series home](https://robcox2910.github.io/) | All of them | Where to find the rest |

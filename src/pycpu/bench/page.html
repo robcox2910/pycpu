@@ -235,7 +235,10 @@ function showMachine(m) {
     el("span", "next beat: " + m.phase, "lamp"),
     el("span", m.at_boundary ? "between instructions" : "part-way through an instruction", "lamp" + (m.at_boundary ? "" : " on")),
   );
-  if (m.halted) status.append(el("span", "halted, halt code " + m.halt_code, "lamp on"));
+  if (m.halted) {
+    const why = m.fault ? m.fault.toLowerCase().replaceAll("_", " ") : (m.halt_code === 0 ? "finished" : "stopped");
+    status.append(el("span", "halted: " + why + " (code " + m.halt_code + ")", "lamp on"));
+  }
 
   const registers = document.getElementById("registers");
   registers.replaceChildren();

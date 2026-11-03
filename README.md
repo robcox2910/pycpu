@@ -36,8 +36,8 @@ Pebble (a small programming language from the same series) run on this computer,
 The Cockpit is not built yet, but a big piece of it is: the **Bench**, a local page
 where a program runs on the CPU, paused, so you can watch its registers and memory,
 step it by a gate, a clock beat or an instruction, rewind it, and zoom from the CPU down
-to a single gate. Everything up to the CPU and the assembler exists; Pebble and the
-Cockpit are still to come.
+to a single gate. Everything up to the CPU and the assembler exists; Pebble does not run on PyCPU yet, and
+the Cockpit is still to come.
 
 ## Features
 

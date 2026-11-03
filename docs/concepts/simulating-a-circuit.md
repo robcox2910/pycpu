@@ -138,7 +138,7 @@ counted.
 
 ## How It Works
 
-The simulator lives in `src/pycpu/simulator.py` and is built from three small
+The simulator lives in `src/pycpu/simulator.py` and is built from five small
 ideas.
 
 **1. Keep a value for every wire, and a list of who is listening.** When the

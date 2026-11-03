@@ -320,3 +320,25 @@ def test_stepping_while_running_is_refused(computer: Computer, program: Program)
         computer.rewind()
     with pytest.raises(RuntimeError, match="not paused"):
         computer.resume()
+
+
+DOC_QUICKEST_AND_SLOWEST = (6313, 13403)  # quoted on docs/concepts/pausing-and-rewinding.md
+
+
+@pytest.mark.slow
+def test_the_docs_give_the_real_gate_steps_per_instruction(
+    computer: Computer, program: Program
+) -> None:
+    """The countdown's quickest and slowest instructions take the gate steps the docs quote."""
+    _fresh(computer, program)
+    computer.pause()
+    counts: list[int] = []
+    taken = 0
+    while not computer.state().halted:
+        taken += 1
+        micro = computer.step(StepSize.GATE)
+        assert micro is not None
+        if micro.kind == "end":
+            counts.append(taken)
+            taken = 0
+    assert (min(counts), max(counts)) == DOC_QUICKEST_AND_SLOWEST

@@ -15,12 +15,12 @@ from pycpu.arithmetic import AluOp
 from pycpu.assembler import assemble
 from pycpu.fast import alu_model
 from pycpu.isa import Condition, Instruction, Opcode, condition_holds, decode, encode
+from pycpu.state import REGISTER_COUNT
 
 ROOT = Path(__file__).parent.parent
 REFERENCE_PAGE = ROOT / "docs" / "reference" / "instruction-set.md"
 WORD_MAX = 0xFFFF
 SIGN = 0x8000
-REGISTER_COUNT = 8
 LAST_OPCODE = 15
 words = st.integers(min_value=0, max_value=WORD_MAX)
 registers = st.integers(min_value=0, max_value=REGISTER_COUNT - 1)

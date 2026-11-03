@@ -22,7 +22,6 @@ from pycpu.isa import (
     IMM8_BITS,
     OFF6_BITS,
     OFF9_BITS,
-    REGISTER_COUNT,
     WORD_MASK,
     Condition,
     Instruction,
@@ -30,9 +29,9 @@ from pycpu.isa import (
     decode,
     encode,
 )
-from pycpu.memory import RAM_WORDS
+from pycpu.memory import RAM_WORDS, WORD_BITS
+from pycpu.state import REGISTER_COUNT
 
-WORD_BITS = 16
 SIGNED_WORD_MIN = -(1 << (WORD_BITS - 1))
 BYTE_MAX = (1 << IMM8_BITS) - 1
 IMM8_SIGNED_MIN = -(1 << (IMM8_BITS - 1))

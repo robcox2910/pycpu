@@ -168,9 +168,14 @@ answers with the same picture of the machine, which the page redraws:
   beat is next (`phase`, `"fetch"` or `"execute"`) and whether the machine is between
   two instructions (`at_boundary`). `instruction` is the **current instruction**: the
   one at the address where it started, with its `word` and its `text`, turned back into
-  assembly by `disassemble`. `memory` is 16 words starting 4 before `pc` (or at 0), so
-  you can see a little behind and ahead; near the end of memory the window stops at the
-  last word.
+  assembly by `disassemble`. `memory` is always 16 words, starting 4 before `pc` (or at
+  0), so you can see a little behind and ahead; near the end of memory the window slides
+  back so it still shows the last 16 words, even when `pc` has run off the end. `fault`
+  names why the machine stopped when `halt_code` is one of the `Fault` codes
+  (`BAD_ADDRESS`, `STACK_OVERFLOW` or `DIVIDE_BY_ZERO`, which are 1, 2 and 3) and is
+  `null` otherwise; the page then says, for example, "halted: bad address (code 1)".
+  A program's own `halt 1`, `halt 2` or `halt 3` shares those codes, so the page cannot
+  tell a program that chose to stop that way from a real fault.
 - `POST /api/step` takes `{"size": "gate"}`, `{"size": "cycle"}` or
   `{"size": "instruction"}` and calls `Computer.step` with that size (the three sizes
   from [Pausing and Rewinding](pausing-and-rewinding.md)). One instruction is thousands
@@ -279,7 +284,8 @@ the gate engine, the computer made of NAND gates.
 That finishes the second climb: from RAM up to a whole computer that fetches, decodes
 and executes instructions, with an assembler to write programs in and a Bench to watch
 them run, all the way down to the gates. What we do not have yet is a friendly language
-to write programs in: typing `li`, `add` and `store` by hand is slow. The next climb
-builds **Pebble**, a small programming language, and a compiler that turns it into the
-assembly you have just been reading. The Bench will grow into the **Cockpit**, where you
-can pause a Pebble program and drop from a line of code down to the gates.
+to write programs in: typing `li`, `add` and `store` by hand is slow. **Pebble**, the small
+programming language from the same series, already exists. The next climb translates
+Pebble programs into the machine code you have just been reading about, so that they run
+on this computer. The Bench will grow into the **Cockpit**, where you can pause a Pebble
+program and drop from a line of code down to the gates.

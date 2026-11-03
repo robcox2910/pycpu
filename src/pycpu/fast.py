@@ -12,12 +12,10 @@ computer built on it, following the definitions in `isa.py`.
 """
 
 from collections.abc import Callable, Sequence
-from dataclasses import replace
 
 from pycpu.arithmetic import AluOp
 from pycpu.isa import (
     OUTPUT_PORT,
-    WORD_MASK,
     Condition,
     Fault,
     Instruction,
@@ -26,7 +24,15 @@ from pycpu.isa import (
     decode,
 )
 from pycpu.memory import RAM_WORDS, WORD_BITS
-from pycpu.state import BYTE_MASK, HALT_CODE_MAX, REGISTER_COUNT, Flags, MachineState, power_on
+from pycpu.state import (
+    BYTE_MASK,
+    WORD_MASK,
+    Flags,
+    MachineState,
+    power_on,
+    program_state,
+    validate_state,
+)
 
 SIGN_BIT = 1 << (WORD_BITS - 1)
 BYTE_BITS = 8
@@ -141,16 +147,7 @@ class FastMachine:
             ValueError: If the program is bigger than memory or holds a non-word.
 
         """
-        if len(words) > self.words:
-            msg = f"a program of {len(words)} words does not fit in {self.words} words of memory"
-            raise ValueError(msg)
-        for word in words:
-            if not 0 <= word <= WORD_MASK:
-                msg = f"program word {word} is not a 16-bit number"
-                raise ValueError(msg)
-        state = power_on(self.words)
-        memory = (*words, *state.memory[len(words) :])
-        self.load_state(replace(state, memory=memory))
+        self.load_state(program_state(words, self.words))
 
     def run(self, max_steps: int) -> int:
         """Step until the machine halts or `max_steps` steps are taken; return the count."""
@@ -300,32 +297,3 @@ class FastMachine:
         """Obey `HALT`: stop with the immediate as the halt code."""
         self._halted = True
         self._halt_code = i.imm
-
-
-def validate_state(state: MachineState, words: int) -> None:
-    """Raise a ValueError unless `state` is a state a machine of `words` words could hold."""
-    if len(state.memory) != words:
-        msg = f"memory has {len(state.memory)} words, but this machine has {words}"
-        raise ValueError(msg)
-    if len(state.registers) != REGISTER_COUNT:
-        msg = f"there must be {REGISTER_COUNT} registers, not {len(state.registers)}"
-        raise ValueError(msg)
-    numbers = {
-        "pc": [state.pc],
-        "sp": [state.sp],
-        "register": state.registers,
-        "memory word": state.memory,
-        "output word": state.output,
-    }
-    for name, values in numbers.items():
-        for value in values:
-            if not 0 <= value <= WORD_MASK:
-                msg = f"{name} {value} is not a 16-bit number"
-                raise ValueError(msg)
-    if not 0 <= state.halt_code <= HALT_CODE_MAX:
-        msg = f"halt code {state.halt_code} must be from 0 to {HALT_CODE_MAX}"
-        raise ValueError(msg)
-    for name, flag in zip(Flags._fields, state.flags, strict=True):
-        if flag not in (0, 1):
-            msg = f"flag {name} must be 0 or 1, not {flag}"
-            raise ValueError(msg)

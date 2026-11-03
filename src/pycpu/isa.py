@@ -17,18 +17,16 @@ from 0 to 65535 is a valid instruction.
 from dataclasses import dataclass
 from enum import IntEnum
 
-from pycpu.state import Flags
+from pycpu.state import REGISTER_COUNT, WORD_MASK, Flags
 
 OUTPUT_PORT = 0xFFFF
 
-WORD_MASK = 0xFFFF
 OPCODE_SHIFT = 12
 RD_SHIFT = 9
 RA_SHIFT = 6
 RB_SHIFT = 3
 REGISTER_MASK = 0b111
 FN_MASK = 0b111
-REGISTER_COUNT = 8
 FN_COUNT = 8
 
 IMM8_BITS = 8

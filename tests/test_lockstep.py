@@ -64,7 +64,7 @@ states = st.builds(
     registers=st.tuples(*[_word_near(EDGES)] * REGISTER_COUNT),
     flags=st.builds(Flags, *[st.integers(0, 1)] * len(Flags._fields)),
     memory=st.tuples(*[st.integers(0, WORD_MASK)] * WORDS),
-    halted=st.just(False),
+    halted=st.booleans(),
     halt_code=st.integers(0, HALT_CODE_MAX),
     output=st.lists(st.integers(0, WORD_MASK), max_size=MAX_OUTPUT).map(tuple),
 )
@@ -92,7 +92,7 @@ def _run_side_by_side(gate: GateMachine, start: MachineState) -> MachineState:
 @settings(max_examples=200, deadline=None)
 @given(start=states)
 def test_both_engines_agree_from_any_state(gate: GateMachine, start: MachineState) -> None:
-    """From any loadable state, random memory and all, both engines stay equal at every step."""
+    """From any loadable state, halted or not, both engines stay equal; a halted one stays put."""
     _run_side_by_side(gate, start)
 
 

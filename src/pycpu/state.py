@@ -10,12 +10,14 @@ compared, and how a paused computer is carried from one engine to the other.
 This file only holds values. It works nothing out.
 """
 
-from dataclasses import dataclass
+from collections.abc import Sequence
+from dataclasses import dataclass, replace
 from typing import NamedTuple
 
-from pycpu.memory import RAM_WORDS
+from pycpu.memory import RAM_WORDS, WORD_BITS
 
 REGISTER_COUNT = 8
+WORD_MASK = (1 << WORD_BITS) - 1  # the biggest 16-bit number: 65535
 BYTE_MASK = 0xFF
 HALT_CODE_MAX = 0xFF  # HALT carries an 8-bit code, so every halt code fits in a byte
 
@@ -89,3 +91,56 @@ def power_on(words: int = RAM_WORDS) -> MachineState:
         halt_code=0,
         output=(),
     )
+
+
+def program_state(program: Sequence[int], words: int = RAM_WORDS) -> MachineState:
+    """Return a freshly powered-on state with `program` copied in from address 0.
+
+    Both engines load programs this way, so they start from the very same sheet.
+
+    Args:
+        program: The 16-bit words to put at the start of memory.
+        words: How many words of RAM the computer has.
+
+    Raises:
+        ValueError: If the program is bigger than memory or holds a non-word.
+
+    """
+    if len(program) > words:
+        msg = f"a program of {len(program)} words does not fit in {words} words of memory"
+        raise ValueError(msg)
+    for word in program:
+        if not 0 <= word <= WORD_MASK:
+            msg = f"program word {word} is not a 16-bit number"
+            raise ValueError(msg)
+    start = power_on(words)
+    return replace(start, memory=(*program, *start.memory[len(program) :]))
+
+
+def validate_state(state: MachineState, words: int) -> None:
+    """Raise a ValueError unless `state` is a state a machine of `words` words could hold."""
+    if len(state.memory) != words:
+        msg = f"memory has {len(state.memory)} words, but this machine has {words}"
+        raise ValueError(msg)
+    if len(state.registers) != REGISTER_COUNT:
+        msg = f"there must be {REGISTER_COUNT} registers, not {len(state.registers)}"
+        raise ValueError(msg)
+    numbers = {
+        "pc": [state.pc],
+        "sp": [state.sp],
+        "register": state.registers,
+        "memory word": state.memory,
+        "output word": state.output,
+    }
+    for name, values in numbers.items():
+        for value in values:
+            if not 0 <= value <= WORD_MASK:
+                msg = f"{name} {value} is not a 16-bit number"
+                raise ValueError(msg)
+    if not 0 <= state.halt_code <= HALT_CODE_MAX:
+        msg = f"halt code {state.halt_code} must be from 0 to {HALT_CODE_MAX}"
+        raise ValueError(msg)
+    for name, flag in zip(Flags._fields, state.flags, strict=True):
+        if flag not in (0, 1):
+            msg = f"flag {name} must be 0 or 1, not {flag}"
+            raise ValueError(msg)

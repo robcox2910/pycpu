@@ -105,9 +105,12 @@ def check_whats_next(text: str, name: str) -> None:
 
 
 def _last_nav_page() -> str:
-    """Return the final page listed in mkdocs.yml, the one with nowhere further to climb."""
+    """Return the last concept page in mkdocs.yml, the one with nowhere further to climb.
+
+    The Reference section sits after the climb, and is not a step on it.
+    """
     nav = (ROOT / "mkdocs.yml").read_text(encoding="utf-8")
-    return re.findall(r":\s*(\S+\.md)\s*$", nav, flags=re.MULTILINE)[-1]
+    return re.findall(r":\s*(concepts/\S+\.md)\s*$", nav, flags=re.MULTILINE)[-1]
 
 
 def run_try_it(text: str, name: str) -> None:
