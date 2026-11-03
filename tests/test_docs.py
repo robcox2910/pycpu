@@ -59,7 +59,14 @@ KEY_IDEAS: dict[str, list[str]] = {
         "source map",
         "needs more stack room",
     ],
-    "concepts/the-bench.md": ["bench", "register", "gate", "instruction", "pebble", "source map"],
+    "concepts/the-cockpit.md": [
+        "cockpit",
+        "register",
+        "gate",
+        "instruction",
+        "pebble",
+        "source map",
+    ],
 }
 
 

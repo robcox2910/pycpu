@@ -8,7 +8,7 @@ shifting and subtracting. A second pair of cards, `__print_int` and `__print_tex
 characters one at a time through the output port, like a cash register with a slot for
 one letter, so a number is broken into digits first. They are plain PyCPU assembly text
 in `RUNTIME`, to be pasted after any program's code, so they run on the machine like
-everything else and the Bench can show them.
+everything else and the Cockpit can show them.
 
 The calling rules: put the inputs in `r1` and `r2` (`__print_int` and `__print_text`
 take just `r1`), `call` the routine, and find the answer in `r1` (and `r2`). `r0`

@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>The Bench - PyCPU</title>
+<title>The Cockpit - PyCPU</title>
 <link rel="icon" href="data:,">
 <style>
   :root { --bg:#fafafa; --fg:#1d1d27; --card:#fff; --line:#d5d5e0; --accent:#5e35b1; --hot:#ffb300; --hotfg:#201600; --muted:#5d5d70; --here:#ede7f6; }
@@ -48,7 +48,7 @@
 </head>
 <body>
 <main>
-  <h1>The Bench</h1>
+  <h1>The Cockpit</h1>
   <p class="muted">A whole computer made of NAND gates, paused, with the lid off. Step it forward, rewind it, run it, then click down through its parts to a single gate. Load a Pebble program and the line that is running is marked beside its machine code. Everything shown is read from the real circuit; a wire carrying a 1 is highlighted.</p>
 
   <div class="card row" role="group" aria-label="Controls">
@@ -197,7 +197,7 @@ async function load(next) {
     path = next;
     draw(view);
   } catch (e) {
-    showError("Could not reach the Bench");
+    showError("Could not reach the Cockpit");
   }
 }
 
@@ -316,7 +316,7 @@ async function send(url, body) {
   try {
     const response = await fetch(url, { method: body === undefined ? "GET" : "POST", headers: { "Content-Type": "application/json" }, body: body === undefined ? undefined : JSON.stringify(body) });
     if (!response.ok) {
-      let message = "The Bench refused that (" + response.status + ").";
+      let message = "The Cockpit refused that (" + response.status + ").";
       try { message = (await response.json()).message || message; } catch (e) { /* keep default */ }
       showError(message);
       return;
@@ -327,7 +327,7 @@ async function send(url, body) {
     showPebble(machine);
     await load(path);
   } catch (e) {
-    showError("Could not reach the Bench");
+    showError("Could not reach the Cockpit");
   } finally {
     busy = false;
     document.querySelectorAll("button").forEach((b) => { b.disabled = false; });

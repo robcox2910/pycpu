@@ -22,7 +22,7 @@ sums, RAM is the computer's big notebook, the CPU is the processor that follows 
 and the Assembler turns readable instructions into the numbers the CPU understands. The docs explain every word.
 
 ```
-  The Cockpit               <- coming later (the Bench is its first piece)
+  The Cockpit               <- a first version is built (the Bench grew into it)
   Pebble programs           <- built for part of Pebble
   Assembler                 <- built
   The CPU                   <- built
@@ -34,7 +34,7 @@ and the Assembler turns readable instructions into the numbers the CPU understan
 
 The destination is the **Cockpit**, a screen where you can watch a program written in
 Pebble (a small programming language from the same series) run on this computer, pause at any moment, and zoom all the way down to individual gates.
-The Cockpit is not built yet, but a big piece of it is: the **Bench**, a local page
+The Cockpit is partly built: the **Cockpit** (once called the Bench) is a local page
 where a program runs on the CPU, paused, so you can watch its registers and memory,
 step it by a gate, a clock beat or an instruction, rewind it, and zoom from the CPU down
 to a single gate. Load a Pebble program on it and it marks the Pebble line that is running,
@@ -59,7 +59,7 @@ Cockpit is still to come.
 - **Two engines** -- a fast engine in plain Python, checked in lockstep against the gates
 - **Pause and rewind** -- run fast, pause into the gates, step by a gate, a beat or an instruction, rewind, resume
 - **Pebble on the CPU** -- a translator from Pebble's compiled programs to PyCPU assembly, with frames, jumps, calls, fault lines and a source map
-- **The Bench** -- a local web page (served by [PyWeb](https://github.com/robcox2910/pyweb)) showing the running computer, down to single gates, and the running Pebble line
+- **The Cockpit** -- a local web page (served by [PyWeb](https://github.com/robcox2910/pyweb)) showing the running computer, down to single gates, and the running Pebble line
 
 ## Example
 
@@ -91,7 +91,7 @@ uv run python examples/run_assembly.py   # assemble and run a program that print
 uv run python examples/run_pebble.py   # translate a Pebble program and run it: prints 6, 4, 2
 uv run python examples/alu_tour.py   # more programs live in examples/
 uv run mkdocs serve   # read the docs at http://127.0.0.1:8000
-uv run python -m pycpu   # open the Bench at http://127.0.0.1:8765
+uv run python -m pycpu   # open the Cockpit at http://127.0.0.1:8765
 ```
 
 ## Concepts
@@ -132,7 +132,7 @@ Every idea gets its own page, with an everyday analogy:
 | Multiply and divide | [multiply-and-divide.md](docs/concepts/multiply-and-divide.md) | Long multiplication on paper |
 | Printing a number | [printing-a-number.md](docs/concepts/printing-a-number.md) | A cash register with one slot per letter |
 | What happens when things go wrong | [what-happens-when-things-go-wrong.md](docs/concepts/what-happens-when-things-go-wrong.md) | The referee's whistle |
-| The Bench | [the-bench.md](docs/concepts/the-bench.md) | A workbench with the lid off, and the lyric sheet beside it |
+| The Cockpit | [the-cockpit.md](docs/concepts/the-cockpit.md) | An aeroplane cockpit: every dial in view, and a pilot who can freeze the flight |
 
 ## Read the docs
 

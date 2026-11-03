@@ -1,4 +1,4 @@
-"""Tests for the Bench: the local page for watching the running computer."""
+"""Tests for the Cockpit: the local page for watching the running computer."""
 
 from collections.abc import Coroutine
 from typing import Any, cast
@@ -9,15 +9,10 @@ from pyweb.aserver import AsyncServer
 from pyweb.testing import TestClient, TestResponse
 
 from pycpu import __main__ as entry
-from pycpu.__main__ import HOST, banner, open_bench
+from pycpu.__main__ import HOST, banner, open_cockpit
 from pycpu.assembler import assemble
-from pycpu.bench.app import (
-    DEMO_PROGRAM,
-    MAX_GATE_STEPS,
-    MAX_PEBBLE_CHARACTERS,
-    MAX_RUN,
-    create_bench,
-)
+from pycpu.cockpit.app import create_cockpit
+from pycpu.cockpit.session import DEMO_PROGRAM, MAX_GATE_STEPS, MAX_PEBBLE_CHARACTERS, MAX_RUN
 from pycpu.computer import Computer, StepSize
 from pycpu.fast import FastMachine
 from pycpu.memory import RAM_ADDRESS_BITS
@@ -77,12 +72,12 @@ def _json(response: TestResponse) -> dict[str, Any]:
     return cast("dict[str, Any]", response.json())
 
 
-class Bench:
-    """A small Bench (64 words of memory) with plain, waiting-free helpers for each route."""
+class Cockpit:
+    """A small Cockpit (64 words of memory) with plain, waiting-free helpers for each route."""
 
     def __init__(self, address_bits: int = SMALL) -> None:
-        """Build the Bench (64 words unless told otherwise) and a pretend browser for it."""
-        self.client = TestClient(create_bench(address_bits=address_bits))
+        """Build the Cockpit (64 words unless told otherwise) and a pretend browser for it."""
+        self.client = TestClient(create_cockpit(address_bits=address_bits))
 
     def machine(self) -> dict[str, Any]:
         """Return the machine picture from GET /api/machine."""
@@ -93,7 +88,7 @@ class Bench:
         return _run(self.client.post(path, json=body))  # pyright: ignore[reportArgumentType]
 
     def step(self, size: str, count: int | None = None) -> dict[str, Any]:
-        """Step by `size` (and `count`, if given), insisting the Bench agrees."""
+        """Step by `size` (and `count`, if given), insisting the Cockpit agrees."""
         body: dict[str, object] = {"size": size}
         if count is not None:
             body["count"] = count
@@ -102,7 +97,7 @@ class Bench:
         return _json(response)
 
     def run(self, instructions: int) -> dict[str, Any]:
-        """Run `instructions` instructions, insisting the Bench agrees."""
+        """Run `instructions` instructions, insisting the Cockpit agrees."""
         response = self.post("/api/run", {"instructions": instructions})
         assert response.status == OK, response.text
         return _json(response)
@@ -139,9 +134,9 @@ def _fast_after(instructions: int) -> FastMachine:
 class TestTheMachinePicture:
     """GET /api/machine shows the paused computer, read from the gate engine."""
 
-    def test_the_bench_opens_paused_before_the_first_instruction(self) -> None:
+    def test_the_cockpit_opens_paused_before_the_first_instruction(self) -> None:
         """At the start every register is 0, sp is the RAM size and pc points at address 0."""
-        machine = Bench().machine()
+        machine = Cockpit().machine()
         assert machine["paused"] is True
         assert machine["phase"] == "fetch"
         assert machine["at_boundary"] is True
@@ -155,20 +150,20 @@ class TestTheMachinePicture:
 
     def test_the_current_instruction_is_the_word_at_pc_as_assembly(self) -> None:
         """The demo program starts with `set r1, 0xFFFF`, whose first half is `li r1, 255`."""
-        instruction = Bench().machine()["instruction"]
+        instruction = Cockpit().machine()["instruction"]
         first = assemble(DEMO_PROGRAM, words=WORDS).words[0]
         assert instruction == {"address": 0, "word": first, "text": "li r1, 255"}
 
     def test_the_memory_window_is_sixteen_words_from_zero_at_the_start(self) -> None:
         """With pc at 0 the window cannot start 4 behind, so it starts at 0."""
-        memory = Bench().machine()["memory"]
+        memory = Cockpit().machine()["memory"]
         words = assemble(DEMO_PROGRAM, words=WORDS).words
         assert [cell["address"] for cell in memory] == list(range(WINDOW))
         assert memory[1] == {"address": 1, "word": words[1], "text": "lhi r1, 255"}
 
     def test_the_memory_window_starts_four_words_behind_pc(self) -> None:
         """Paused before the add at address 8, the window shows addresses 4 to 19."""
-        machine = Bench().run(RUN_TO_ADD)
+        machine = Cockpit().run(RUN_TO_ADD)
         assert machine["pc"] == ADD_ADDRESS
         assert machine["memory"][0]["address"] == ADD_ADDRESS - BEHIND
         assert len(machine["memory"]) == WINDOW
@@ -176,18 +171,18 @@ class TestTheMachinePicture:
 
     def test_the_memory_window_slides_back_to_end_at_the_last_word(self) -> None:
         """Near the end of memory the window still holds 16 words, the last 16."""
-        bench = Bench()
-        assert bench.load(f".word {JUMP_NEAR_END}").status == OK
-        machine = bench.step("instruction")
+        cockpit = Cockpit()
+        assert cockpit.load(f".word {JUMP_NEAR_END}").status == OK
+        machine = cockpit.step("instruction")
         assert machine["pc"] == NEAR_END
         assert [cell["address"] for cell in machine["memory"]] == list(range(WORDS - WINDOW, WORDS))
 
     def test_a_pc_outside_memory_shows_no_word_and_a_fault(self) -> None:
         """Jumping past the end faults on the next fetch; the instruction has no word."""
-        bench = Bench()
-        assert bench.load(f".word {JUMP_OUTSIDE}").status == OK
-        bench.step("instruction")
-        machine = bench.step("instruction")
+        cockpit = Cockpit()
+        assert cockpit.load(f".word {JUMP_OUTSIDE}").status == OK
+        cockpit.step("instruction")
+        machine = cockpit.step("instruction")
         assert machine["halted"] is True
         assert machine["halt_code"] == 1
         assert machine["instruction"] == {"address": OUTSIDE, "word": None, "text": ""}
@@ -196,20 +191,20 @@ class TestTheMachinePicture:
 
     def test_a_normal_halt_names_no_fault(self) -> None:
         """A program that halts with 0, or with a code that is no `Fault`, has `fault` null."""
-        bench = Bench()
-        assert bench.machine()["fault"] is None
-        assert bench.load("halt").status == OK
-        machine = bench.step("instruction")
+        cockpit = Cockpit()
+        assert cockpit.machine()["fault"] is None
+        assert cockpit.load("halt").status == OK
+        machine = cockpit.step("instruction")
         assert (machine["halted"], machine["halt_code"], machine["fault"]) == (True, 0, None)
-        assert bench.load("halt 7").status == OK
-        machine = bench.step("instruction")
+        assert cockpit.load("halt 7").status == OK
+        machine = cockpit.step("instruction")
         assert (machine["halt_code"], machine["fault"]) == (SEVEN, None)
 
     def test_a_programs_own_halt_one_to_three_shares_the_fault_names(self) -> None:
         """`halt 2` is indistinguishable from a stack overflow, so it is named as one."""
-        bench = Bench()
-        assert bench.load("halt 2").status == OK
-        assert bench.step("instruction")["fault"] == "STACK_OVERFLOW"
+        cockpit = Cockpit()
+        assert cockpit.load("halt 2").status == OK
+        assert cockpit.step("instruction")["fault"] == "STACK_OVERFLOW"
 
 
 class TestStepping:
@@ -217,9 +212,9 @@ class TestStepping:
 
     def test_one_instruction_moves_the_machine_as_the_fast_engine_predicts(self) -> None:
         """After each instruction, the registers, pc, sp and output match a fast run."""
-        bench = Bench()
+        cockpit = Cockpit()
         for done in range(1, RUN_TO_ADD + 2):
-            machine = bench.step("instruction")
+            machine = cockpit.step("instruction")
             predicted = _fast_after(done).state()
             assert machine["registers"] == list(predicted.registers)
             assert machine["pc"] == predicted.pc
@@ -228,9 +223,9 @@ class TestStepping:
 
     def test_a_cycle_step_leaves_the_add_fetched_but_not_obeyed(self) -> None:
         """Half way through the add, pc has moved on but the instruction is still the add."""
-        bench = Bench()
-        bench.run(RUN_TO_ADD)
-        machine = bench.step("cycle")
+        cockpit = Cockpit()
+        cockpit.run(RUN_TO_ADD)
+        machine = cockpit.step("cycle")
         assert machine["phase"] == "execute"
         assert machine["at_boundary"] is False
         assert machine["pc"] == ADD_ADDRESS + 1
@@ -239,22 +234,22 @@ class TestStepping:
 
     def test_gate_steps_change_the_phase_and_the_wires_over_one_instruction(self) -> None:
         """Stepping 500 gates at a time through an instruction, both beats appear and wires move."""
-        bench = Bench()
-        bench.run(RUN_TO_ADD)
+        cockpit = Cockpit()
+        cockpit.run(RUN_TO_ADD)
         phases: set[str] = set()
-        pictures = [bench.wires("cpu.pc.bit0")]
-        machine = bench.step("gate", GATE_BATCH)
+        pictures = [cockpit.wires("cpu.pc.bit0")]
+        machine = cockpit.step("gate", GATE_BATCH)
         while machine["instruction"]["address"] == ADD_ADDRESS:
             phases.add(machine["phase"])
-            pictures.append(bench.wires("cpu.pc.bit0"))
-            machine = bench.step("gate", GATE_BATCH)
+            pictures.append(cockpit.wires("cpu.pc.bit0"))
+            machine = cockpit.step("gate", GATE_BATCH)
         assert phases == {"fetch", "execute"}
         assert len({tuple(picture) for picture in pictures}) > 1
         assert machine["registers"][3] == ord("3")
 
     def test_a_count_of_a_hundred_is_the_same_as_a_hundred_single_gates(self) -> None:
         """The 100 gates button is a shortcut, not a different kind of step."""
-        one_by_one, at_once = Bench(), Bench()
+        one_by_one, at_once = Cockpit(), Cockpit()
         for _ in range(HUNDRED):
             one_by_one.step("gate")
         assert at_once.step("gate", HUNDRED) == one_by_one.machine()
@@ -262,9 +257,9 @@ class TestStepping:
 
     def test_gate_steps_stop_when_the_machine_halts(self) -> None:
         """A huge count on a program that halts at once finishes quickly and halts."""
-        bench = Bench()
-        assert bench.load("halt 7").status == OK
-        machine = bench.step("gate", MAX_GATE_STEPS)
+        cockpit = Cockpit()
+        assert cockpit.load("halt 7").status == OK
+        machine = cockpit.step("gate", MAX_GATE_STEPS)
         assert machine["halted"] is True
         assert machine["halt_code"] == SEVEN
 
@@ -282,15 +277,15 @@ class TestStepping:
             {"size": "instruction", "count": 2},
             [1, 2],
         ]
-        bench = Bench()
-        assert [bench.post("/api/step", item).status for item in bad] == [BAD_REQUEST] * len(bad)
-        assert bench.machine()["pc"] == 0
+        cockpit = Cockpit()
+        assert [cockpit.post("/api/step", item).status for item in bad] == [BAD_REQUEST] * len(bad)
+        assert cockpit.machine()["pc"] == 0
 
     def test_a_cycle_or_instruction_step_may_say_count_one(self) -> None:
         """A count of 1 is what those steps already mean, so it is allowed."""
-        bench = Bench()
-        assert bench.step("cycle", 1)["phase"] == "execute"
-        assert bench.step("instruction", 1)["at_boundary"] is True
+        cockpit = Cockpit()
+        assert cockpit.step("cycle", 1)["phase"] == "execute"
+        assert cockpit.step("instruction", 1)["at_boundary"] is True
 
 
 class TestBrokenBodies:
@@ -300,10 +295,10 @@ class TestBrokenBodies:
     @pytest.mark.parametrize("body", [b"{nope", b""], ids=["broken", "empty"])
     def test_a_broken_or_empty_body_is_a_400(self, path: str, body: bytes) -> None:
         """Broken JSON and an empty body both get 400, and the machine does not move."""
-        bench = Bench()
-        response = _run(bench.client.post(path, body=body))
+        cockpit = Cockpit()
+        response = _run(cockpit.client.post(path, body=body))
         assert response.status == BAD_REQUEST
-        assert bench.machine()["pc"] == 0
+        assert cockpit.machine()["pc"] == 0
 
 
 class TestRewindAndRun:
@@ -311,17 +306,17 @@ class TestRewindAndRun:
 
     def test_rewind_goes_back_to_the_start_of_the_instruction(self) -> None:
         """After some gates and a beat, rewind shows exactly the starting picture again."""
-        bench = Bench()
-        start = bench.machine()
-        bench.step("gate", HUNDRED)
-        bench.step("cycle")
-        response = bench.post("/api/rewind", {})
+        cockpit = Cockpit()
+        start = cockpit.machine()
+        cockpit.step("gate", HUNDRED)
+        cockpit.step("cycle")
+        response = cockpit.post("/api/rewind", {})
         assert response.status == OK
         assert _json(response) == start
 
     def test_running_to_the_end_prints_the_countdown(self) -> None:
         """The demo program counts 3, 2, 1 and halts normally."""
-        machine = Bench().run(MAX_RUN)
+        machine = Cockpit().run(MAX_RUN)
         assert machine["output"] == "321"
         assert machine["halted"] is True
         assert machine["halt_code"] == 0
@@ -329,10 +324,10 @@ class TestRewindAndRun:
 
     def test_run_finishes_a_half_done_instruction_first(self) -> None:
         """Run 1 from half way through the add finishes the add and runs one more."""
-        bench = Bench()
-        bench.run(RUN_TO_ADD)
-        bench.step("cycle")
-        machine = bench.run(1)
+        cockpit = Cockpit()
+        cockpit.run(RUN_TO_ADD)
+        cockpit.step("cycle")
+        machine = cockpit.run(1)
         assert machine["at_boundary"] is True
         assert machine["registers"] == list(_fast_after(RUN_TO_ADD + 2).state().registers)
 
@@ -346,8 +341,8 @@ class TestRewindAndRun:
             {},
             [5],
         ]
-        bench = Bench()
-        assert [bench.post("/api/run", item).status for item in bad] == [BAD_REQUEST] * len(bad)
+        cockpit = Cockpit()
+        assert [cockpit.post("/api/run", item).status for item in bad] == [BAD_REQUEST] * len(bad)
 
 
 class TestLoadingAProgram:
@@ -355,53 +350,53 @@ class TestLoadingAProgram:
 
     def test_a_new_program_starts_paused_at_its_first_instruction(self) -> None:
         """Loading `li r0, 7` and running it leaves 7 in r0."""
-        bench = Bench()
-        bench.run(RUN_TO_ADD)
-        response = bench.load("li r0, 7\nhalt")
+        cockpit = Cockpit()
+        cockpit.run(RUN_TO_ADD)
+        response = cockpit.load("li r0, 7\nhalt")
         assert response.status == OK
         machine = _json(response)
         assert machine["pc"] == 0
         assert machine["paused"] is True
         assert machine["sp"] == WORDS
         assert machine["instruction"]["text"] == "li r0, 7"
-        assert bench.run(MAX_RUN)["registers"][0] == SEVEN
+        assert cockpit.run(MAX_RUN)["registers"][0] == SEVEN
 
     def test_a_mistake_is_a_400_naming_the_line(self) -> None:
         """The assembler's own message, with its line number, comes back."""
-        bench = Bench()
-        response = bench.load("li r0, 7\nfly r1")
+        cockpit = Cockpit()
+        response = cockpit.load("li r0, 7\nfly r1")
         assert response.status == BAD_REQUEST
         assert _json(response)["message"].startswith("line 2:")
-        assert bench.machine()["instruction"]["text"] == "li r1, 255"
+        assert cockpit.machine()["instruction"]["text"] == "li r1, 255"
 
     def test_a_program_too_big_for_memory_is_a_400(self) -> None:
         """65 words do not fit in 64."""
-        assert Bench().load(TOO_MANY_WORDS).status == BAD_REQUEST
+        assert Cockpit().load(TOO_MANY_WORDS).status == BAD_REQUEST
 
     def test_source_that_is_not_text_is_a_400(self) -> None:
         """A number, nothing at all, or a list is not assembly."""
-        bench = Bench()
-        statuses = [bench.post("/api/program", item).status for item in ({"source": 5}, {}, [1])]
+        cockpit = Cockpit()
+        statuses = [cockpit.post("/api/program", item).status for item in ({"source": 5}, {}, [1])]
         assert statuses == [BAD_REQUEST] * len(statuses)
 
 
-class TestPebbleOnTheBench:
+class TestPebbleOnTheCockpit:
     """POST /api/pebble translates a Pebble program, loads it, and the picture names its line."""
 
-    def _bench(self) -> Bench:
-        """Build a 256-word Bench with the countdown loaded, insisting the Bench agrees."""
-        bench = Bench(PEBBLE_BITS)
-        response = bench.pebble(COUNTDOWN)
+    def _cockpit(self) -> Cockpit:
+        """Build a 256-word Cockpit with the countdown loaded, insisting the Cockpit agrees."""
+        cockpit = Cockpit(PEBBLE_BITS)
+        response = cockpit.pebble(COUNTDOWN)
         assert response.status == OK, response.text
-        return bench
+        return cockpit
 
     def test_an_assembly_program_has_no_pebble(self) -> None:
         """The demo program is assembly, so `pebble` is null."""
-        assert Bench().machine()["pebble"] is None
+        assert Cockpit().machine()["pebble"] is None
 
     def test_a_pebble_program_starts_paused_on_its_first_line(self) -> None:
         """The source comes back line by line, and line 1 runs first."""
-        machine = self._bench().machine()
+        machine = self._cockpit().machine()
         assert machine["pc"] == 0
         assert machine["paused"] is True
         assert machine["sp"] == PEBBLE_WORDS
@@ -411,32 +406,32 @@ class TestPebbleOnTheBench:
 
     def test_each_instruction_shows_the_line_that_made_it(self) -> None:
         """Stepping to the end, the line is always the source map's line for the instruction."""
-        bench = self._bench()
+        cockpit = self._cockpit()
         translated = translate(COUNTDOWN)
-        machine = bench.machine()
+        machine = cockpit.machine()
         seen: set[int | None] = set()
         while not machine["halted"]:
             line = machine["pebble"]["line"]
             assert line == translated.line_at(machine["instruction"]["address"])
             seen.add(line)
-            machine = bench.step("instruction")
+            machine = cockpit.step("instruction")
         assert seen == {1, 2, PRINT_LINE, 4, None}
 
     def test_half_way_through_an_instruction_the_line_is_still_its_line(self) -> None:
         """The fetch moves `pc` on, but the line stays with the instruction being obeyed."""
-        bench = self._bench()
+        cockpit = self._cockpit()
         translated = translate(COUNTDOWN)
-        machine = bench.machine()
+        machine = cockpit.machine()
         while translated.line_at(machine["pc"] + 1) == translated.line_at(machine["pc"]):
-            machine = bench.step("instruction")
+            machine = cockpit.step("instruction")
         here = translated.line_at(machine["pc"])
-        machine = bench.step("cycle")
+        machine = cockpit.step("cycle")
         assert translated.line_at(machine["pc"]) != here
         assert machine["pebble"]["line"] == here
 
     def test_running_to_the_end_says_the_program_finished(self) -> None:
         """The countdown prints 2 then 1, each on its own line; once halted no line is marked."""
-        machine = self._bench().run(MAX_RUN)
+        machine = self._cockpit().run(MAX_RUN)
         assert machine["output"] == "2\n1\n"
         assert machine["halted"] is True
         assert machine["pebble"]["line"] is None
@@ -444,108 +439,108 @@ class TestPebbleOnTheBench:
 
     def test_a_fault_names_its_pebble_line(self) -> None:
         """Dividing by zero halts on line 2, and the message says so."""
-        bench = Bench(PEBBLE_BITS)
-        assert bench.pebble(DIVIDE_BY_ZERO).status == OK
-        machine = bench.run(MAX_RUN)
+        cockpit = Cockpit(PEBBLE_BITS)
+        assert cockpit.pebble(DIVIDE_BY_ZERO).status == OK
+        machine = cockpit.run(MAX_RUN)
         assert machine["fault"] == "DIVIDE_BY_ZERO"
         assert machine["pebble"]["line"] == DIVIDE_LINE
         assert machine["pebble"]["message"] == f"Division by zero at line {DIVIDE_LINE}"
 
     def test_loading_assembly_afterwards_clears_the_pebble(self) -> None:
         """An assembly program has no Pebble source, so the pane empties."""
-        bench = self._bench()
-        assert bench.load("halt").status == OK
-        assert bench.machine()["pebble"] is None
+        cockpit = self._cockpit()
+        assert cockpit.load("halt").status == OK
+        assert cockpit.machine()["pebble"] is None
 
     def test_rewind_keeps_the_pebble_line(self) -> None:
         """Rewinding half an instruction shows exactly the picture from its start."""
-        bench = self._bench()
-        start = bench.step("instruction")
-        bench.step("cycle")
-        assert _json(bench.post("/api/rewind", {})) == start
+        cockpit = self._cockpit()
+        start = cockpit.step("instruction")
+        cockpit.step("cycle")
+        assert _json(cockpit.post("/api/rewind", {})) == start
 
     def test_an_unsupported_feature_is_a_400_with_its_line_and_column(self) -> None:
         """`/` is refused with the translator's message, line and column; nothing is loaded."""
-        bench = self._bench()
-        response = bench.pebble(DECIMAL_DIVIDE)
+        cockpit = self._cockpit()
+        response = cockpit.pebble(DECIMAL_DIVIDE)
         assert response.status == BAD_REQUEST
         body = _json(response)
         assert body["message"].startswith("the / operator")
         assert (body["line"], body["column"]) == (DIVIDE_LINE, DIVIDE_COLUMN)
-        assert bench.machine()["pebble"]["source"] == COUNTDOWN.splitlines()
+        assert cockpit.machine()["pebble"]["source"] == COUNTDOWN.splitlines()
 
     def test_a_pebble_mistake_is_a_400_with_its_line_and_column(self) -> None:
         """Pebble's own errors, such as a missing value, come back with their place."""
-        bench = Bench(PEBBLE_BITS)
-        response = bench.pebble(NOT_PEBBLE)
+        cockpit = Cockpit(PEBBLE_BITS)
+        response = cockpit.pebble(NOT_PEBBLE)
         assert response.status == BAD_REQUEST
         body = _json(response)
         assert "at line 1" in body["message"]
         assert (body["line"], body["column"]) == (1, NOT_PEBBLE_COLUMN)
-        assert bench.machine()["pebble"] is None
+        assert cockpit.machine()["pebble"] is None
 
     def test_a_program_whose_stack_has_no_room_is_a_400(self) -> None:
         """Three prints fit in 128 words, but main's first frame after them would not."""
-        bench = Bench(address_bits=PEBBLE_STACK_BITS)
+        cockpit = Cockpit(address_bits=PEBBLE_STACK_BITS)
         source = "print(1)\n" * PEBBLE_STACK_PRINTS
         translated = translate(source)
         assert len(translated.program.words) <= (1 << PEBBLE_STACK_BITS)
-        response = bench.pebble(source)
+        response = cockpit.pebble(source)
         assert response.status == BAD_REQUEST
         assert "room for its stack" in _json(response)["message"]
-        assert bench.machine()["pebble"] is None
+        assert cockpit.machine()["pebble"] is None
 
-    def test_a_program_too_big_for_this_benchs_memory_is_a_400(self) -> None:
-        """The countdown and its routines need more than the 64-word Bench has."""
-        bench = Bench()
-        response = bench.pebble(COUNTDOWN)
+    def test_a_program_too_big_for_this_cockpits_memory_is_a_400(self) -> None:
+        """The countdown and its routines need more than the 64-word Cockpit has."""
+        cockpit = Cockpit()
+        response = cockpit.pebble(COUNTDOWN)
         assert response.status == BAD_REQUEST
         words = len(translate(COUNTDOWN).program.words)
         assert _json(response)["message"] == (
-            f"this program needs {words} words, but this Bench's memory has only {WORDS}"
+            f"this program needs {words} words, but this Cockpit's memory has only {WORDS}"
         )
-        assert bench.machine()["instruction"]["text"] == "li r1, 255"
+        assert cockpit.machine()["instruction"]["text"] == "li r1, 255"
 
     def test_the_second_tour_comes_out_of_the_print_routine_on_line_four(self) -> None:
         """Stepping into the print routine, then running 180, has printed 3 and is on line 4."""
-        bench = Bench(PEBBLE_BITS)
-        machine = _json(bench.pebble(TOUR_COUNTDOWN))
+        cockpit = Cockpit(PEBBLE_BITS)
+        machine = _json(cockpit.pebble(TOUR_COUNTDOWN))
         while machine["pebble"]["line"] is not None:
-            machine = bench.step("instruction")
-        machine = bench.run(TOUR_RUN)
+            machine = cockpit.step("instruction")
+        machine = cockpit.run(TOUR_RUN)
         assert machine["output"] == "3\n"
         assert machine["pebble"]["line"] == TOUR_LINE_AFTER_PRINT
-        machine = bench.run(MAX_RUN)
+        machine = cockpit.run(MAX_RUN)
         assert machine["output"] == "3\n2\n1\n"
         assert machine["pebble"]["message"] == "The program finished"
 
     def test_the_second_tours_divide_by_zero_prints_twice_then_names_line_three(self) -> None:
         """10 // 2 and 10 // 1 print, then 10 // 0 halts on line 3."""
-        bench = Bench(PEBBLE_BITS)
-        assert bench.pebble(TOUR_DIVIDE).status == OK
-        machine = bench.run(MAX_RUN)
+        cockpit = Cockpit(PEBBLE_BITS)
+        assert cockpit.pebble(TOUR_DIVIDE).status == OK
+        machine = cockpit.run(MAX_RUN)
         assert machine["output"] == "5\n10\n"
         assert machine["pebble"]["line"] == PRINT_LINE
         assert machine["pebble"]["message"] == f"Division by zero at line {PRINT_LINE}"
 
     def test_a_text_too_long_to_ever_fit_is_a_400_before_translating(self) -> None:
         """One character over the limit is refused with a friendly message; nothing loads."""
-        bench = Bench(PEBBLE_BITS)
-        response = bench.pebble("#" * (MAX_PEBBLE_CHARACTERS + 1))
+        cockpit = Cockpit(PEBBLE_BITS)
+        response = cockpit.pebble("#" * (MAX_PEBBLE_CHARACTERS + 1))
         assert response.status == BAD_REQUEST
         assert "at most 65,536 characters" in _json(response)["message"]
-        assert bench.machine()["pebble"] is None
+        assert cockpit.machine()["pebble"] is None
 
     def test_a_text_just_at_the_limit_is_translated(self) -> None:
         """A comment padded to exactly the limit is still a Pebble program."""
         source = "print(7)\n#"
         source += "x" * (MAX_PEBBLE_CHARACTERS - len(source))
-        assert Bench(PEBBLE_BITS).pebble(source).status == OK
+        assert Cockpit(PEBBLE_BITS).pebble(source).status == OK
 
     def test_source_that_is_not_text_is_a_400(self) -> None:
         """A number, nothing at all, or a list is not a Pebble program."""
-        bench = Bench(PEBBLE_BITS)
-        statuses = [bench.post("/api/pebble", item).status for item in ({"source": 5}, {}, [1])]
+        cockpit = Cockpit(PEBBLE_BITS)
+        statuses = [cockpit.post("/api/pebble", item).status for item in ({"source": 5}, {}, [1])]
         assert statuses == [BAD_REQUEST] * len(statuses)
 
 
@@ -554,51 +549,51 @@ class TestTheViewAndThePage:
 
     def test_the_whole_circuit_holds_the_cpu_and_the_ram(self) -> None:
         """With no path the view is the top of the circuit."""
-        view = _json(Bench().view(""))
+        view = _json(Cockpit().view(""))
         assert sorted(child["name"] for child in view["children"]) == ["cpu", "ram"]
 
     def test_the_alu_is_one_click_down_from_the_cpu(self) -> None:
         """`cpu` lists `alu` among its parts."""
-        view = _json(Bench().view("cpu"))
+        view = _json(Cockpit().view("cpu"))
         assert "alu" in [child["name"] for child in view["children"]]
 
     def test_the_tour_gates_show_forty_eight_plus_three_in_the_first_column(self) -> None:
         """After fetching the add, the first column's and sees a 0 and a 1, so nothing carries."""
-        bench = Bench()
-        bench.run(RUN_TO_ADD)
-        bench.step("cycle")
-        gates = _json(bench.view(ALU_GATE))["gates"]
+        cockpit = Cockpit()
+        cockpit.run(RUN_TO_ADD)
+        cockpit.step("cycle")
+        gates = _json(cockpit.view(ALU_GATE))["gates"]
         assert sorted((g["value_a"], g["value_b"]) for g in gates) == [(0, 1), (1, 1)]
         assert gates[-1]["value_out"] == 0
 
     def test_an_unknown_part_is_a_friendly_404(self) -> None:
         """Asking for a scope that does not exist says so, rather than crashing."""
-        response = Bench().view("cpu.nope")
+        response = Cockpit().view("cpu.nope")
         assert response.status == NOT_FOUND
         assert "No part called cpu.nope" in response.text
 
     def test_the_front_page_has_the_machine_and_its_buttons(self) -> None:
         """GET / serves HTML with the step buttons, rewind, run and the load box."""
-        response = _run(Bench().client.get("/"))
+        response = _run(Cockpit().client.get("/"))
         assert response.status == OK
         assert "text/html" in (response.headers.get("Content-Type") or "")
-        for words in ("Bench", "1 gate", "100 gates", "1 cycle", "1 instruction", "Rewind"):
+        for words in ("Cockpit", "1 gate", "100 gates", "1 cycle", "1 instruction", "Rewind"):
             assert words in response.text
         assert "<script src" not in response.text
 
     def test_the_front_page_has_a_pebble_pane_that_never_injects_html(self) -> None:
         """The page loads Pebble and draws it with textContent, never innerHTML."""
-        text = _run(Bench().client.get("/")).text
+        text = _run(Cockpit().client.get("/")).text
         for words in ("Pebble", "/api/pebble", "Load Pebble", TOUR_COUNTDOWN):
             assert words in text
         assert "innerHTML" not in text
 
 
-def test_the_bench_opens_on_this_computer_only() -> None:
-    """open_bench listens on 127.0.0.1, and the banner names the real address."""
+def test_the_cockpit_opens_on_this_computer_only() -> None:
+    """open_cockpit listens on 127.0.0.1, and the banner names the real address."""
 
     async def body() -> tuple[str, int]:
-        server = await open_bench(0, address_bits=SMALL)
+        server = await open_cockpit(0, address_bits=SMALL)
         try:
             return banner(server), server.port
         finally:
@@ -628,7 +623,7 @@ def test_main_closes_quietly_on_ctrl_c(
 def test_serve_prints_the_banner_and_shuts_the_server_down(
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    """Serve opens the Bench, prints where it is, and closes it when serving ends."""
+    """Serve opens the Cockpit, prints where it is, and closes it when serving ends."""
 
     async def finish(_self: AsyncServer) -> None:
         """Stand in for serving forever by returning at once."""
@@ -639,18 +634,18 @@ def test_serve_prints_the_banner_and_shuts_the_server_down(
     _run(entry.serve())
     out = capsys.readouterr().out
     assert "Building the computer" in out
-    assert "The Bench is open at http://127.0.0.1:" in out
+    assert "The Cockpit is open at http://127.0.0.1:" in out
 
 
 FULL_SIZE_TOUR_GATES = [610636, 610637]
 
 
 @pytest.mark.slow
-def test_the_full_size_tour_finds_the_gates_the_bench_page_names() -> None:
-    """On the real 4K Bench, the tour's two gates are the numbers the docs give."""
+def test_the_full_size_tour_finds_the_gates_the_cockpit_page_names() -> None:
+    """On the real 4K Cockpit, the tour's two gates are the numbers the docs give."""
 
     async def body() -> list[int]:
-        client = TestClient(create_bench())
+        client = TestClient(create_cockpit())
         await client.post("/api/run", json={"instructions": RUN_TO_ADD})
         await client.post("/api/step", json={"size": "cycle"})
         view = _json(await client.get("/api/view", query={"path": ALU_GATE}))
@@ -681,7 +676,7 @@ def _gate_steps_per_instruction(address_bits: int) -> list[int]:
 
 @pytest.mark.slow
 @pytest.mark.parametrize("address_bits", sorted(DEMO_GATE_STEPS))
-def test_the_bench_page_gives_the_real_gate_steps_per_instruction(address_bits: int) -> None:
+def test_the_cockpit_page_gives_the_real_gate_steps_per_instruction(address_bits: int) -> None:
     """The quickest and slowest demo instructions take the gate steps the docs give."""
     counts = _gate_steps_per_instruction(address_bits)
     assert (min(counts), max(counts)) == DEMO_GATE_STEPS[address_bits]

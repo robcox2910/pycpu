@@ -103,7 +103,7 @@ says.
 "The stack ran out of room". That one blames a call. This one appears when *no call is to
 blame*: the top of the program could not even fit its own first frame. On the full
 4,096-word computer, `translate` refuses such a program before it runs (it is "too big"), so
-you will only meet this sentence on a computer with less memory, like a small Bench. The
+you will only meet this sentence on a computer with less memory, like a small Cockpit. The
 Try It makes one: `print(1)` needs 122 words (`memory_needed`, the program plus its top
 frame), so we give a `FastMachine` 121. The stack is empty and the first frame still
 does not fit, so there is no return address and no call to point at, and the sentence names
@@ -214,4 +214,4 @@ translator writes.
 
 You have now seen a whole Pebble program travel down to NAND gates and, when it goes
 wrong, back up to the right line. The finale is to do all of this with buttons and
-watch the whole running computer, on [The Bench](the-bench.md).
+watch the whole running computer, on [The Cockpit](the-cockpit.md).

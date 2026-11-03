@@ -102,7 +102,7 @@ print("register file gates:", c.gate_count)
 
 All four parts live in `src/pycpu/cpu_parts.py`, and every one is built from the gates
 on earlier pages. Each opens its own part (a *scope*) with a name, so the
-[Bench](the-bench.md) can zoom in on it.
+[Cockpit](the-cockpit.md) can zoom in on it.
 
 **1. Decoding the opcode.** `opcode_lines` is a decoder with four inputs. A decoder
 makes sixteen AND gates, one for each possible opcode. Line 8 is "bit 3 is 1 AND bits 2,

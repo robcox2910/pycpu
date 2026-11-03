@@ -42,7 +42,7 @@ def test_each_opcode_lights_exactly_its_own_line() -> None:
 
 
 def test_the_decoder_lives_in_a_part_named_decode() -> None:
-    """The Bench can find the decoder by its scope name."""
+    """The Cockpit can find the decoder by its scope name."""
     c = Circuit()
     opcode_lines(c, c.bus_input("op", OPCODE_BITS))
     assert c.has_scope("decode")

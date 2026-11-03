@@ -64,7 +64,7 @@ Here it is as a picture. Read it from the bottom up.
 
 ```
   ┌──────────────────────────────────────────────────────┐
-  │  The Cockpit      watch a program run, zoom to gates │  coming later; the Bench is its start
+  │  The Cockpit      watch a program run, zoom to gates │  first version built
   ├──────────────────────────────────────────────────────┤
   │  Pebble           programs, translated to numbers    │  built for part of Pebble
   ├──────────────────────────────────────────────────────┤
@@ -102,11 +102,11 @@ instruction that the two always agree. A program runs fast, and you can **pause*
 which carries the whole machine over to the gates, so you can step through an
 instruction one gate at a time and **rewind** it to watch again.
 
-You can do all of that on **the Bench**, a page on your own computer: it shows the
+You can do all of that on **the Cockpit**, a page on your own computer: it shows the
 registers, the memory with the current instruction marked, and buttons to step by a
 gate, a clock beat or an instruction, and to rewind and run. Its zoom panel goes from
 the whole CPU down to a single gate, with the real 0s and 1s on its wires. Start it
-with `uv run python -m pycpu`, or read [The Bench](concepts/the-bench.md).
+with `uv run python -m pycpu`, or read [The Cockpit](concepts/the-cockpit.md).
 
 And you can write programs in **Pebble**. The section "Pebble on the CPU", starting at
 [From Pebble to Machine Code](concepts/from-pebble-to-machine-code.md), shows how each
@@ -115,7 +115,7 @@ piece of a Pebble program becomes machine code: variables become places in memor
 memory) on the stack, and multiplying, dividing and printing are small routines written
 in assembly, because the CPU itself can only add, shift and compare. When a program goes
 wrong, for example by dividing by zero, PyCPU stops and names the Pebble line to blame.
-Load a Pebble program on the Bench and it shows the line that is running, next to the
+Load a Pebble program on the Cockpit and it shows the line that is running, next to the
 machine code.
 
 ## By the End of the Climb
@@ -135,10 +135,10 @@ the instruction that is running right now. You will be able to **pause at any mo
 and click down through the layers (the ALU, the adder, a single bit, a single gate)
 and see the real circuit, with real wires carrying real values.
 
-The full Cockpit does not exist yet, but a good part of it does: the Bench already shows
+The full Cockpit does not exist yet, but a good part of it does: the first version (once called the Bench) already shows
 the registers, the memory and the running instruction, zooms down to the gates, and
 loads a Pebble program and marks the line that is running. What is missing is the
-Cockpit itself: one screen laid out for all of it, and a button that steps a whole
+finished Cockpit: one screen laid out for all of it, and a button that steps a whole
 Pebble line at a time. That is where the climb is heading.
 
 ## Start Here

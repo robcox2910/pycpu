@@ -81,7 +81,7 @@ sit *on top* of a computer, and PyCPU is the one that sits underneath.
 |---------|----------------|----------------|
 | [Pebble](https://robcox2910.github.io/pebble-lang/) | A small programming language | Part of Pebble now runs on the PyCPU computer, translated into its machine code |
 | [PyOS](https://robcox2910.github.io/py-os/) | An operating system | Software that runs on a computer like this one |
-| [PyWeb](https://robcox2910.github.io/pyweb/) | A web server | Already serves the Bench, and will serve the Cockpit screen |
+| [PyWeb](https://robcox2910.github.io/pyweb/) | A web server | Already serves the Cockpit, and will serve the Cockpit screen |
 | [The series home](https://robcox2910.github.io/) | All of them | Where to find the rest |
 
 Pebble, PyOS and the others all quietly assume a computer exists. PyCPU is the project
@@ -102,7 +102,7 @@ that asks: what if we built that computer too?
 One more honest note. Three climbs are built. The first runs from a single gate up to
 adders, a calculator part called the ALU, and memory that remembers. The second builds
 a processor from those parts, an assembler to write programs for it, a fast engine
-that is checked against the gates, and the Bench, where you can pause a running
+that is checked against the gates, and the Cockpit, where you can pause a running
 program and look inside it down to a single gate. The third translates Pebble programs
 into machine code for that processor, so they run on it and print the same answers
 as Pebble's own way of running them, for numbers that fit in 16 bits. Only part of

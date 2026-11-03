@@ -76,6 +76,6 @@ nav:
       - Multiply and Divide: concepts/multiply-and-divide.md
       - Printing a Number: concepts/printing-a-number.md
       - What Happens When Things Go Wrong: concepts/what-happens-when-things-go-wrong.md
-  - The Bench: concepts/the-bench.md
+  - The Cockpit: concepts/the-cockpit.md
   - Reference:
       - Instruction Set: reference/instruction-set.md

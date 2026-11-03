@@ -1,15 +1,16 @@
-# The Bench
+# The Cockpit
 
-## A Workbench With the Lid Off
+## A Cockpit With Every Dial in View
 
-Imagine a radio on a workbench. Normally you only see the box: a dial, a speaker,
-a smooth lid. But someone has taken the lid off, and now you can lean over and
-see every wire and every part inside. Better still, the radio is switched on and
-playing. You can freeze it in the middle of a note, nudge it forward a tiny bit at a
-time, point at any part and say, "That one is carrying a signal *right now*."
+Imagine the cockpit of an aeroplane. Every dial is in view at once: speed, height,
+fuel, heading. Now imagine a pilot who can *freeze the flight* in the middle of the
+sky, look at every dial, and nudge time forward a tiny bit at a time to see what each
+one does. That is what this page does for the computer we have built.
 
-The **Bench** is a web page on your own computer that does this for the whole
-computer we have built. On it sits a real program, already loaded and paused at its
+The **Cockpit** is a web page on your own computer that shows the whole computer. It
+began life as the Bench, a workbench with the lid off a radio, and it has grown into
+the Cockpit: the routes work exactly as they did, and the name now says what the page
+is for. On it sits a real program, already loaded and paused at its
 very first instruction. You can see the eight **registers** (the computer's small
 named boxes for numbers, from [What Is a CPU?](what-is-a-cpu.md)), the program
 counter, the stack pointer, the flags, a window onto memory with the current
@@ -20,13 +21,13 @@ panel lets you **zoom** (move from a big part into the smaller parts it is made 
 from the whole CPU down to a single NAND gate, with the real 0s and 1s on its wires.
 Nothing on it is drawn from memory or faked.
 
-You can also put a **Pebble** program on the Bench. Then the page shows your Pebble
+You can also put a **Pebble** program in the Cockpit. Then the page shows your Pebble
 code next to the machine code it was translated into, with the line that is running
 right now marked. Step one instruction at a time and you can watch that mark sit still
-for a while, then jump: one line of Pebble is many machine instructions, and the Bench
+for a while, then jump: one line of Pebble is many machine instructions, and the Cockpit
 lets you count them.
 
-The page in your browser and the Bench app behind it talk by sending each other short
+The page in your browser and the Cockpit app behind it talk by sending each other short
 messages, like notes passed through a hatch. Each kind of note goes to its own address,
 called a **route**, such as `/api/machine` ("tell me about the machine") or `/api/step`
 ("move it forward"). A note marked **GET** asks for something and changes nothing; a
@@ -36,28 +37,28 @@ Python and the browser can read, like `{"pc": 1, "halted": false}`. When a note 
 no sense, the answer is a number instead: **400** means "bad request, I can't do
 that", and **404** means "not found, there is no such thing".
 
-| The workbench | In PyCPU |
+| The cockpit | In PyCPU |
 |---------------|----------|
-| The radio with its lid off | The Bench page, served by `python -m pycpu` |
-| The radio, switched on and playing | A `Computer` (from [Pausing and Rewinding](pausing-and-rewinding.md)) running `DEMO_PROGRAM` |
-| The dials on the front | `registers`, `pc`, `sp`, `flags` and `output`, read from `GET /api/machine` |
-| The song sheet, with your place marked | The memory window: 16 words of memory, the current instruction highlighted |
-| Nudging the music forward | `POST /api/step` with `"gate"`, `"cycle"` or `"instruction"` |
-| Going back to the start of the note | `POST /api/rewind` |
-| Letting it play for a while | `POST /api/run` |
-| Putting a new song on | `POST /api/program`, with assembly text |
-| Putting on a song that comes with a lyric sheet | `POST /api/pebble`, with a Pebble program that the translator turns into machine code |
-| The lyric sheet, held up beside the notes | The Pebble pane, next to the memory window |
-| The words being sung right now | `pebble.line`: the Pebble line of the current instruction |
+| The whole instrument panel | The Cockpit page, served by `python -m pycpu` |
+| The aeroplane in flight, frozen | A `Computer` (from [Pausing and Rewinding](pausing-and-rewinding.md)) running `DEMO_PROGRAM` |
+| The dials in front of the pilot | `registers`, `pc`, `sp`, `flags` and `output`, read from `GET /api/machine` |
+| The flight plan, with your place marked | The memory window: 16 words of memory, the current instruction highlighted |
+| Nudging time forward | `POST /api/step` with `"gate"`, `"cycle"` or `"instruction"` |
+| Going back to the start of the manoeuvre | `POST /api/rewind` |
+| Letting the flight go on for a while | `POST /api/run` |
+| Loading a new flight plan | `POST /api/program`, with assembly text |
+| Loading a plan that comes with a written briefing | `POST /api/pebble`, with a Pebble program that the translator turns into machine code |
+| The briefing, held up beside the plan | The Pebble pane, next to the memory window |
+| The line of the briefing being flown right now | `pebble.line`: the Pebble line of the current instruction |
 | A part you point at | A **scope**, such as `cpu.alu.adder` (see [Looking Inside a Circuit](looking-inside.md)) |
 | The smallest part you can find | One NAND gate, with its two inputs and one output |
-| The workshop door | `create_bench()` in `src/pycpu/bench/app.py` |
+| The cockpit door | `create_cockpit()` in `src/pycpu/cockpit/app.py` |
 
 ## Try It
 
-The Bench is a small web app, but you can talk to it without opening a browser.
+The Cockpit is a small web app, but you can talk to it without opening a browser.
 Python has a pretend browser for this, called `TestClient` (it sends requests
-straight to the app, with no network). We open a small Bench, with 64 words of memory
+straight to the app, with no network). We open a small Cockpit, with 64 words of memory
 so it builds quickly, and drive it the way the page's buttons do.
 
 Three small words appear that you may not have met. A web request is a message that
@@ -70,11 +71,11 @@ our function to the end.
 from pynet.loop import run
 from pyweb.testing import TestClient
 
-from pycpu.bench.app import create_bench
+from pycpu.cockpit.app import create_cockpit
 
 
 async def visit() -> None:
-    client = TestClient(create_bench(address_bits=6))
+    client = TestClient(create_cockpit(address_bits=6))
     machine = (await client.get("/api/machine")).json()
     print("pc", machine["pc"], "next:", machine["instruction"]["text"])
 
@@ -130,10 +131,10 @@ the ALU's gates are already working on 48 + 3. In the very first column of the s
 48 ends in a 0 and 3 ends in a 1, so the half adder's `and` sees a 0 and a 1: gate
 12678 outputs 1, gate 12679 turns it into 0, and nothing carries. Finishing the
 instruction stores the answer, 51 (the character `3`), in `r3`. Then the program runs
-to its end, printing `321`, and asking for a step size the Bench does not know gets a
+to its end, printing `321`, and asking for a step size the Cockpit does not know gets a
 400.
 
-Now the same countdown, written in Pebble instead. This Bench gets 256 words of memory
+Now the same countdown, written in Pebble instead. This Cockpit gets 256 words of memory
 (`address_bits=8`), because a translated program also carries the ready-made routines
 for multiplying, dividing and printing from
 [Multiply and Divide](multiply-and-divide.md) and [Printing a Number](printing-a-number.md).
@@ -145,7 +146,7 @@ changes, we start a new entry and count how many instructions it lasts. `None` m
 from pynet.loop import run
 from pyweb.testing import TestClient
 
-from pycpu.bench.app import create_bench
+from pycpu.cockpit.app import create_cockpit
 
 COUNTDOWN = """\
 let n = 2
@@ -159,7 +160,7 @@ DECIMAL = "let a = 7\nprint(a / 2)\n"
 
 
 async def visit_pebble() -> None:
-    client = TestClient(create_bench(address_bits=8))
+    client = TestClient(create_cockpit(address_bits=8))
     machine = (await client.post("/api/pebble", json={"source": COUNTDOWN})).json()
     pebble = machine["pebble"]
     print(len(pebble["source"]), "lines of Pebble; line", pebble["line"], "runs first")
@@ -215,7 +216,7 @@ The trail's sixth entry is cut off by the loop, so we print only five.
 
 Running to the end prints `'2\n1\n'`. `repr` shows text with its invisible characters
 written out, and `\n` is the "new line" character `print` puts after each number. The
-second program divides by zero; the Bench marks line 2 and says why, in the same words
+second program divides by zero; the Cockpit marks line 2 and says why, in the same words
 as [What Happens When Things Go Wrong](what-happens-when-things-go-wrong.md). The last
 program uses `/`, which PyCPU cannot do, so nothing is loaded and the answer is a 400
 naming the exact line and column.
@@ -227,19 +228,22 @@ uv run python -m pycpu
 ```
 
 It serves the page at `http://127.0.0.1:8765`. The address `127.0.0.1` means "this
-computer only", so nobody else on your network can see it. The real Bench has the full
+computer only", so nobody else on your network can see it. The real Cockpit has the full
 4K words of memory, more than 600,000 NAND gates, so it says `Building the computer
 from NAND gates...` and takes about 3 seconds (on the computer this page was written on)
 before the address appears.
 
 ## How It Works
 
-The Bench has three small parts, all in `src/pycpu/bench/`.
+The Cockpit is split into a session, a picture and an app, all in `src/pycpu/cockpit/`:
+`session.py` holds the `Cockpit` (the one running computer and every rule about moving
+it), `picture.py` turns it into the JSON the page draws, and `app.py` only reads requests,
+calls the session and answers.
 
 ```
    your browser                               your computer
  ┌───────────────┐   GET /              ┌────────────────────────────────┐
- │  page.html    │ <─────────────────── │  app.py: create_bench()        │
+ │  page.html    │ <─────────────────── │  app.py: create_cockpit()      │
  │               │                      │                                │
  │  registers    │   GET /api/machine   │  one Computer, paused:         │
  │  Pebble pane  │ <─────────────────── │   a fast engine and a gate     │
@@ -254,10 +258,10 @@ The Bench has three small parts, all in `src/pycpu/bench/`.
  └───────────────┘                      └────────────────────────────────┘
 ```
 
-**`create_bench()`** assembles `DEMO_PROGRAM`, a short countdown written in assembly at
-the top of `app.py`, builds a `Computer` with it and pauses it at once, so the machine
+**`create_cockpit()`** builds a `Cockpit` session, which assembles `DEMO_PROGRAM`, a short countdown written in
+assembly at the top of `session.py`, builds a `Computer` with it and pauses it at once, so the machine
 sits in the gate engine before its first instruction. It takes `address_bits`, the
-number of memory address wires, just like `Computer` does; the real Bench uses the full
+number of memory address wires, just like `Computer` does; the real Cockpit uses the full
 12 (4,096 words), and the Try It uses 6 (64 words) to build quickly, or 8 (256 words)
 when it needs room for a Pebble program. Every route answers with the same picture of
 the machine, which the page redraws:
@@ -287,10 +291,10 @@ the machine, which the page redraws:
 - `POST /api/step` takes `{"size": "gate"}`, `{"size": "cycle"}` or
   `{"size": "instruction"}` and calls `Computer.step` with that size (the three sizes
   from [Pausing and Rewinding](pausing-and-rewinding.md)). One instruction is thousands
-  of gate steps: running the demo program on the full-size Bench, the quickest took
+  of gate steps: running the demo program on the full-size Cockpit, the quickest took
   6,988 and the slowest 43,045. The slow ones write to memory, because each data wire
   that changes wakes one gate in every one of the 4,096 words (on the small 64-word
-  Bench the same program's instructions take 6,736 to 15,213). Clicking one gate at a
+  Cockpit the same program's instructions take 6,736 to 15,213). Clicking one gate at a
   time would take all day.
   A gate step can therefore carry a `count`, a whole number from 1 to 100,000, such as
   `{"size": "gate", "count": 100}`: that is the page's **100 gates** button. The steps
@@ -311,7 +315,7 @@ the machine, which the page redraws:
   so later pictures can look up lines, and pauses at the start. If Pebble finds a
   mistake, or the program uses something PyCPU cannot do yet, nothing is loaded and the
   answer is a 400 whose `message` is the error's own words, with `line` and `column`
-  saying where. A small Bench also refuses a program bigger than its memory. Loading
+  saying where. A small Cockpit also refuses a program bigger than its memory. Loading
   assembly afterwards forgets the Pebble program, so `pebble` goes back to `null`.
 - `GET /api/view?path=cpu.alu` answers with `circuit_view` for that scope of the gate
   engine's circuit, exactly as before. A scope that does not exist, such as `cpu.nope`,
@@ -340,17 +344,17 @@ at, so you can watch its wires change.
 **Why can the page look inside at all?** Back in
 [Looking Inside a Circuit](looking-inside.md), every gate was filed under the name of
 the part it belongs to as it was built. `circuit_view` looks up that filing and reads
-each gate's three wires from the gate engine's simulator. The Bench does no logic of
+each gate's three wires from the gate engine's simulator. The Cockpit does no logic of
 its own: it only asks the gate engine what is on each wire and what is in each
 register, and shows you.
 
 ### A guided tour: from an instruction down to a gate
 
 This is the Try It, done with the buttons. The RAM is built before the CPU, so on the
-full-size Bench, with its much bigger RAM, the same two gates have bigger numbers than
-the small Bench's 12678 and 12679: they are gates 610636 and 610637.
+full-size Cockpit, with its much bigger RAM, the same two gates have bigger numbers than
+the small Cockpit's 12678 and 12679: they are gates 610636 and 610637.
 
-1. Open the Bench. The memory window highlights address 0, `li r1, 255`, and every
+1. Open the Cockpit. The memory window highlights address 0, `li r1, 255`, and every
    register is 0. Press **1 instruction**. `r1` becomes 255 and the highlight moves to
    address 1. `pc` is 1.
 2. Type 4 in the Run box and press **Run**. The highlight is now on
@@ -411,7 +415,7 @@ every level you visit. These are the main ones.
 
 ## Why Does This Matter?
 
-Without the Bench, a wrong answer from a program is a mystery: it prints 5 where you
+Without the Cockpit, a wrong answer from a program is a mystery: it prints 5 where you
 expected 4 and you have no way to ask *where did it go wrong?* With the lid off you can
 stop at the instruction that misbehaved, see which register held what, step through it
 a beat or a gate at a time, and follow the 1 down to the single gate that got it wrong.
@@ -420,13 +424,13 @@ which wire is high right now, and how programmers debug programs, with a **debug
 that pauses and steps through code.
 
 The Pebble pane is the trick every real debugger plays. When you pause a Python or C
-program on a line, the debugger is doing what the Bench does: the processor only knows
+program on a line, the debugger is doing what the Cockpit does: the processor only knows
 which machine instruction it is on, and a table made by the compiler, like our source
 map, turns that address back into a line of your code. Without that table, the
 computer could tell you only the address of an instruction, and nothing more.
 
 It matters for teaching too. The promise of this project is "nothing is faked", and the
-Bench is where you check that promise yourself. Every number on the page is read from
+Cockpit is where you check that promise yourself. Every number on the page is read from
 the gate engine, the computer made of NAND gates.
 
 ## What's Next
@@ -439,7 +443,7 @@ it. Only part of Pebble runs on PyCPU so far: whole numbers, variables, `if`, `w
 `for` over a range, functions and `print`. Lists, text in variables and the rest are
 refused with a friendly message.
 
-What comes next is not written yet. The Bench will grow into the **Cockpit**, where the
-Pebble pane becomes the left side of the screen and you can step one *Pebble line* at
-a time, then drop from that line all the way down to the gates. Until then, go back to
+What comes next is the rest of the Cockpit: the Pebble pane becomes the left side of
+the screen and you can step one *Pebble line* at a time, then drop from that line all
+the way down to the gates. Until then, go back to
 [the start of the story](../index.md) and see how far you have climbed.
