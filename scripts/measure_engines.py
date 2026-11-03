@@ -1,27 +1,15 @@
 """Hold the stopwatch up to both engines and print how they did against each limit.
 
-The measuring itself lives in `pycpu.proof.measure_engines`; this script is the
-clipboard that writes the results down. Run it fresh each time, because the
+The measuring itself lives in `pycpu.proof.measure_engines`, and the limits in
+`pycpu.proof.ENGINE_LIMITS`; this script is the clipboard that writes the results down. Run it fresh each time, because the
 memory figure is the peak of the whole process.
 """
 
 import argparse
-import operator
 import sys
-from collections.abc import Callable
 
 from pycpu.memory import RAM_ADDRESS_BITS
-from pycpu.proof import measure_engines
-
-# Each figure, its limit, and the comparison it must pass (most are "under").
-LIMITS: dict[str, tuple[float, Callable[[float, float], bool], str]] = {
-    "build_seconds": (30.0, operator.lt, "under"),
-    "memory_mib": (1024.0, operator.lt, "under"),
-    "pause_seconds": (2.0, operator.lt, "under"),
-    "read_state_seconds": (2.0, operator.lt, "under"),
-    "gate_instruction_seconds": (0.5, operator.lt, "under"),
-    "fast_instructions_per_second": (50_000.0, operator.gt, "over"),
-}
+from pycpu.proof import ENGINE_LIMITS, measure_engines
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -36,7 +24,7 @@ def main(argv: list[str] | None = None) -> int:
     print(f"total_gates {result['total_gates']:>12,.0f}")
     print(f"{'measure':<29} {'result':>12} {'limit':>15}")
     missed = False
-    for name, (limit, passes, side) in LIMITS.items():
+    for name, (limit, passes, side) in ENGINE_LIMITS.items():
         verdict = "ok" if passes(result[name], limit) else "MISSED"
         missed = missed or verdict == "MISSED"
         print(f"{name:<29} {result[name]:>12.4f} {side:>5} {limit:>9,.1f}  {verdict}")

@@ -54,7 +54,7 @@ KEY_IDEAS: dict[str, list[str]] = {
     "concepts/multiply-and-divide.md": ["multiply", "shift", "remainder"],
     "concepts/printing-a-number.md": ["digit", "character", "output port"],
     "concepts/what-happens-when-things-go-wrong.md": ["fault", "halt", "source map"],
-    "concepts/the-bench.md": ["bench", "register", "gate", "instruction"],
+    "concepts/the-bench.md": ["bench", "register", "gate", "instruction", "pebble", "source map"],
 }
 
 

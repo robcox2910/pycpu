@@ -141,6 +141,68 @@ What Plan 2 learned, measured on the same Intel Core i7-9750H laptop (macOS 26.5
 - The Bench's "Read more" entries are still plain text; make them real links when the site
   is published (carried from the Plan 2 notes).
 
+## Notes for Plan 4
+
+What Plan 3 learned, measured on the same Intel Core i7-9750H laptop (macOS 26.5, Python
+3.14.3) on 2026-11-03 with throwaway scripts (not in the repo).
+
+- **Instructions per Pebble line** (fast engine, the 15 programs in `tests/pebble_programs/`,
+  run to their halt, 77,141 instructions in all). Three ways to count:
+  - A run of consecutive instructions on one line's own words: min 1, median 12, max 61
+    (1,887 runs).
+  - A run inside the runtime routines (`__mul`, `__divmod`, `__print_int`, `__print_text`;
+    source-map line `None`): min 14, median 153, max 875 (365 runs).
+  - "Step a Pebble line" = from entering a line until a *different* located line starts,
+    with routine instructions counted toward the line that called them: min 3, median 22,
+    max 1,022 (1,612 steps). A `print` line is the expensive one: printing `2` costs
+    4 instructions of its own plus 170 in `__print_int` (the Bench page's Try It pins both).
+- **Gate steps per Pebble line at full size (4K words).** The Bench page's Try It countdown
+  (`let n = 2` ... `print(n)` ...) on the gate engine, stepped gate by gate: 426 instructions,
+  16,166,978 gate steps, 36.6 s (about 442,000 gate steps per second). Per instruction:
+  min 6,154, median 22,082, max 172,502. Per line step (routines counted in): `let n = 2`
+  400,733; `while n > 0` about 390,000; `n = n - 1` about 530,000; `print(n)` about 6.7 million
+  (174 instructions). Median line step 490,376 gate steps.
+- **What the Cockpit's "step a Pebble line" should do.** Run the line on the **fast
+  engine** and pause at the first instruction of the next located line (resume, then step
+  instruction by instruction on the fast engine until `line_at(pc)` changes to a different
+  non-`None` line, then pause). On gates a line is about half a million gate steps (over a
+  second) and a `print` line about 15 seconds, so stepping a line on gates is not
+  interactive; the gate view is for zooming *within* an instruction. Two choices to make:
+  (1) step *over* a user function call (stop only on a line of the same frame, compare
+  `r7`) versus step *into* it (stop on the callee's first line) — offer both, like a real
+  debugger; (2) routine instructions (`None`) always count toward the calling line, never
+  stop. Cap a line step at `MAX_RUN` instructions so `while true {}` cannot hang a request.
+  The Bench already gives the pieces: `TranslatedProgram.line_at`, the `pebble` key in the
+  machine picture, and `POST /api/pebble`.
+- **Bench API (Plan 3 shape).** `POST /api/pebble` `{"source": ...}` reuses the built
+  machine (`Computer.load_program`, as `/api/program` does). The machine picture's `pebble`
+  is `null` for assembly, else `{"source": [lines], "line": n | null, "message": str | null}`;
+  `line` is read at `instruction_start.pc`, and once halted it is the line to blame (null
+  after a normal finish) with `message` from `PebbleRun.describe()` (built by the new
+  `PebbleRun.from_state`). A refused program is a 400 with PyWeb's usual `error`/`message`
+  plus `line` and `column`. A small Bench (tests use 8 address bits, 256 words) refuses a
+  program bigger than its memory with a 400.
+- **Pebble VM bugs found** (both in the VM, not PyCPU):
+  - A function that falls off its end after a `return` inside an `if` crashes the VM with
+    `IndexError` (PyCPU returns null, as Pebble's own functions-without-return do). Fixed
+    upstream in pebble-lang PR #84 (merge pending, to ship as v0.4.1, unreleased). Once it
+    ships: raise PyCPU's floor to `fromscratch-pebble>=0.4.1`, and remove the
+    `# Pebble v0.4.1:` workarounds in the tests (grep for that marker).
+  - Calling a variable as a function (`let x = 1` then `x()`) crashes the Pebble v0.4.0 VM
+    with `KeyError`. Not yet reported upstream. PyCPU refuses it as "functions used as values".
+- **Carried from the Plan 3 ledger (minors that matter later):**
+  - Stepped `range(a, b, step)` is refused ("range with a step"): Pebble lowers it with a
+    `throw` guard against a zero step, which needs a new fault code to support.
+  - Plan 5's series sync: `mkdocs.yml`'s theme block lacks the current template's
+    `custom_dir`/overrides and plugins (search, social); the README lacks the series-managed
+    Documentation/Install/Related blocks; the template CLAUDE block says docs deploy to Pages,
+    which is not yet true.
+  - `FastMachine.step` still rebuilds its opcode handler table on every step. The
+    conformance corpus ran fast enough without fixing it, but the Cockpit's fast line step
+    calls `step` per instruction: fix it if line steps feel slow.
+  - Long source lines in `printing-a-number.md` and `from-pebble-to-machine-code.md` (render fine).
+  - The engine speed limits now live once, in `pycpu.proof.ENGINE_LIMITS` (done in Plan 3).
+
 ## Rule #1: docs ship with the code
 
 Documentation is as important as code, and it outranks everything else in these plans. The

@@ -17,6 +17,7 @@ the same instructions with plain Python. Both run one mixed program, and their
 states are compared before any time counts, so a quick but wrong engine fails.
 """
 
+import operator
 import random
 import resource
 import statistics
@@ -40,6 +41,19 @@ KIB_PER_MIB = 1024
 PAUSES = 5  # how many times `load_state` and `state()` are each timed
 GATE_INSTRUCTIONS = 60  # instructions timed one by one on the gate engine
 FAST_INSTRUCTIONS = 300_000  # instructions in the fast engine's long run
+
+# The limit each `measure_engines` figure must meet at full size, written down before
+# anything was measured: the limit, the comparison it must pass, and the word the table
+# prints for that comparison. Most are "under"; the fast engine's speed is "over".
+# `scripts/measure_engines.py` and `tests/test_engine_speed.py` both read this one copy.
+ENGINE_LIMITS: dict[str, tuple[float, Callable[[float, float], bool], str]] = {
+    "build_seconds": (30.0, operator.lt, "under"),
+    "memory_mib": (1024.0, operator.lt, "under"),
+    "pause_seconds": (2.0, operator.lt, "under"),
+    "read_state_seconds": (2.0, operator.lt, "under"),
+    "gate_instruction_seconds": (0.5, operator.lt, "under"),
+    "fast_instructions_per_second": (50_000.0, operator.gt, "over"),
+}
 
 # A loop that never ends, using every kind of instruction worth timing: sums,
 # a store and a load, the stack, a call and a return, and a branch.

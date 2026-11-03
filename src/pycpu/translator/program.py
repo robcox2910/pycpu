@@ -12,6 +12,7 @@ went wrong, which Pebble line was running.
 """
 
 from dataclasses import dataclass
+from typing import Self
 
 from pebble import compile_source
 
@@ -19,6 +20,7 @@ from pycpu.assembler import Program, ProgramTooLongError, assemble
 from pycpu.fast import FastMachine
 from pycpu.isa import Fault
 from pycpu.memory import RAM_WORDS
+from pycpu.state import MachineState
 from pycpu.translator.codegen import END_LABEL, frame_words, generate
 from pycpu.translator.subset import TOO_BIG, UnsupportedFeature, check_program
 
@@ -66,6 +68,30 @@ class PebbleRun:
     fault: Fault | None
     line: int | None
     steps: int
+
+    @classmethod
+    def from_state(cls, translated: TranslatedProgram, state: MachineState, steps: int) -> Self:
+        """Read how a run of `translated` went from the machine it ran on.
+
+        Either engine's state will do: `run_pebble` passes the fast engine's, and the
+        Bench passes the gate engine's.
+
+        Args:
+            translated: The program that was running.
+            state: The machine as it is now.
+            steps: How many instructions it has carried out.
+
+        Returns:
+            The output, whether it halted, any fault, and the Pebble line to blame.
+
+        """
+        fault = Fault(state.halt_code) if state.halted and state.halt_code else None
+        line = None
+        if fault is not None:
+            line = _fault_line(translated, state, fault)
+        # Each output word is one character's code, kept whole (not cut to a byte).
+        output = "".join(chr(code) for code in state.output)
+        return cls(output, state.halted, fault, line, steps)
 
     def describe(self) -> str:
         """Say in one friendly sentence how the run ended.
@@ -118,14 +144,7 @@ def translate(source: str) -> TranslatedProgram:
     return TranslatedProgram(source, assembly.text, program, lines)
 
 
-def _fault_line(
-    translated: TranslatedProgram,
-    pc: int,
-    sp: int,
-    memory: tuple[int, ...],
-    words: int,
-    fault: Fault,
-) -> int | None:
+def _fault_line(translated: TranslatedProgram, state: MachineState, fault: Fault) -> int | None:
     """Find the Pebble line to blame for a fault.
 
     A stack overflow is blamed on the call that needed one more frame than there was
@@ -135,10 +154,11 @@ def _fault_line(
     empty), so its own first line is used. Any other fault is blamed on the faulting
     word: `pc - 1` for an execute fault, `pc` for a fetch fault.
     """
-    if fault is Fault.STACK_OVERFLOW and sp < words:
-        return translated.line_at(memory[sp] - 1)
+    words = len(state.memory)
+    if fault is Fault.STACK_OVERFLOW and state.sp < words:
+        return translated.line_at(state.memory[state.sp] - 1)
     # A fetch fault leaves pc on the bad address; any other fault has moved past it.
-    return translated.line_at(pc if pc >= words else pc - 1)
+    return translated.line_at(state.pc if state.pc >= words else state.pc - 1)
 
 
 def run_pebble(source: str, max_steps: int = 1_000_000) -> PebbleRun:
@@ -161,10 +181,4 @@ def run_pebble(source: str, max_steps: int = 1_000_000) -> PebbleRun:
     machine = FastMachine()
     machine.load_program(translated.program.words)
     steps = machine.run(max_steps)
-    state = machine.state()
-    fault = Fault(state.halt_code) if state.halted and state.halt_code else None
-    line = None
-    if fault is not None:
-        line = _fault_line(translated, state.pc, state.sp, state.memory, machine.words, fault)
-    output = "".join(chr(code) for code in state.output)
-    return PebbleRun(output, state.halted, fault, line, steps)
+    return PebbleRun.from_state(translated, machine.state(), steps)

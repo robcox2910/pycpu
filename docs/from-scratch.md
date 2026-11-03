@@ -79,7 +79,7 @@ sit *on top* of a computer, and PyCPU is the one that sits underneath.
 
 | Project | What it builds | How it relates |
 |---------|----------------|----------------|
-| [Pebble](https://robcox2910.github.io/pebble-lang/) | A small programming language | A language we already have; next we run it on the PyCPU computer |
+| [Pebble](https://robcox2910.github.io/pebble-lang/) | A small programming language | Part of Pebble now runs on the PyCPU computer, translated into its machine code |
 | [PyOS](https://robcox2910.github.io/py-os/) | An operating system | Software that runs on a computer like this one |
 | [PyWeb](https://robcox2910.github.io/pyweb/) | A web server | Already serves the Bench, and will serve the Cockpit screen |
 | [The series home](https://robcox2910.github.io/) | All of them | Where to find the rest |
@@ -99,12 +99,16 @@ that asks: what if we built that computer too?
 4. **Trust the numbers.** Any figure in these docs was measured by running the code,
    never invented.
 
-One more honest note. Two climbs are built. The first runs from a single gate up to
+One more honest note. Three climbs are built. The first runs from a single gate up to
 adders, a calculator part called the ALU, and memory that remembers. The second builds
 a processor from those parts, an assembler to write programs for it, a fast engine
 that is checked against the gates, and the Bench, where you can pause a running
-program and look inside it down to a single gate. Pebble and the full Cockpit come on
-later climbs, and each time a new rung is built, a new page joins these.
+program and look inside it down to a single gate. The third translates Pebble programs
+into machine code for that processor, so they run on it and print the same answers
+as Pebble's own way of running them, for numbers that fit in 16 bits. Only part of
+Pebble runs so far (whole numbers, variables, `if`, `while`, functions and `print`),
+and anything else gets a friendly "not supported yet" message. The full Cockpit comes
+on a later climb, and each time a new rung is built, a new page joins these.
 
 Ready? Go back to the [home page](index.md) to see the whole ladder again, or start
 climbing with [Bits and Binary](concepts/bits-and-binary.md).

@@ -20,6 +20,12 @@ panel lets you **zoom** (move from a big part into the smaller parts it is made 
 from the whole CPU down to a single NAND gate, with the real 0s and 1s on its wires.
 Nothing on it is drawn from memory or faked.
 
+You can also put a **Pebble** program on the Bench. Then the page shows your Pebble
+code next to the machine code it was translated into, with the line that is running
+right now marked. Step one instruction at a time and you can watch that mark sit still
+for a while, then jump: one line of Pebble is many machine instructions, and the Bench
+lets you count them.
+
 The page in your browser and the Bench app behind it talk by sending each other short
 messages, like notes passed through a hatch. Each kind of note goes to its own address,
 called a **route**, such as `/api/machine` ("tell me about the machine") or `/api/step`
@@ -40,6 +46,9 @@ that", and **404** means "not found, there is no such thing".
 | Going back to the start of the note | `POST /api/rewind` |
 | Letting it play for a while | `POST /api/run` |
 | Putting a new song on | `POST /api/program`, with assembly text |
+| Putting on a song that comes with a lyric sheet | `POST /api/pebble`, with a Pebble program that the translator turns into machine code |
+| The lyric sheet, held up beside the notes | The Pebble pane, next to the memory window |
+| The words being sung right now | `pebble.line`: the Pebble line of the current instruction |
 | A part you point at | A **scope**, such as `cpu.alu.adder` (see [Looking Inside a Circuit](looking-inside.md)) |
 | The smallest part you can find | One NAND gate, with its two inputs and one output |
 | The workshop door | `create_bench()` in `src/pycpu/bench/app.py` |
@@ -124,6 +133,93 @@ instruction stores the answer, 51 (the character `3`), in `r3`. Then the program
 to its end, printing `321`, and asking for a step size the Bench does not know gets a
 400.
 
+Now the same countdown, written in Pebble instead. This Bench gets 256 words of memory
+(`address_bits=8`), because a translated program also carries the ready-made routines
+for multiplying, dividing and printing from
+[Multiply and Divide](multiply-and-divide.md) and [Printing a Number](printing-a-number.md).
+We step one instruction at a time and keep a **trail**: each time the Pebble line
+changes, we start a new entry and count how many instructions it lasts. `None` means
+"no Pebble line": the machine is inside one of those ready-made routines.
+
+```python
+from pynet.loop import run
+from pyweb.testing import TestClient
+
+from pycpu.bench.app import create_bench
+
+COUNTDOWN = """\
+let n = 2
+while n > 0 {
+    print(n)
+    n = n - 1
+}
+"""
+DIVIDE_BY_ZERO = "let a = 7\nprint(a // 0)\n"
+DECIMAL = "let a = 7\nprint(a / 2)\n"
+
+
+async def visit_pebble() -> None:
+    client = TestClient(create_bench(address_bits=8))
+    machine = (await client.post("/api/pebble", json={"source": COUNTDOWN})).json()
+    pebble = machine["pebble"]
+    print(len(pebble["source"]), "lines of Pebble; line", pebble["line"], "runs first")
+    print("its first instruction:", machine["instruction"]["text"])
+
+    trail = []
+    while len(trail) < 6:
+        line = machine["pebble"]["line"]
+        if trail and trail[-1][0] == line:
+            trail[-1][1] += 1
+        else:
+            trail.append([line, 1])
+        machine = (await client.post("/api/step", json={"size": "instruction"})).json()
+    for line, instructions in trail[:5]:
+        print("line", line, "lasted", instructions, "instructions")
+
+    machine = (await client.post("/api/run", json={"instructions": 1000})).json()
+    print("printed", repr(machine["output"]), "-", machine["pebble"]["message"])
+
+    await client.post("/api/pebble", json={"source": DIVIDE_BY_ZERO})
+    machine = (await client.post("/api/run", json={"instructions": 1000})).json()
+    print(machine["pebble"]["message"], "- the page marks line", machine["pebble"]["line"])
+
+    wrong = await client.post("/api/pebble", json={"source": DECIMAL})
+    print(wrong.status, "at line", wrong.json()["line"], "column", wrong.json()["column"])
+    print(wrong.json()["message"])
+
+
+run(visit_pebble())
+# Output:
+# 5 lines of Pebble; line 1 runs first
+# its first instruction: getsp r1
+# line 1 lasted 14 instructions
+# line 2 lasted 13 instructions
+# line 3 lasted 4 instructions
+# line None lasted 170 instructions
+# line 4 lasted 10 instructions
+# printed '2\n1\n' - The program finished
+# Division by zero at line 2 - the page marks line 2
+# 400 at line 2 column 9
+# the / operator (it always makes a decimal number; use // for whole numbers) is not supported on PyCPU yet at line 2, column 9
+```
+
+The first instruction is `getsp r1`, not anything to do with `n`: it starts main's
+**frame**, the room checked and made for its variables (see
+[Variables in Memory](variables-in-memory.md)), and the translator files those words
+under line 1. So `let n = 2` lasts 14 instructions, frame and all. The check
+`while n > 0` takes 13. `print(n)` takes only 4 of its own (fetch `n`, put it on the
+stack, take it off again, call the printing routine), and then the mark leaves the
+Pebble program altogether for 170 instructions: that is the ready-made routine turning
+2 into the digit `2` and a new line, one division at a time. Then `n = n - 1` takes 10.
+The trail's sixth entry is cut off by the loop, so we print only five.
+
+Running to the end prints `'2\n1\n'`. `repr` shows text with its invisible characters
+written out, and `\n` is the "new line" character `print` puts after each number. The
+second program divides by zero; the Bench marks line 2 and says why, in the same words
+as [What Happens When Things Go Wrong](what-happens-when-things-go-wrong.md). The last
+program uses `/`, which PyCPU cannot do, so nothing is loaded and the answer is a 400
+naming the exact line and column.
+
 To open the real thing, run this in a terminal, then visit the address it prints:
 
 ```text
@@ -146,22 +242,25 @@ The Bench has three small parts, all in `src/pycpu/bench/`.
  │  page.html    │ <─────────────────── │  app.py: create_bench()        │
  │               │                      │                                │
  │  registers    │   GET /api/machine   │  one Computer, paused:         │
- │  memory       │ <─────────────────── │   a fast engine and a gate     │
- │  buttons      │   POST /api/step     │   engine of real NAND gates    │
- │  load box     │   POST /api/rewind   │                                │
- │               │   POST /api/run      │  assemble / disassemble        │
- │  zoom panel   │   POST /api/program  │                                │
- │               │ ───────────────────> │  circuit_view reads the gates' │
- │               │   GET /api/view      │  own wires                     │
- └───────────────┘ <─────────────────── └────────────────────────────────┘
+ │  Pebble pane  │ <─────────────────── │   a fast engine and a gate     │
+ │  memory       │   POST /api/step     │   engine of real NAND gates    │
+ │  buttons      │   POST /api/rewind   │                                │
+ │  load box     │   POST /api/run      │  assemble / disassemble        │
+ │               │   POST /api/program  │  translate (Pebble -> words,   │
+ │  zoom panel   │   POST /api/pebble   │   plus a line for each word)   │
+ │               │ ───────────────────> │                                │
+ │               │   GET /api/view      │  circuit_view reads the gates' │
+ │               │ <─────────────────── │  own wires                     │
+ └───────────────┘                      └────────────────────────────────┘
 ```
 
 **`create_bench()`** assembles `DEMO_PROGRAM`, a short countdown written in assembly at
 the top of `app.py`, builds a `Computer` with it and pauses it at once, so the machine
 sits in the gate engine before its first instruction. It takes `address_bits`, the
 number of memory address wires, just like `Computer` does; the real Bench uses the full
-12 (4,096 words), and the Try It uses 6 (64 words) to build quickly. Every route
-answers with the same picture of the machine, which the page redraws:
+12 (4,096 words), and the Try It uses 6 (64 words) to build quickly, or 8 (256 words)
+when it needs room for a Pebble program. Every route answers with the same picture of
+the machine, which the page redraws:
 
 - `GET /api/machine` reads the paused gate engine's state: the eight `registers`, `pc`,
   `sp`, the four `flags`, `halted` and `halt_code`, the `output` printed so far, which
@@ -176,6 +275,15 @@ answers with the same picture of the machine, which the page redraws:
   `null` otherwise; the page then says, for example, "halted: bad address (code 1)".
   A program's own `halt 1`, `halt 2` or `halt 3` shares those codes, so the page cannot
   tell a program that chose to stop that way from a real fault.
+  `pebble` is `null` for an assembly program. For a Pebble program it is
+  `{"source": [...], "line": 3, "message": null}`: `source` is the program as a list of
+  lines, and `line` is the Pebble line of the current instruction, looked up in the
+  translator's **source map** (the list that says, for every word of machine code,
+  which Pebble line made it; see [What Happens When Things Go Wrong](what-happens-when-things-go-wrong.md)).
+  It is `null` while a ready-made routine runs, because those words belong to no line.
+  Once the machine halts, `message` says how the run ended, such as
+  `"Division by zero at line 2"` or `"The program finished"`, and `line` is the line
+  to blame (`null` after a normal finish).
 - `POST /api/step` takes `{"size": "gate"}`, `{"size": "cycle"}` or
   `{"size": "instruction"}` and calls `Computer.step` with that size (the three sizes
   from [Pausing and Rewinding](pausing-and-rewinding.md)). One instruction is thousands
@@ -197,6 +305,14 @@ answers with the same picture of the machine, which the page redraws:
   the computer is switched on again with the new program in memory and paused at its
   start. If it does not, the answer is a 400 carrying the assembler's own message, which
   starts with the line number of the mistake, such as `line 2: ...`.
+- `POST /api/pebble` takes `{"source": "..."}`, a Pebble program. `load_pebble` hands it
+  to `translate` (from [From Pebble to Machine Code](from-pebble-to-machine-code.md)),
+  loads the machine code exactly as `/api/program` does, keeps the translated program
+  so later pictures can look up lines, and pauses at the start. If Pebble finds a
+  mistake, or the program uses something PyCPU cannot do yet, nothing is loaded and the
+  answer is a 400 whose `message` is the error's own words, with `line` and `column`
+  saying where. A small Bench also refuses a program bigger than its memory. Loading
+  assembly afterwards forgets the Pebble program, so `pebble` goes back to `null`.
 - `GET /api/view?path=cpu.alu` answers with `circuit_view` for that scope of the gate
   engine's circuit, exactly as before. A scope that does not exist, such as `cpu.nope`,
   gets a friendly 404 ("not found") answer that says `No part called cpu.nope`.
@@ -207,8 +323,15 @@ anywhere else. Across the top are the step buttons (**1 gate**, **100 gates**,
 instructions. Below them are the registers and flags, the program's printed output, and
 the memory window, where each word is shown as a number and as assembly, with the
 current instruction highlighted. Once the machine has halted, no row is highlighted,
-because nothing runs next. A text box takes your own assembly, and **Load**
-sends it. Under all that is the zoom panel: it opens on `cpu`, lists the parts inside
+because nothing runs next. Beside the memory window is the **Pebble pane**: the Pebble
+program, one numbered line per row, with the running line highlighted and a sentence
+above it saying what is happening ("Running line 2", "Inside a ready-made routine", or,
+once halted, how the run ended). For an assembly program the pane says there is no
+Pebble to show. A text box below takes your own program; **Load Pebble** sends it to
+`/api/pebble` and **Load assembly** to `/api/program`. The page writes every piece of
+text it shows with `textContent`, which puts words on the page as plain words, so a
+program containing something like `<b>` shows those three characters instead of
+changing the page. Under all that is the zoom panel: it opens on `cpu`, lists the parts inside
 with their gate counts, and draws each gate with its two inputs and its output, a wire
 holding a 1 highlighted. Each level is labelled in one plain sentence, with the name of
 the page that explains it. After every button the page reloads the part you are looking
@@ -246,6 +369,27 @@ the small Bench's 12678 and 12679: they are gates 610636 and 610637.
 6. Press **1 instruction**: `r3` turns from 48 into 51, the code for the character
    `3`. Press **Run** with 100 and the output says `321`.
 
+### A second tour: one Pebble line, many instructions
+
+1. The box under the memory window already holds a Pebble countdown from 3. Press
+   **Load Pebble**. The Pebble pane highlights line 1, `let n = 3`, and the memory
+   window highlights `getsp r1` at address 0: the start of main's frame.
+2. Press **1 instruction** again and again. The memory highlight moves every time; the
+   Pebble highlight sits on line 1 until the frame is made and `n` is stored, then
+   jumps to line 2, `while n > 0`.
+3. Keep going until line 3, `print(n)`, and on until the `call`. One more press and the
+   Pebble pane says you are inside a ready-made routine: no line is highlighted, and
+   the memory window shows the printing routine's own instructions. Press **Run** with
+   180 and you come out the other side, on line 4, with `3` printed.
+4. Whatever line is highlighted, press **1 cycle** and click down through the zoom
+   panel as in the first tour. The gates you reach are working on that Pebble line,
+   right now.
+5. Press **Run** with 1000. The output says `3`, `2`, `1`, and the Pebble pane says
+   "The program finished."
+6. Change line 3 to `print(10 // (n - 1))` and press **Load Pebble**, then **Run**.
+   It prints `5` and `10`, then `n - 1` reaches 0 and the pane says
+   "Division by zero at line 3", with line 3 highlighted as the one to blame.
+
 ### The levels, in plain words
 
 The page shows a one-line explanation and a pointer to the matching concept page at
@@ -275,17 +419,27 @@ That is how engineers debug real chips, with probes and logic analysers that sho
 which wire is high right now, and how programmers debug programs, with a **debugger**
 that pauses and steps through code.
 
+The Pebble pane is the trick every real debugger plays. When you pause a Python or C
+program on a line, the debugger is doing what the Bench does: the processor only knows
+which machine instruction it is on, and a table made by the compiler, like our source
+map, turns that address back into a line of your code. Without that table, the
+computer could tell you only the address of an instruction, and nothing more.
+
 It matters for teaching too. The promise of this project is "nothing is faked", and the
 Bench is where you check that promise yourself. Every number on the page is read from
 the gate engine, the computer made of NAND gates.
 
 ## What's Next
 
-That finishes the second climb: from RAM up to a whole computer that fetches, decodes
-and executes instructions, with an assembler to write programs in and a Bench to watch
-them run, all the way down to the gates. What we do not have yet is a friendly language
-to write programs in: typing `li`, `add` and `store` by hand is slow. **Pebble**, the small
-programming language from the same series, already exists. The next climb translates
-Pebble programs into the machine code you have just been reading about, so that they run
-on this computer. The Bench will grow into the **Cockpit**, where you can pause a Pebble
-program and drop from a line of code down to the gates.
+That finishes the third climb. You started with one NAND gate, built memory and a whole
+computer from it, and now a program written in Pebble, a real programming language,
+runs on that computer: translated into machine code, with its own frames, jumps,
+routines and faults, and with every instruction traceable back to the line that made
+it. Only part of Pebble runs on PyCPU so far: whole numbers, variables, `if`, `while`,
+`for` over a range, functions and `print`. Lists, text in variables and the rest are
+refused with a friendly message.
+
+What comes next is not written yet. The Bench will grow into the **Cockpit**, where the
+Pebble pane becomes the left side of the screen and you can step one *Pebble line* at
+a time, then drop from that line all the way down to the gates. Until then, go back to
+[the start of the story](../index.md) and see how far you have climbed.

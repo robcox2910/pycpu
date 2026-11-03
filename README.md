@@ -22,7 +22,8 @@ sums, RAM is the computer's big notebook, the CPU is the processor that follows 
 and the Assembler turns readable instructions into the numbers the CPU understands. The docs explain every word.
 
 ```
-  Pebble programs           <- coming later in the climb
+  The Cockpit               <- coming later (the Bench is its first piece)
+  Pebble programs           <- built for part of Pebble
   Assembler                 <- built
   The CPU                   <- built
   Memory (RAM)              <- built
@@ -36,8 +37,12 @@ Pebble (a small programming language from the same series) run on this computer,
 The Cockpit is not built yet, but a big piece of it is: the **Bench**, a local page
 where a program runs on the CPU, paused, so you can watch its registers and memory,
 step it by a gate, a clock beat or an instruction, rewind it, and zoom from the CPU down
-to a single gate. Everything up to the CPU and the assembler exists; Pebble does not run on PyCPU yet, and
-the Cockpit is still to come.
+to a single gate. Load a Pebble program on it and it marks the Pebble line that is running,
+next to the machine code. Pebble programs run on PyCPU: whole numbers, variables, `if`,
+`while`, `for` over a range, functions and `print`, translated into machine code, with
+multiplying, dividing and printing done by small assembly routines. The rest of Pebble
+(decimals, lists, text in variables, ...) is refused with a friendly message, and the
+Cockpit is still to come.
 
 ## Features
 
@@ -53,7 +58,8 @@ the Cockpit is still to come.
 - **An assembler** -- readable assembly in, machine code out, with labels and friendly line-numbered errors
 - **Two engines** -- a fast engine in plain Python, checked in lockstep against the gates
 - **Pause and rewind** -- run fast, pause into the gates, step by a gate, a beat or an instruction, rewind, resume
-- **The Bench** -- a local web page (served by [PyWeb](https://github.com/robcox2910/pyweb)) showing the running computer, down to single gates
+- **Pebble on the CPU** -- a translator from Pebble's compiled programs to PyCPU assembly, with frames, jumps, calls, fault lines and a source map
+- **The Bench** -- a local web page (served by [PyWeb](https://github.com/robcox2910/pyweb)) showing the running computer, down to single gates, and the running Pebble line
 
 ## Example
 
@@ -118,7 +124,15 @@ Every idea gets its own page, with an everyday analogy:
 | Calling and returning | [calling-and-returning.md](docs/concepts/calling-and-returning.md) | A bookmark on the pile |
 | Two engines | [two-engines.md](docs/concepts/two-engines.md) | A flip-book and a slow-motion camera |
 | Pausing and rewinding | [pausing-and-rewinding.md](docs/concepts/pausing-and-rewinding.md) | Pause, replay, back to live |
-| The Bench | [the-bench.md](docs/concepts/the-bench.md) | A workbench with the lid off |
+| From Pebble to machine code | [from-pebble-to-machine-code.md](docs/concepts/from-pebble-to-machine-code.md) | Translating a recipe, card by card |
+| Variables in memory | [variables-in-memory.md](docs/concepts/variables-in-memory.md) | Pigeonholes behind the counter |
+| Why 16-bit numbers wrap | [why-16-bit-numbers-wrap.md](docs/concepts/why-16-bit-numbers-wrap.md) | The mileage counter again |
+| If and while as jumps | [if-and-while-as-jumps.md](docs/concepts/if-and-while-as-jumps.md) | A choose-your-own-adventure book |
+| How a function call really works | [how-a-function-call-really-works.md](docs/concepts/how-a-function-call-really-works.md) | Leaving your desk to help a friend |
+| Multiply and divide | [multiply-and-divide.md](docs/concepts/multiply-and-divide.md) | Long multiplication on paper |
+| Printing a number | [printing-a-number.md](docs/concepts/printing-a-number.md) | A cash register with one slot per letter |
+| What happens when things go wrong | [what-happens-when-things-go-wrong.md](docs/concepts/what-happens-when-things-go-wrong.md) | The referee's whistle |
+| The Bench | [the-bench.md](docs/concepts/the-bench.md) | A workbench with the lid off, and the lyric sheet beside it |
 
 ## Read the docs
 
