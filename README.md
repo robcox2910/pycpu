@@ -23,8 +23,8 @@ and the Assembler turns readable instructions into the numbers the CPU understan
 
 ```
   Pebble programs           <- coming later in the climb
-  Assembler                 <- coming later in the climb
-  The CPU                   <- coming later in the climb
+  Assembler                 <- built
+  The CPU                   <- built
   Memory (RAM)              <- built
   Arithmetic (adders, ALU)  <- built
   Gates (AND, OR, ...)      <- built
@@ -33,8 +33,11 @@ and the Assembler turns readable instructions into the numbers the CPU understan
 
 The destination is the **Cockpit**, a screen where you can watch a program written in
 Pebble (a small programming language from the same series) run on this computer, pause at any moment, and zoom all the way down to individual gates.
-The Cockpit is not built yet, but its first piece is: the **Bench**, a local page for
-looking inside the ALU gate by gate (registers and RAM join it with the CPU). Gates, adders, the ALU, registers and RAM exist.
+The Cockpit is not built yet, but a big piece of it is: the **Bench**, a local page
+where a program runs on the CPU, paused, so you can watch its registers and memory,
+step it by a gate, a clock beat or an instruction, rewind it, and zoom from the CPU down
+to a single gate. Everything up to the CPU and the assembler exists; Pebble does not run on PyCPU yet, and
+the Cockpit is still to come.
 
 ## Features
 
@@ -45,7 +48,12 @@ looking inside the ALU gate by gate (registers and RAM join it with the CPU). Ga
 - **The ALU** -- add, subtract, AND, OR, XOR and shifts, with zero, negative, carry and overflow flags
 - **Memory** -- latches, flip-flops, a two-beat clock, registers, and 4,096 words of RAM
 - **Zoom** -- every part is named, so you can open any circuit and see the gates inside
-- **The Bench** -- a local web page (served by [PyWeb](https://github.com/robcox2910/pyweb)) for driving the ALU and clicking down to single gates
+- **An instruction set** -- 16 opcodes, every instruction one 16-bit word, with flags, a stack and fault halts
+- **The CPU** -- built from NAND gates and wired to the RAM, fetching and executing one clock beat at a time
+- **An assembler** -- readable assembly in, machine code out, with labels and friendly line-numbered errors
+- **Two engines** -- a fast engine in plain Python, checked in lockstep against the gates
+- **Pause and rewind** -- run fast, pause into the gates, step by a gate, a beat or an instruction, rewind, resume
+- **The Bench** -- a local web page (served by [PyWeb](https://github.com/robcox2910/pyweb)) showing the running computer, down to single gates
 
 ## Example
 
@@ -73,6 +81,7 @@ You need Python 3.14 and [uv](https://docs.astral.sh/uv/).
 ```bash
 uv sync --all-extras
 uv run pytest
+uv run python examples/run_assembly.py   # assemble and run a program that prints Hi
 uv run python examples/alu_tour.py   # more programs live in examples/
 uv run mkdocs serve   # read the docs at http://127.0.0.1:8000
 uv run python -m pycpu   # open the Bench at http://127.0.0.1:8765
@@ -98,6 +107,16 @@ Every idea gets its own page, with an everyday analogy:
 | Registers | [registers.md](docs/concepts/registers.md) | A row of sticky notes |
 | RAM | [ram.md](docs/concepts/ram.md) | A wall of lockers |
 | How big is our memory? | [how-big-is-our-memory.md](docs/concepts/how-big-is-our-memory.md) | Lockers and a stopwatch |
+| Instruction set (reference) | [instruction-set.md](docs/reference/instruction-set.md) | A lookup table, not a lesson |
+| What is a CPU? | [what-is-a-cpu.md](docs/concepts/what-is-a-cpu.md) | A cook and a stack of recipe cards |
+| Machine code | [machine-code.md](docs/concepts/machine-code.md) | A secret code card |
+| Assembly language | [assembly-language.md](docs/concepts/assembly-language.md) | A recipe, and a helper who translates it |
+| The control unit | [the-control-unit.md](docs/concepts/the-control-unit.md) | A railway signal box |
+| Fetch, decode, execute | [fetch-decode-execute.md](docs/concepts/fetch-decode-execute.md) | A cook and a drum |
+| The stack | [the-stack.md](docs/concepts/the-stack.md) | A pile of plates |
+| Calling and returning | [calling-and-returning.md](docs/concepts/calling-and-returning.md) | A bookmark on the pile |
+| Two engines | [two-engines.md](docs/concepts/two-engines.md) | A flip-book and a slow-motion camera |
+| Pausing and rewinding | [pausing-and-rewinding.md](docs/concepts/pausing-and-rewinding.md) | Pause, replay, back to live |
 | The Bench | [the-bench.md](docs/concepts/the-bench.md) | A workbench with the lid off |
 
 ## Read the docs

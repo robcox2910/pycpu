@@ -12,7 +12,7 @@ proof, and Plan 3 depends on Pebble's public API at the pinned tag.
 | # | Plan | Deliverable |
 |---|------|-------------|
 | 1 | **Gates to memory** (`2026-11-01-pycpu-01-gates-to-memory.md`) | Repo scaffold; netlist and event-driven gate engine; logic gates from NAND; adder and ALU; latch, flip-flop, register, RAM; the 4K-word proof, with its result recorded; Bench page with a live circuit view. |
-| 2 | **CPU and assembler** | Instruction set; decoder, control unit, program counter, stack pointer; fast engine; lockstep equivalence property tests; pause, step, rewind and resume between engines; assembler; fault halts. Bench shows registers, memory and current instruction. |
+| 2 | **CPU and assembler** (`2026-11-02-pycpu-02-cpu-and-assembler.md`) | Instruction set; decoder, control unit, program counter, stack pointer; fast engine; lockstep equivalence property tests; pause, step, rewind and resume between engines; assembler; fault halts. Bench shows registers, memory and current instruction. |
 | 3 | **Pebble on the CPU** | Bytecode-to-machine-code translator with source-line map; friendly errors at the subset's edges; multiply, divide, modulo, decimal-print routines in assembly; string-literal print; conformance against the Pebble VM. |
 | 4 | **The Cockpit** | Bench grows into the full layout A: Pebble and machine-code panes, registers, memory, drill-down zoom panel, four step sizes, program loading, live updates over WebSocket or SSE. |
 | 5 | **Integration and first release** | PyStack `pycpu` plugin (shell command, `import "cpu"`, pin, registry, docs); complete docs and README; final definition-of-done pass against spec section 9; add PyCPU to the series with the runbook in `robcox2910.github.io/README.md` (`series.yml`, `HOME_GROUPS`, enable Pages, `series sync`, `series hub`); `v0.1.0` tag. |
@@ -51,6 +51,39 @@ forecast. A write is costly (median about 43,270 gate evaluations against 1,745 
 each changed data wire wakes one gate per word. Two reads and a write take about 0.026 s, which
 suits gate stepping and is why long runs need Plan 2's fast engine.
 
+## Engine result
+
+**Both engines meet every limit at full size, with the 4K RAM unchanged and no engine changes
+needed.** The fast engine's handler table is still rebuilt on every step; it clears its floor
+more than three times over, so that deferred item stays deferred.
+
+Measured 2026-11-02 with `scripts/measure_engines.py` (`measure_engines` in
+`src/pycpu/proof.py`), fresh process, on an Intel Core i7-9750H at 2.60 GHz with 16 GB, macOS
+26.5, Python 3.14.3. Both engines run one looping program (ALU, LOAD/STORE, PUSH/POP,
+CALL/RET, BR, JMP) from the same state, with the rest of RAM random words from seed 2026. The
+gate engine's state after its 60 timed instructions must equal the fast engine's after 60 steps.
+
+| Measure | Result | Limit |
+|---|---|---|
+| `cpu_gates` (outside the RAM) | 6,023 | none |
+| `total_gates` | 613,477 | none |
+| `build_seconds` | 2.83 | under 30 |
+| `memory_mib` | 113 | under 1024 |
+| `pause_seconds` (median of 5 `load_state`) | 0.106 | under 2 |
+| `read_state_seconds` (median of 5 `state()`) | 0.013 | under 2 |
+| `gate_instruction_seconds` (median of 60 `step()`) | 0.0236 | under 0.5 |
+| `fast_instructions_per_second` (one run of 300,000) | 176,811 | over 50,000 |
+
+Ranges seen across five fresh runs, not bounds: build 2.65 to 2.92 s, memory 112 to 115 MiB,
+pause 0.099 to 0.108 s, read state 0.012 to 0.014 s, gate instruction 0.0233 to 0.0251 s,
+fast 153,618 to 176,811 instructions per second. The fast engine is about 4,000 times quicker
+than the gate engine (about 42 instructions per second on gates).
+
+Lockstep (`tests/test_lockstep.py`, 64-word machine): 200 random whole states and 200 random
+assembled programs, each compared after every step for up to 30 steps, plus a pinned
+self-modifying-code case. No disagreement was found. A deliberately broken fast `shr` carry
+was caught by the random-state test.
+
 ## Notes for Plan 2
 
 - Start by adding slow tests for the combined stack: full RAM + ALU + registers in one
@@ -66,6 +99,47 @@ suits gate stepping and is why long runs need Plan 2's fast engine.
 - `pynet` is imported directly but arrives only through `pyweb`; declare it when pins change.
 - Add a full-size test touching address 4095.
 - Make the Bench "Read more" entries real links once a site exists.
+
+## Notes for Plan 3
+
+What Plan 2 learned, measured on the same Intel Core i7-9750H laptop (macOS 26.5, Python
+3.14.3) unless stated.
+
+- **Gate steps per instruction.** Running the Bench's `DEMO_PROGRAM` to its halt, one
+  instruction took 6,988 to 43,045 gate steps at full size (4K words), and 6,736 to 15,213
+  on a 64-word machine. Writes to RAM are the slow ones: each changed data wire wakes a
+  gate in every word. Pinned by the slow tests in `tests/test_bench.py`. A Pebble line will
+  be several instructions, so the Cockpit's "step a line on gates" can mean 100,000+ gate
+  steps; step by beat or instruction there, not by gate.
+- **Engine speeds** (from the Engine result above): the fast engine runs about 150,000 to
+  177,000 instructions per second, the gate engine about 42 (0.024 s per instruction).
+  Plan 3's conformance runs against the Pebble VM must use the fast engine; gate runs are
+  for lockstep spot checks only.
+- **`halt_code` is 8 bits** (`HALT imm8`, `HALT_CODE_MAX`), on both engines. Plan 3's error
+  codes (`STACK_OVERFLOW = 2`, `DIVIDE_BY_ZERO = 3` and any more) must fit in 0 to 255.
+- **The Bench at full size.** `create_bench()` measured 3.05 to 3.10 s over three fresh
+  builds (the `GateMachine` is built once and kept; loading a new program reuses it).
+  Through PyWeb's `TestClient`: `GET /api/machine` 0.016 s (reading `state()` peeks all
+  4,096 words), a cycle step 0.026 s, 100 gate steps 0.015 s, 100,000 gate steps 0.32 s.
+  `python -m pycpu` prints "Building the computer from NAND gates..." before the address.
+- **Bench API shape.** Every route answers with the same machine picture. The current
+  instruction is read at `instruction_start.pc` from `instruction_start.memory`, because
+  half way through an instruction `pc` has moved on. A gate step takes a `count` (1 to
+  100,000) and stops early on a halt; cycle and instruction steps refuse any count but 1.
+  `POST /api/program` reuses the built machine (`Computer.load_program`) instead of
+  building a new one. The Cockpit should keep this shape and add the Pebble source map.
+- **Carried from the Plan 2 ledger:**
+  - `FastMachine.step` still rebuilds its opcode handler dict on every step
+    (`FastMachine._handlers`). Not fixed: the engine clears its 50,000 floor more than
+    three times over. Fix it if Plan 3's conformance runs are too slow.
+  - `scripts/measure_engines.py` keeps its own copy of the limits in `tests/test_engine_speed.py`;
+    a change to one can drift from the other. Move them into `proof.py` and import both.
+  - The ledger noted that `assemble` used `splitlines`, so `\x0b`, `\x0c` and similar would
+    count as line breaks. Checked for this note: `assemble` splits on `"\n"` only (since
+    33b6055), so line numbers match an editor's; `li r0, 1\x0bli r1, 2` is one bad line 1.
+    Text with `\r\n` line ends also assembles. Nothing to carry.
+- The Bench's "Read more" entries are still plain text; make them real links when the site
+  is published (carried from the Plan 2 notes).
 
 ## Rule #1: docs ship with the code
 

@@ -4,23 +4,38 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>The Bench - PyCPU</title>
+<link rel="icon" href="data:,">
 <style>
-  :root { --bg:#fafafa; --fg:#1d1d27; --card:#fff; --line:#d5d5e0; --accent:#5e35b1; --hot:#ffb300; --hotfg:#201600; --muted:#5d5d70; }
+  :root { --bg:#fafafa; --fg:#1d1d27; --card:#fff; --line:#d5d5e0; --accent:#5e35b1; --hot:#ffb300; --hotfg:#201600; --muted:#5d5d70; --here:#ede7f6; }
   @media (prefers-color-scheme: dark) {
-    :root { --bg:#17171f; --fg:#ececf4; --card:#222230; --line:#3a3a4e; --accent:#b39ddb; --hot:#ffb300; --hotfg:#201600; --muted:#a4a4b8; }
+    :root { --bg:#17171f; --fg:#ececf4; --card:#222230; --line:#3a3a4e; --accent:#b39ddb; --hot:#ffb300; --hotfg:#201600; --muted:#a4a4b8; --here:#33294d; }
   }
   body { margin:0; font:16px/1.5 system-ui, sans-serif; background:var(--bg); color:var(--fg); }
-  main { max-width:56rem; margin:0 auto; padding:1rem; }
+  main { max-width:60rem; margin:0 auto; padding:1rem; }
   h1 { margin:.2rem 0; } h2 { margin:1.2rem 0 .4rem; font-size:1.1rem; }
   .muted { color:var(--muted); }
-  form { display:flex; flex-wrap:wrap; gap:.8rem; align-items:end; background:var(--card); border:1px solid var(--line); border-radius:8px; padding:.8rem; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:8px; padding:.8rem; }
+  .row { display:flex; flex-wrap:wrap; gap:.5rem; align-items:center; }
   label { display:flex; flex-direction:column; font-size:.85rem; gap:.2rem; }
-  input, select, button { font:inherit; padding:.35rem .5rem; border:1px solid var(--line); border-radius:6px; background:var(--bg); color:var(--fg); }
+  input, textarea, button { font:inherit; padding:.35rem .5rem; border:1px solid var(--line); border-radius:6px; background:var(--bg); color:var(--fg); }
+  textarea { font-family:ui-monospace,monospace; font-size:.9rem; width:100%; box-sizing:border-box; min-height:8rem; }
+  input[type=number] { width:6rem; }
   button { background:var(--accent); color:var(--bg); cursor:pointer; border-color:var(--accent); }
-  #answer { margin-top:.6rem; display:flex; flex-wrap:wrap; gap:.5rem; align-items:center; }
+  button:disabled { opacity:.5; cursor:wait; }
+  button.quiet { background:transparent; color:var(--accent); border-color:var(--line); }
   .lamp { border:1px solid var(--line); border-radius:999px; padding:.1rem .7rem; font-size:.85rem; }
   .lamp.on, .wire.on { background:var(--hot); color:var(--hotfg); border-color:var(--hot); }
-  #error { color:#c62828; font-weight:600; }
+  #error { color:#c62828; font-weight:600; min-height:1.5rem; }
+  .grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(8.5rem,1fr)); gap:.4rem; }
+  .reg { background:var(--card); border:1px solid var(--line); border-radius:6px; padding:.3rem .5rem; font-family:ui-monospace,monospace; font-size:.9rem; }
+  .reg strong { font-family:system-ui, sans-serif; }
+  .split { display:grid; grid-template-columns:1fr 1fr; gap:1rem; }
+  @media (max-width:44rem) { .split { grid-template-columns:1fr; } }
+  table { border-collapse:collapse; width:100%; font-family:ui-monospace,monospace; font-size:.9rem; }
+  td, th { text-align:left; padding:.15rem .5rem; border-bottom:1px solid var(--line); }
+  tr.here { background:var(--here); font-weight:700; }
+  tr.here td:first-child::before { content:"> "; color:var(--accent); }
+  #output { font-family:ui-monospace,monospace; white-space:pre-wrap; min-height:1.5rem; }
   nav#crumbs { display:flex; flex-wrap:wrap; gap:.3rem; align-items:center; }
   nav#crumbs button { background:transparent; color:var(--accent); border-color:var(--line); }
   #level { background:var(--card); border:1px solid var(--line); border-left:4px solid var(--accent); border-radius:6px; padding:.6rem .8rem; margin:.6rem 0; }
@@ -33,22 +48,39 @@
 <body>
 <main>
   <h1>The Bench</h1>
-  <p class="muted">The lid is off. Set the inputs, then click down through the parts to a single gate. Everything shown is read from the real circuit, a wire carrying a 1 is highlighted.</p>
+  <p class="muted">A whole computer made of NAND gates, paused, with the lid off. Step it forward, rewind it, run it, then click down through its parts to a single gate. Everything shown is read from the real circuit; a wire carrying a 1 is highlighted.</p>
 
-  <form id="inputs">
-    <label>A (0 to 65535)<input id="a" type="number" min="0" max="65535" value="3"></label>
-    <label>B (0 to 65535)<input id="b" type="number" min="0" max="65535" value="1"></label>
-    <label>Op
-      <select id="op">
-        <option value="0">0 ADD</option><option value="1">1 SUB</option><option value="2">2 AND</option>
-        <option value="3">3 OR</option><option value="4">4 XOR</option><option value="5">5 SHL</option>
-        <option value="6">6 SHR</option><option value="7">7 PASS_B</option>
-      </select>
-    </label>
-    <button type="submit">Set inputs</button>
-  </form>
-  <div id="answer" aria-live="polite"></div>
+  <div class="card row" role="group" aria-label="Controls">
+    <button type="button" data-size="gate" data-count="1">1 gate</button>
+    <button type="button" data-size="gate" data-count="100">100 gates</button>
+    <button type="button" data-size="cycle">1 cycle</button>
+    <button type="button" data-size="instruction">1 instruction</button>
+    <button type="button" id="rewind" class="quiet">Rewind</button>
+    <span class="row"><input id="count" type="number" min="1" max="10000" value="10" aria-label="Instructions to run"><button type="button" id="run">Run</button></span>
+  </div>
   <div id="error" role="alert"></div>
+
+  <div class="row" id="status" aria-live="polite"></div>
+
+  <h2>Registers</h2>
+  <div class="grid" id="registers"></div>
+  <div class="row" id="flags" style="margin-top:.5rem"></div>
+
+  <h2>Printed so far</h2>
+  <div class="card" id="output"></div>
+
+  <div class="split">
+    <section>
+      <h2>Memory</h2>
+      <p class="muted" id="current"></p>
+      <table><thead><tr><th>address</th><th>word</th><th>as assembly</th></tr></thead><tbody id="memory"></tbody></table>
+    </section>
+    <section>
+      <h2>Load your own program</h2>
+      <textarea id="source" spellcheck="false" aria-label="Assembly program" placeholder="li r0, 7&#10;halt"></textarea>
+      <div class="row" style="margin-top:.4rem"><button type="button" id="load">Load</button><span class="muted">Assembled, put in memory, and paused at its start.</span></div>
+    </section>
+  </div>
 
   <h2>Where you are</h2>
   <nav id="crumbs" aria-label="Breadcrumb trail"></nav>
@@ -62,12 +94,45 @@
 </main>
 <script>
 "use strict";
-// What each level means, in plain words, and which concept page explains it.
+// What a part means, in plain words, and which concept page explains it.
+// Whole paths come first, because some names (like "flags") mean different things in different places.
+const PATHS = {
+  "": ["The whole circuit: the CPU and the RAM, filed into named parts.", "Looking Inside a Circuit (looking-inside.md)"],
+  "cpu.flags": ["The flags register: four bits remembering whether the last result was zero, negative, carried or overflowed.", "Machine Code (machine-code.md)"],
+  "cpu.operand": ["The operand chooser: picks what goes into the ALU's second input for this instruction.", "The Control Unit (the-control-unit.md)"],
+  "cpu.alu.control": ["The ALU's control: works out from the op dial whether this job is a subtraction.", "The ALU (the-alu.md)"],
+  "cpu.alu.flags": ["The ALU's flags part: it holds the zero check, which lights up when the result is all 0s.", "The ALU (the-alu.md)"],
+};
 const LEVELS = {
-  "": ["The whole circuit: everything we built, filed into named parts.", "Looking Inside a Circuit (looking-inside.md)"],
+  "ram": ["The RAM: memory, every bit of every word a latch made of gates.", "RAM (ram.md)"],
+  "cpu": ["The CPU: its registers, the control unit, the ALU and the wires between them.", "What Is a CPU? (what-is-a-cpu.md)"],
+  "phase": ["The phase register: one bit saying whether the next beat fetches or executes.", "Fetch, Decode, Execute (fetch-decode-execute.md)"],
+  "ir": ["The instruction register: holds the instruction being worked on.", "Fetch, Decode, Execute (fetch-decode-execute.md)"],
+  "pc": ["The program counter: the address of the next instruction.", "What Is a CPU? (what-is-a-cpu.md)"],
+  "sp": ["The stack pointer: the address of the top of the stack.", "The Stack (the-stack.md)"],
+  "halt": ["The halt registers: whether the machine has stopped, and its halt code.", "Machine Code (machine-code.md)"],
+  "halted": ["The halted bit: 1 once the machine has stopped.", "Machine Code (machine-code.md)"],
+  "halt_code": ["The halt code: why the machine stopped (0 means it finished normally).", "Machine Code (machine-code.md)"],
+  "decode": ["The decoder: turns the opcode into one lit wire per kind of instruction.", "The Control Unit (the-control-unit.md)"],
+  "control": ["The control: works out which jobs this instruction needs done.", "The Control Unit (the-control-unit.md)"],
+  "registers": ["The register file: r0 to r7, and the choosers that read and write them.", "The Control Unit (the-control-unit.md)"],
+  "condition": ["The condition check: decides whether a branch should be taken.", "The Control Unit (the-control-unit.md)"],
+  "sp_minus_1": ["An adder that works out sp - 1, for pushing.", "The Stack (the-stack.md)"],
+  "sp_plus_1": ["An adder that works out sp + 1, for popping.", "The Stack (the-stack.md)"],
+  "next_sp": ["Choosers that pick the stack pointer's next value.", "The Stack (the-stack.md)"],
+  "pc_plus_1": ["An adder that works out pc + 1, the next instruction's address.", "Fetch, Decode, Execute (fetch-decode-execute.md)"],
+  "branch_target": ["An adder that works out where a branch would land.", "Fetch, Decode, Execute (fetch-decode-execute.md)"],
+  "next_pc": ["Choosers that pick the program counter's next value.", "Fetch, Decode, Execute (fetch-decode-execute.md)"],
+  "address_mux": ["Choosers that pick which address goes to memory.", "Fetch, Decode, Execute (fetch-decode-execute.md)"],
+  "address_check": ["The check that an address is inside memory.", "Fetch, Decode, Execute (fetch-decode-execute.md)"],
+  "port": ["The check for a store to the output port, the computer's screen.", "Fetch, Decode, Execute (fetch-decode-execute.md)"],
+  "fault": ["The fault check: spots a bad address and stops the machine.", "Fetch, Decode, Execute (fetch-decode-execute.md)"],
+  "write_back": ["Choosers that pick the value written back into a register.", "Fetch, Decode, Execute (fetch-decode-execute.md)"],
+  "ram_data": ["Choosers that pick the word a store writes to memory.", "Fetch, Decode, Execute (fetch-decode-execute.md)"],
+  "ram_wires": ["Buffers that carry the CPU's address, data and write wires over to the RAM.", "Fetch, Decode, Execute (fetch-decode-execute.md)"],
   "alu": ["The ALU: two numbers go in, a dial picks the job, a result and four flag lamps come out.", "The ALU (the-alu.md)"],
   "adder": ["The adder: sixteen columns that add, one after the other, passing a carry along.", "Adding (adding.md)"],
-  "bit": ["One column of the sum: it adds one bit of A, one bit of B and a carry from the right.", "Adding (adding.md)"],
+  "bit": ["One bit: one column of a sum, or one storage cell of a register.", "Adding (adding.md)"],
   "full_adder": ["A full adder: adds two bits and a carry that came in.", "Adding (adding.md)"],
   "half_adder": ["A half adder: adds two bits, giving a sum digit and a carry.", "Adding (adding.md)"],
   "xor": ["An XOR gate, made of 4 NANDs: on when its inputs differ.", "Logic Gates from NAND (gates.md)"],
@@ -77,23 +142,25 @@ const LEVELS = {
   "choose": ["The inside of a chooser: gates that let one of the two wires through.", "Choosing and Decoding (choosing-and-decoding.md)"],
   "or_many": ["An OR over many wires: on if any one of them is on.", "Logic Gates from NAND (gates.md)"],
   "is_zero": ["The zero check: on only when every wire of the result is off.", "The ALU (the-alu.md)"],
-  "control": ["The control: works out from the op dial whether this is a subtraction.", "The ALU (the-alu.md)"],
   "operand": ["The operand: flips the bits of B when subtracting.", "Negative Numbers (negative-numbers.md)"],
   "overflow": ["The overflow check: spots a signed answer that does not fit.", "Negative Numbers (negative-numbers.md)"],
   "select": ["The select: choosers steered by the op dial pick the answer.", "Choosing and Decoding (choosing-and-decoding.md)"],
-  "flags": ["The flags part: it holds the zero check, which lights up when the result is all 0s.", "The ALU (the-alu.md)"],
+  "master": ["The master latch: the first half of a flip-flop, open while the clock is low.", "The Clock (the-clock.md)"],
+  "slave": ["The slave latch: the second half of a flip-flop, open when the clock rises.", "The Clock (the-clock.md)"],
 };
 const GATE_LINE = ["One NAND gate: its output is 0 only when both inputs are 1. Every part above is built from these.", "Switches and NAND (switches-and-nand.md)"];
 const FALLBACK = ["A part of the circuit, made of smaller parts and gates.", "Looking Inside a Circuit (looking-inside.md)"];
+const FLAGS = ["zero", "negative", "carry", "overflow"];
 
-let path = "";
+let path = "cpu";
+let busy = false;
 
 function levelFor(p) {
-  if (p === "") return LEVELS[""];
+  if (p in PATHS) return PATHS[p];
   let last = p.split(".").pop().replace(/#\d+$/, "");
   if (/^bit\d+$/.test(last)) last = "bit";
-  else if (/^(and|or|xor)_bus$/.test(last)) return ["A row of 16 identical gates, one per bit of A and B.", "Logic Gates from NAND (gates.md)"];
-  else if (last === "mux_bus") return ["A row of choosers: each picks one of two wires, steered by an op wire.", "Choosing and Decoding (choosing-and-decoding.md)"];
+  else if (/^(and|or|xor)_bus$/.test(last)) return ["A row of 16 identical gates, one per bit.", "Logic Gates from NAND (gates.md)"];
+  else if (last === "mux_bus") return ["A row of choosers: each picks one of two wires, steered by a select wire.", "Choosing and Decoding (choosing-and-decoding.md)"];
   return LEVELS[last] || FALLBACK;
 }
 
@@ -104,6 +171,8 @@ function el(tag, text, cls) {
   return e;
 }
 
+function hex(n) { return "0x" + n.toString(16).toUpperCase().padStart(4, "0"); }
+
 function showError(text) { document.getElementById("error").textContent = text; }
 
 async function load(next) {
@@ -111,7 +180,6 @@ async function load(next) {
     const response = await fetch("/api/view?path=" + encodeURIComponent(next));
     if (!response.ok) { showError("Could not open " + (next || "the whole circuit") + " (" + response.status + ")"); return; }
     const view = await response.json();
-    showError("");
     path = next;
     draw(view);
   } catch (e) {
@@ -161,34 +229,83 @@ function draw(view) {
   if (view.gates.length === 0) gates.append(el("div", "No gates directly here, look in the parts above.", "muted"));
 }
 
-async function setInputs(event) {
-  event.preventDefault();
+function showMachine(m) {
+  const status = document.getElementById("status");
+  status.replaceChildren(
+    el("span", "next beat: " + m.phase, "lamp"),
+    el("span", m.at_boundary ? "between instructions" : "part-way through an instruction", "lamp" + (m.at_boundary ? "" : " on")),
+  );
+  if (m.halted) {
+    const why = m.fault ? m.fault.toLowerCase().replaceAll("_", " ") : (m.halt_code === 0 ? "finished" : "stopped");
+    status.append(el("span", "halted: " + why + " (code " + m.halt_code + ")", "lamp on"));
+  }
+
+  const registers = document.getElementById("registers");
+  registers.replaceChildren();
+  const box = (name, value) => {
+    const b = el("div", undefined, "reg");
+    b.append(el("strong", name + " "), document.createTextNode(value + " (" + hex(value) + ")"));
+    registers.append(b);
+  };
+  m.registers.forEach((value, i) => box("r" + i, value));
+  box("pc", m.pc);
+  box("sp", m.sp);
+
+  const flags = document.getElementById("flags");
+  flags.replaceChildren(el("span", "flags:", "muted"));
+  FLAGS.forEach((flag) => flags.append(el("span", flag + " " + m.flags[flag], "lamp" + (m.flags[flag] ? " on" : ""))));
+
+  document.getElementById("output").textContent = m.output || "(nothing yet)";
+
+  const i = m.instruction;
+  let current = "Current instruction: " + i.text + " at address " + i.address + ".";
+  if (i.word === null) current = "Current instruction: address " + i.address + " is outside memory.";
+  if (m.halted) current = "The machine has halted, so no instruction is next. pc is " + m.pc + ".";
+  document.getElementById("current").textContent = current;
+  const memory = document.getElementById("memory");
+  memory.replaceChildren();
+  m.memory.forEach((cell) => {
+    // Once halted nothing runs next, so no row is marked.
+    const row = el("tr", undefined, !m.halted && cell.address === i.address ? "here" : "");
+    row.append(el("td", String(cell.address)), el("td", hex(cell.word)), el("td", cell.text));
+    memory.append(row);
+  });
+}
+
+async function send(url, body) {
+  if (busy) return;
+  busy = true;
+  document.querySelectorAll("button").forEach((b) => { b.disabled = true; });
   try {
-    await sendInputs();
+    const response = await fetch(url, { method: body === undefined ? "GET" : "POST", headers: { "Content-Type": "application/json" }, body: body === undefined ? undefined : JSON.stringify(body) });
+    if (!response.ok) {
+      let message = "The Bench refused that (" + response.status + ").";
+      try { message = (await response.json()).message || message; } catch (e) { /* keep default */ }
+      showError(message);
+      return;
+    }
+    showError("");
+    showMachine(await response.json());
+    await load(path);
   } catch (e) {
     showError("Could not reach the Bench");
+  } finally {
+    busy = false;
+    document.querySelectorAll("button").forEach((b) => { b.disabled = false; });
   }
 }
 
-async function sendInputs() {
-  const body = { a: Number(document.getElementById("a").value), b: Number(document.getElementById("b").value), op: Number(document.getElementById("op").value) };
-  const response = await fetch("/api/inputs", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
-  if (!response.ok) {
-    let message = "The Bench refused those inputs.";
-    try { message = (await response.json()).message || message; } catch (e) { /* keep default */ }
-    showError(message);
-    return;
-  }
-  showError("");
-  const r = await response.json();
-  const answer = document.getElementById("answer");
-  answer.replaceChildren(el("strong", "Result: " + r.result + " (0x" + r.result.toString(16).toUpperCase().padStart(4, "0") + ")"));
-  ["zero", "negative", "carry", "overflow"].forEach((flag) => answer.append(el("span", flag + " " + r[flag], "lamp" + (r[flag] ? " on" : ""))));
-  await load(path);
-}
-
-document.getElementById("inputs").addEventListener("submit", setInputs);
-load("").then(() => setInputs(new Event("submit", { cancelable: true })));
+document.querySelectorAll("button[data-size]").forEach((b) => {
+  b.addEventListener("click", () => {
+    const body = { size: b.dataset.size };
+    if (b.dataset.count) body.count = Number(b.dataset.count);
+    send("/api/step", body);
+  });
+});
+document.getElementById("rewind").addEventListener("click", () => send("/api/rewind", {}));
+document.getElementById("run").addEventListener("click", () => send("/api/run", { instructions: Number(document.getElementById("count").value) }));
+document.getElementById("load").addEventListener("click", () => send("/api/program", { source: document.getElementById("source").value }));
+send("/api/machine");
 </script>
 </body>
 </html>

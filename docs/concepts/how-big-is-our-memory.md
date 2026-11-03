@@ -186,8 +186,8 @@ program, which is why we will need a faster way of running it too.
 
 ## What's Next
 
-The RAM is big enough and quick enough, so 4K words it stays. We have now built
-every part up to memory, but so far we have only seen numbers printed on a
-screen. Next comes [The Bench](the-bench.md): a workbench with the lid off, where you can look
-inside the ALU, and so every adder and gate under it, and watch its real gates
-working. Registers and RAM join the Bench when the CPU does.
+The RAM is big enough and quick enough, so 4K words it stays. We now have every
+part we need: gates, an ALU, registers and memory. What we lack is something to
+*use* them. Read [What Is a CPU?](what-is-a-cpu.md) to meet the machine that
+follows a list of instructions, one after another. [The Bench](the-bench.md) comes
+later in the climb, once there is a whole computer to look inside.

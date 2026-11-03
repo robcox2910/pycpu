@@ -1,9 +1,11 @@
-"""The Bench's web app: one real ALU, a page to look at it, and two small routes.
+"""The Bench's web app: one real running computer, a page to watch it, and a few small routes.
 
-Think of a workshop with a single radio on the bench. Visitors can turn its dial
-(`/api/inputs`) and ask what any part is carrying (`/api/view`), but the radio is
-always the same real one. Here the radio is an ALU built from NAND gates, and the
-answers come from its simulator, never from a copy.
+Think of a workshop with a single radio on the bench, switched on, its lid off.
+Visitors can freeze it, nudge it forward (`/api/step`), wind it back (`/api/rewind`),
+let it play (`/api/run`), put a new song on (`/api/program`), read its dials
+(`/api/machine`) and ask what any part is carrying (`/api/view`). The radio is always
+the same real one. Here it is a `Computer` whose paused gate engine is the CPU and RAM
+built from NAND gates, and every answer is read from it, never from a copy.
 """
 
 from collections.abc import Mapping
@@ -12,86 +14,225 @@ from importlib import resources
 from pyweb.app import App
 from pyweb.messages import HTTPError, HttpRequest, HttpResponse, html, json
 
-from pycpu.arithmetic import AluOp, alu
-from pycpu.circuit import Circuit
-from pycpu.simulator import Simulator
+from pycpu.assembler import AssemblyError, assemble, disassemble
+from pycpu.computer import Computer, StepSize
+from pycpu.isa import Fault
+from pycpu.memory import RAM_ADDRESS_BITS
+from pycpu.state import MachineState
 from pycpu.view import circuit_view
 
-WORD_BITS = 16
-OP_BITS = 3
-MAX_WORD = (1 << WORD_BITS) - 1
 BAD_REQUEST = 400
 NOT_FOUND = 404
+MAX_RUN = 10_000  # the most instructions one press of Run may ask for
+MAX_GATE_STEPS = 100_000  # the most gate steps one request may ask for
+WINDOW_WORDS = 16  # how many words of memory the page shows
+WINDOW_BEHIND = 4  # how many of them sit before pc
+
+DEMO_PROGRAM = """\
+    set r1, 0xFFFF    ; the output port's address
+    li r2, 3          ; count down from 3
+loop:
+    call show         ; print the digit for r2
+    addi r2, -1
+    br ne, loop       ; again, until r2 reaches 0
+    halt
+show:
+    li r3, 48         ; 48 is the character '0'
+    add r3, r3, r2    ; '0' + r2 is the digit for r2
+    store r3, [r1]    ; send it to the screen
+    ret
+"""
 
 
-def _read_number(body: Mapping[str, object], name: str, largest: int) -> int:
-    """Return `body[name]` as a whole number from 0 to `largest`, or raise a 400.
+def _whole_number(body: Mapping[str, object], name: str, largest: int, default: int | None) -> int:
+    """Return `body[name]` as a whole number from 1 to `largest`, or raise a 400.
 
-    Booleans are refused even though Python counts them as numbers, because
-    `true` is not what anyone means by the number 1 on a dial.
+    A missing value takes `default` when there is one. Booleans are refused even
+    though Python counts them as numbers, because `true` is not what anyone means
+    by "run 1 instruction".
     """
-    value = body.get(name)
-    if isinstance(value, bool) or not isinstance(value, int) or not 0 <= value <= largest:
-        msg = f"{name} must be a whole number from 0 to {largest}"
+    value = body.get(name, default)
+    if isinstance(value, bool) or not isinstance(value, int) or not 1 <= value <= largest:
+        msg = f"{name} must be a whole number from 1 to {largest}"
         raise HTTPError(BAD_REQUEST, msg)
     return value
 
 
-def create_bench() -> App:
-    """Build the Bench app, with a fresh ALU switched on and all inputs at 0.
+def _object(request: HttpRequest, what: str) -> Mapping[str, object]:
+    """Return the request's JSON body as an object, or raise a 400 saying what to send."""
+    body = request.json()
+    if not isinstance(body, dict):
+        raise HTTPError(BAD_REQUEST, f"send a JSON object with {what}")
+    return body
+
+
+def _cell(state: MachineState, address: int) -> dict[str, object]:
+    """Describe one word of memory as its address, its number and its assembly text."""
+    word = state.memory[address]
+    return {"address": address, "word": word, "text": disassemble(word, address)}
+
+
+def machine_picture(computer: Computer) -> dict[str, object]:
+    """Describe the paused computer the way the Bench page draws it.
+
+    Everything is read from the gate engine while paused. The current instruction
+    is the one that started at `instruction_start.pc`, read from memory as it was
+    then, because half way through an instruction `pc` has already moved on. When
+    that address is outside memory (a fetch fault) its word is None and its text
+    is empty. The memory window holds 16 words, starting 4 before `pc` (or at 0), and
+    slides back so it never runs past the last word: a `pc` far outside memory still
+    shows the final 16 words. `fault` is the name of the `Fault` (such as
+    `"BAD_ADDRESS"`) when the machine has halted with one of those codes, else None;
+    a program's own `halt 1` to `halt 3` shares those codes.
+
+    Args:
+        computer: The computer to describe.
 
     Returns:
-        A PyWeb `App` with three routes: `GET /` (the page), `GET /api/view`
-        (look inside a part) and `POST /api/inputs` (turn the dial).
+        A dictionary ready to send as JSON; the Bench page's routes all answer with it.
 
     """
-    circuit = Circuit()
-    a = circuit.bus_input("a", WORD_BITS)
-    b = circuit.bus_input("b", WORD_BITS)
-    op = circuit.bus_input("op", OP_BITS)
-    out = alu(circuit, a, b, op)
-    sim = Simulator(circuit)
-    sim.settle()
+    state = computer.state()
+    start = computer.instruction_start
+    if start.pc < len(start.memory):
+        instruction = _cell(start, start.pc)
+    else:
+        instruction = {"address": start.pc, "word": None, "text": ""}
+    first = max(0, min(state.pc - WINDOW_BEHIND, len(state.memory) - WINDOW_WORDS))
+    last = min(first + WINDOW_WORDS, len(state.memory))
+    fault = Fault(state.halt_code).name if state.halted and state.halt_code in Fault else None
+    return {
+        "paused": computer.paused,
+        "phase": computer.gate.phase.name.lower(),
+        "at_boundary": computer.gate.at_boundary,
+        "registers": list(state.registers),
+        "pc": state.pc,
+        "sp": state.sp,
+        "flags": state.flags._asdict(),
+        "halted": state.halted,
+        "halt_code": state.halt_code,
+        "fault": fault,
+        "output": state.output_text,
+        "instruction": instruction,
+        "memory": [_cell(state, address) for address in range(first, last)],
+    }
+
+
+def step_paused(computer: Computer, body: Mapping[str, object]) -> None:
+    """Step the paused computer as a `POST /api/step` body asks, or raise a 400.
+
+    `size` is `"gate"`, `"cycle"` or `"instruction"`. A gate step may carry a
+    `count` from 1 to `MAX_GATE_STEPS`, because one instruction is thousands of
+    gate steps; the steps stop early if the machine halts. A cycle or instruction
+    step may only say `count` 1.
+
+    Args:
+        computer: The paused computer to move.
+        body: The request's JSON object.
+
+    """
+    size = body.get("size")
+    if size not in tuple(StepSize):
+        sizes = ", ".join(f'"{s}"' for s in StepSize)
+        raise HTTPError(BAD_REQUEST, f"size must be one of {sizes}")
+    size = StepSize(str(size))
+    count = _whole_number(body, "count", MAX_GATE_STEPS, 1)
+    if size != StepSize.GATE and count != 1:
+        raise HTTPError(BAD_REQUEST, "count is only for gate steps")
+    for _ in range(count):
+        micro = computer.step(size)
+        # Only an instruction's end can leave the machine halted, so look only there.
+        if micro is not None and micro.kind == "end" and computer.state().halted:
+            break
+
+
+def load_source(computer: Computer, source: object) -> None:
+    """Assemble `source`, load it and pause at its start, or raise a 400 naming the line.
+
+    Args:
+        computer: The computer to load; it is left as it was when the text is wrong.
+        source: The assembly text from the request.
+
+    """
+    if not isinstance(source, str):
+        raise HTTPError(BAD_REQUEST, "source must be the assembly text")
+    try:
+        assembled = assemble(source, words=computer.gate.words)
+    except AssemblyError as error:
+        raise HTTPError(BAD_REQUEST, str(error)) from None
+    computer.load_program(assembled)
+    computer.pause()
+
+
+def create_bench(address_bits: int = RAM_ADDRESS_BITS) -> App:
+    """Build the Bench app around one `Computer` running `DEMO_PROGRAM`, paused at its start.
+
+    Args:
+        address_bits: How many address wires the RAM has. The real Bench uses the
+            full 12 (4,096 words), which takes a few seconds to build; tests and the
+            docs use 6 (64 words).
+
+    Returns:
+        A PyWeb `App` with the routes `GET /` (the page), `GET /api/machine`,
+        `GET /api/view`, `POST /api/step`, `POST /api/rewind`, `POST /api/run`
+        and `POST /api/program`. See the Bench page in the docs for each one.
+
+    """
+    computer = Computer(assemble(DEMO_PROGRAM, words=1 << address_bits), address_bits)
+    computer.pause()
     page = resources.files("pycpu.bench").joinpath("page.html").read_text(encoding="utf-8")
     app = App()
+
+    def answer() -> HttpResponse:
+        """Answer with the machine picture, as every route that moves the machine does."""
+        return json(machine_picture(computer))  # pyright: ignore[reportArgumentType]
 
     @app.get("/")
     def front_page(_request: HttpRequest) -> HttpResponse:  # pyright: ignore[reportUnusedFunction]
         """Serve the Bench page."""
         return html(page)
 
+    @app.get("/api/machine")
+    def machine(_request: HttpRequest) -> HttpResponse:  # pyright: ignore[reportUnusedFunction]
+        """Describe the computer as it is now."""
+        return answer()
+
     @app.get("/api/view")
     def view(request: HttpRequest) -> HttpResponse:  # pyright: ignore[reportUnusedFunction]
         """Describe the part named by `?path=`, or the whole circuit with no path."""
         path = request.query.get("path", "") or ""
         try:
-            described = circuit_view(sim, path)
+            described = circuit_view(computer.gate.simulator, path)
         except KeyError:
             raise HTTPError(NOT_FOUND, f"No part called {path}") from None
         return json(described)  # pyright: ignore[reportArgumentType]
 
-    @app.post("/api/inputs")
-    def inputs(request: HttpRequest) -> HttpResponse:  # pyright: ignore[reportUnusedFunction]
-        """Set a, b and op, let the gates settle, and report the result and flags."""
-        body = request.json()
-        if not isinstance(body, dict):
-            raise HTTPError(BAD_REQUEST, "send a JSON object with a, b and op")
-        fields = body
-        first = _read_number(fields, "a", MAX_WORD)
-        second = _read_number(fields, "b", MAX_WORD)
-        setting = _read_number(fields, "op", len(AluOp) - 1)
-        sim.set_bus(a, first)
-        sim.set_bus(b, second)
-        sim.set_bus(op, setting)
-        sim.settle()
-        return json(
-            {
-                "result": sim.get_bus(out.result),
-                "zero": sim.get(out.zero),
-                "negative": sim.get(out.negative),
-                "carry": sim.get(out.carry),
-                "overflow": sim.get(out.overflow),
-            }
-        )
+    @app.post("/api/step")
+    def step(request: HttpRequest) -> HttpResponse:  # pyright: ignore[reportUnusedFunction]
+        """Step by a gate (`count` of them), a clock beat or an instruction."""
+        step_paused(computer, _object(request, "a size"))
+        return answer()
+
+    @app.post("/api/rewind")
+    def rewind(_request: HttpRequest) -> HttpResponse:  # pyright: ignore[reportUnusedFunction]
+        """Go back to the start of the current instruction."""
+        computer.rewind()
+        return answer()
+
+    @app.post("/api/run")
+    def run(request: HttpRequest) -> HttpResponse:  # pyright: ignore[reportUnusedFunction]
+        """Resume, run some instructions on the fast engine, and pause again."""
+        body = _object(request, "a number of instructions")
+        instructions = _whole_number(body, "instructions", MAX_RUN, None)
+        computer.resume()
+        computer.run(instructions)
+        computer.pause()
+        return answer()
+
+    @app.post("/api/program")
+    def program(request: HttpRequest) -> HttpResponse:  # pyright: ignore[reportUnusedFunction]
+        """Assemble new source and load it, or answer 400 naming the faulty line."""
+        load_source(computer, _object(request, "the assembly text as source").get("source"))
+        return answer()
 
     return app

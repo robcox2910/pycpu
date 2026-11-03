@@ -273,3 +273,14 @@ def test_random_jumps_touch_a_small_part_of_the_circuit(byte: Rig) -> None:
         costs.append(byte.sim.settle())
     assert max(costs) < JUMP_BUDGET
     assert max(costs) * 4 < byte.c.gate_count  # even the worst jump leaves most gates still
+
+
+@pytest.mark.slow
+@pytest.mark.timeout(600)
+def test_the_last_word_of_the_full_ram_can_be_written_and_read() -> None:
+    """Address 4095, the very last word, works at full size and disturbs its neighbour not at all."""
+    rig = Rig(RAM_ADDRESS_BITS)
+    last = RAM_WORDS - 1
+    rig.write(last, SOME_VALUE)
+    assert rig.read(last) == SOME_VALUE
+    assert rig.read(last - 1) == 0

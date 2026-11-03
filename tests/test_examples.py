@@ -15,6 +15,7 @@ EXPECTED = {
     "add_two_numbers.py": "1234 + 4321 = 5555 (carry out 0)",
     "alu_tour.py": "SUB    ->     7   flags: carry",
     "counter.py": "beats: 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 0 1 2 3 4",
+    "run_assembly.py": "Hi",
 }
 
 

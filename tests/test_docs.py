@@ -25,7 +25,7 @@ KEY_IDEAS: dict[str, list[str]] = {
     "from-scratch.md": ["petzold", "nand", "faking", "pebble"],
     "concepts/bits-and-binary.md": ["bit", "binary", "hex"],
     "concepts/switches-and-nand.md": ["nand", "wire", "gate", "truth table"],
-    "concepts/simulating-a-circuit.md": ["event", "settle", "oscillat", "netlist"],
+    "concepts/simulating-a-circuit.md": ["event", "settle", "oscillat", "netlist", "step"],
     "concepts/gates.md": ["nand", "truth table", "xor"],
     "concepts/choosing-and-decoding.md": ["mux", "decoder"],
     "concepts/looking-inside.md": ["scope", "zoom", "real", "faking"],
@@ -37,7 +37,16 @@ KEY_IDEAS: dict[str, list[str]] = {
     "concepts/registers.md": ["register", "load", "counter"],
     "concepts/ram.md": ["address", "word line", "read", "write"],
     "concepts/how-big-is-our-memory.md": ["gates", "4k", "measured"],
-    "concepts/the-bench.md": ["bench", "alu", "gate"],
+    "concepts/what-is-a-cpu.md": ["instruction", "register", "program counter"],
+    "concepts/machine-code.md": ["opcode", "flag", "fault"],
+    "concepts/assembly-language.md": ["assembler", "label", "mnemonic"],
+    "concepts/the-control-unit.md": ["control unit", "decode", "register file"],
+    "concepts/fetch-decode-execute.md": ["fetch", "execute", "instruction register"],
+    "concepts/the-stack.md": ["stack", "push", "pop", "stack pointer"],
+    "concepts/calling-and-returning.md": ["call", "return", "return address"],
+    "concepts/two-engines.md": ["fast engine", "gate engine", "lockstep"],
+    "concepts/pausing-and-rewinding.md": ["pause", "rewind", "resume"],
+    "concepts/the-bench.md": ["bench", "register", "gate", "instruction"],
 }
 
 
@@ -96,9 +105,12 @@ def check_whats_next(text: str, name: str) -> None:
 
 
 def _last_nav_page() -> str:
-    """Return the final page listed in mkdocs.yml, the one with nowhere further to climb."""
+    """Return the last concept page in mkdocs.yml, the one with nowhere further to climb.
+
+    The Reference section sits after the climb, and is not a step on it.
+    """
     nav = (ROOT / "mkdocs.yml").read_text(encoding="utf-8")
-    return re.findall(r":\s*(\S+\.md)\s*$", nav, flags=re.MULTILINE)[-1]
+    return re.findall(r":\s*(concepts/\S+\.md)\s*$", nav, flags=re.MULTILINE)[-1]
 
 
 def run_try_it(text: str, name: str) -> None:
