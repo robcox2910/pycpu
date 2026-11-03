@@ -10,7 +10,7 @@ import pytest
 
 from pycpu.fast import FastMachine
 from pycpu.isa import Fault
-from pycpu.translator import run_pebble, translate
+from pycpu.translator import UnsupportedFeature, run_pebble, translate
 
 THREE_DEEP = (
     "fn c(n) {\n    return 10 OP n\n}\nfn b(n) {\n    return c(n)\n}\n"
@@ -20,10 +20,26 @@ ENDLESS_RECURSION = "fn f(n) {\n    return f(n + 1)\n}\nprint(f(0))"
 ENDLESS_LOOP = "let i = 0\nwhile i < 1 {\n    i = i + 0\n}"
 DIVISION_LINE = 2
 TOP_LEVEL_LINE = 3
+CALL_LINE = 4
+TOP_LEVEL_CALL_LINE = 5
 TWO_STEP_BUDGET = 500
 # Measured: the three-deep program stops with pc one past its `halt 3` word.
 HALT_WORD = 42
 ENDLESS_RECURSION_STEPS = 23654
+
+
+def _nearly_full_program() -> str:
+    """Build a program whose text leaves so little RAM that calling `f` once overflows."""
+    for length in range(3900, 4000):
+        source = f'fn f(n) {{\n    return n\n}}\nprint("{"a" * length}")\nprint(f(1))'
+        try:
+            run = run_pebble(source)
+        except UnsupportedFeature:
+            break
+        if run.fault is Fault.STACK_OVERFLOW:
+            return source
+    msg = "no length of text made the first call overflow"
+    raise AssertionError(msg)
 
 
 def vm_error_line(source: str) -> int:
@@ -79,9 +95,23 @@ class TestStackOverflow:
         assert run.line == DIVISION_LINE
         assert run.steps == ENDLESS_RECURSION_STEPS
 
-    def test_the_vm_has_no_clean_error_for_the_same_program(self) -> None:
-        """The program is endless on the VM, so it is only checked on PyCPU (see report)."""
+    def test_a_multi_line_body_names_the_line_of_the_call_not_the_function(self) -> None:
+        """The call `f(y)` on line 4 is blamed, not line 2 where `f`'s body starts."""
+        source = "fn f(n) {\n    let x = n + 1\n    let y = x\n    return f(y)\n}\nprint(f(0))"
+        run = run_pebble(source)
+        assert run.fault is Fault.STACK_OVERFLOW
+        assert run.line == CALL_LINE
+
+    def test_nothing_is_printed_by_the_endless_recursion(self) -> None:
+        """The overflow stops the program before `print` runs."""
         assert run_pebble(ENDLESS_RECURSION).output == ""
+
+    def test_a_call_from_the_top_level_that_never_fits_names_that_call(self) -> None:
+        """With almost no RAM left, the very first call on line 5 overflows and is blamed."""
+        run = run_pebble(_nearly_full_program())
+        assert run.fault is Fault.STACK_OVERFLOW
+        assert run.line == TOP_LEVEL_CALL_LINE
+        assert run.describe().startswith("The stack ran out of room at line 5")
 
 
 class TestRunningOutOfSteps:
@@ -117,7 +147,7 @@ class TestDescribe:
     def test_stack_overflow(self) -> None:
         """The sentence names the line and suggests what to look for."""
         assert run_pebble(ENDLESS_RECURSION).describe() == (
-            "The stack ran out of room at line 2 (does a function keep calling itself?)"
+            "The stack ran out of room at line 2 (the call on that line found no room for another frame; does a function keep calling itself?)"
         )
 
     def test_still_running(self) -> None:

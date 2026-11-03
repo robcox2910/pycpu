@@ -34,7 +34,8 @@ on purpose.
 ```python
 from pebble import PebbleError, run_source
 
-from pycpu.translator import run_pebble, translate
+from pycpu.isa import Fault
+from pycpu.translator import PebbleRun, run_pebble, translate
 
 source = """fn c(n) {
     return 10 // n
@@ -66,6 +67,8 @@ print(run_pebble(endless_recursion).describe())
 endless_loop = "let i = 0\nwhile i < 1 {\n    i = i + 0\n}"
 print(run_pebble(endless_loop, max_steps=5000).describe())
 print(run_pebble("print(7)").describe())
+broken = PebbleRun("", True, Fault.BAD_ADDRESS, 3, 1)
+print(broken.describe())
 # Output:
 # Pebble VM: Division by zero at line 2, column 15
 # PyCPU:     Division by zero at line 2
@@ -73,15 +76,19 @@ print(run_pebble("print(7)").describe())
 #     cmp  r2, r0             ; is the divisor 0?
 #     br   ne, __fn_c_divisor_ok_2 ; no: go ahead and divide
 #     halt 3                  ; yes: DIVIDE_BY_ZERO
-# The stack ran out of room at line 2 (does a function keep calling itself?)
+# The stack ran out of room at line 2 (the call on that line found no room for another frame; does a function keep calling itself?)
 # The program was still running after 5000 steps
 # The program finished
+# The program used a memory address that does not exist at line 3
 ```
 
 Both machines name line 2, even though the mistake happened three calls deep and `a(0)`
-is on line 11. The `1` was printed before the whistle, and nothing after it was. Your
-three `describe()` lines for the other endings say what stopped the machine in plain
-words. The last one is the happy ending: no fault, so there is nothing to explain.
+is on line 11. The `1` was printed before the whistle, and nothing after it was. The
+`describe()` lines for the other endings say what stopped the machine in plain
+words. The next one is the happy ending: no fault, so there is nothing to explain. The final
+sentence is for a bad address. Our translated programs do not normally reach one, so we
+build the ending by hand (a `PebbleRun` made up for the purpose) just to show what it
+says.
 
 ## How It Works
 
@@ -99,7 +106,7 @@ Every one is a `halt` with a different halt code, defined as `Fault` in
  an address that is not RAM     the machine itself, mid-fetch/execute  1  BAD_ADDRESS
 ```
 
-The two whistles in the first rows are ordinary instructions that the translator
+The two whistles in the first two rows are ordinary instructions that the translator
 writes. Look at the cards in Try It: before every `//` or `%` it writes `cmp r2, r0`
 ("is the divisor 0?"), a branch that skips over the whistle when the answer is no, and
 `halt 3` for when it is yes. And each function begins by checking that there is room
@@ -116,6 +123,19 @@ the counter one past the word that did it, so the word to look at is `pc - 1`. A
 caused by *fetching* (the counter pointing outside memory) leaves the counter on the bad
 address itself, so the word is `pc`. `run_pebble` makes this choice in
 `src/pycpu/translator/program.py`.
+
+**Which line does a stack overflow name?** Not the line where the function starts, but
+the line of the **call** that needed one more frame than the stack had room for. The
+machine finds it from a note the call itself left behind. The `halt 2` check runs
+*before* the new frame pushes anything, so the top of the stack still holds the **return
+address** that `call` pushed (see [Calling and Returning](calling-and-returning.md)).
+The `call` instruction is the word just before that address, and the source map knows
+its line. In the endless `f` of Try It, the call `f(n + 1)` is on line 2, so the sentence
+names line 2. If the function body had been spread over several lines, the line of its
+`return f(y)` would be named. If the very first call from the top of the program does not
+fit, that call's line is named. The one exception is the top level of the program having
+no room even for its own frame, where nobody called anybody, so the line is the first
+line of the program.
 
 **3. The source map turns the word into a Pebble line.** When the translator wrote the
 assembly, every card began with a comment such as `; line 2: FLOOR_DIVIDE`. It kept a
@@ -152,9 +172,9 @@ anything: *we* gave up. It is like a coach saying "ten more minutes and then we 
 home".
 
 Pebble's own VM seems to have no limit on recursion. We ran the same endless recursion on it
-and it was still going after a minute, with no error at all. On PyCPU the stack is a
-fixed amount of RAM, so the whistle blows after a fraction of a second (about 24 thousand
-steps, which a test pins). A real computer is the same: memory is finite, so endless recursion always
+and stopped it after a long wait, with no error at all. On PyCPU the stack is a
+fixed amount of RAM, so the whistle blows almost at once, after about 24 thousand steps
+(a test pins the exact number). A real computer is the same: memory is finite, so endless recursion always
 ends in an overflow, never in an endless run.
 
 ## Why Does This Matter?
@@ -162,9 +182,9 @@ ends in an overflow, never in an endless run.
 Without faults, a broken program would not stop. It would keep going on wrong numbers,
 and you would see a strange answer far away from where the mistake was made. A halt code
 plus a source map turns "something is wrong somewhere" into "line 2". The same trick is
-how real programs report crashes: a "segmentation fault" is the machine's fault code for
-a bad address, and a crash report with a line number comes from a map like ours, linking
-the machine's words back to the programmer's source. Debuggers read exactly this kind of
+how real programs report crashes: a bad-address fault, which the operating system reports as a
+"segmentation fault". A crash report with a line number comes from a map like ours,
+linking the machine's words back to the programmer's source. Debuggers read exactly this kind of
 map to show you your own code while the machine is running something else.
 
 It is also why the machine must stop *by itself*: a program cannot be trusted to check

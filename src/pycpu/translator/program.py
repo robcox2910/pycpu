@@ -83,7 +83,7 @@ class PebbleRun:
         if self.fault is Fault.DIVIDE_BY_ZERO:
             return f"Division by zero{where}"
         if self.fault is Fault.STACK_OVERFLOW:
-            return f"The stack ran out of room{where} (does a function keep calling itself?)"
+            return f"The stack ran out of room{where} (the call on that line found no room for another frame; does a function keep calling itself?)"
         return f"The program used a memory address that does not exist{where}"
 
 
@@ -118,6 +118,29 @@ def translate(source: str) -> TranslatedProgram:
     return TranslatedProgram(source, assembly.text, program, lines)
 
 
+def _fault_line(
+    translated: TranslatedProgram,
+    pc: int,
+    sp: int,
+    memory: tuple[int, ...],
+    words: int,
+    fault: Fault,
+) -> int | None:
+    """Find the Pebble line to blame for a fault.
+
+    A stack overflow is blamed on the call that needed one more frame than there was
+    room for. The room check comes before the prologue's `push r7`, so nothing has been
+    pushed yet and the top of the stack still holds the return address `call` left; the
+    call instruction is the word just before it. Main has no caller (the stack is still
+    empty), so its own first line is used. Any other fault is blamed on the faulting
+    word: `pc - 1` for an execute fault, `pc` for a fetch fault.
+    """
+    if fault is Fault.STACK_OVERFLOW and sp < words:
+        return translated.line_at(memory[sp] - 1)
+    # A fetch fault leaves pc on the bad address; any other fault has moved past it.
+    return translated.line_at(pc if pc >= words else pc - 1)
+
+
 def run_pebble(source: str, max_steps: int = 1_000_000) -> PebbleRun:
     """Translate a Pebble program and run it on the fast engine.
 
@@ -142,8 +165,6 @@ def run_pebble(source: str, max_steps: int = 1_000_000) -> PebbleRun:
     fault = Fault(state.halt_code) if state.halted and state.halt_code else None
     line = None
     if fault is not None:
-        # A fetch fault leaves pc on the bad address; any other fault has moved past it.
-        address = state.pc if state.pc >= machine.words else state.pc - 1
-        line = translated.line_at(address)
+        line = _fault_line(translated, state.pc, state.sp, state.memory, machine.words, fault)
     output = "".join(chr(code) for code in state.output)
     return PebbleRun(output, state.halted, fault, line, steps)
