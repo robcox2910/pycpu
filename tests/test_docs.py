@@ -49,6 +49,7 @@ KEY_IDEAS: dict[str, list[str]] = {
     "concepts/from-pebble-to-machine-code.md": ["bytecode", "translator", "assembly"],
     "concepts/variables-in-memory.md": ["variable", "frame", "frame pointer"],
     "concepts/why-16-bit-numbers-wrap.md": ["wrap", "16-bit", "overflow"],
+    "concepts/if-and-while-as-jumps.md": ["jump", "condition", "loop"],
     "concepts/multiply-and-divide.md": ["multiply", "shift", "remainder"],
     "concepts/printing-a-number.md": ["digit", "character", "output port"],
     "concepts/the-bench.md": ["bench", "register", "gate", "instruction"],

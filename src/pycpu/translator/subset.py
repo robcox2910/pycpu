@@ -47,8 +47,7 @@ TOO_MANY_VARIABLES = f"more than {MAX_VARIABLES} variables in one function"
 BIG_CHARACTERS = "emoji and other characters too big for one 16-bit word"
 ZERO_CHARACTER = "the \\0 character inside text"
 TOO_BIG = "programs too big to fit in memory with room for the stack"
-# Stand-ins until later tasks teach the translator these.
-CONTROL_FLOW_FOR_NOW = "if, while, comparisons and not (coming soon)"
+# A stand-in until a later task teaches the translator calls.
 FUNCTIONS_FOR_NOW = "calls to your own functions (coming soon)"
 
 _SINGULAR = frozenset({TEXT_BRACES, TEXT_OUTSIDE_PRINT, NULL_USED})
@@ -97,27 +96,24 @@ _OPCODE_FEATURES: dict[str, str] = {
     ),
     **dict.fromkeys((OpCode.SETUP_TRY, OpCode.POP_TRY, OpCode.THROW), TRY_CATCH),
     **dict.fromkeys((OpCode.YIELD, OpCode.AWAIT), GENERATORS),
-    **dict.fromkeys(
-        (
-            OpCode.JUMP,
-            OpCode.JUMP_IF_FALSE,
-            OpCode.JUMP_IF_FALSE_OR_POP,
-            OpCode.JUMP_IF_TRUE_OR_POP,
-            OpCode.LESS_THAN,
-            OpCode.LESS_EQUAL,
-            OpCode.GREATER_THAN,
-            OpCode.GREATER_EQUAL,
-            OpCode.EQUAL,
-            OpCode.NOT_EQUAL,
-            OpCode.NOT,
-        ),
-        CONTROL_FLOW_FOR_NOW,
-    ),
 }
 
 ARITHMETIC = frozenset(
     {OpCode.ADD, OpCode.SUBTRACT, OpCode.MULTIPLY, OpCode.FLOOR_DIVIDE, OpCode.MODULO}
 )
+COMPARISONS = frozenset(
+    {
+        OpCode.LESS_THAN,
+        OpCode.LESS_EQUAL,
+        OpCode.GREATER_THAN,
+        OpCode.GREATER_EQUAL,
+        OpCode.EQUAL,
+        OpCode.NOT_EQUAL,
+    }
+)
+# `and` and `or`: jump keeping the value if it decides the answer, else pop it.
+KEEP_OR_POP = frozenset({OpCode.JUMP_IF_FALSE_OR_POP, OpCode.JUMP_IF_TRUE_OR_POP})
+JUMPS = frozenset({OpCode.JUMP, OpCode.JUMP_IF_FALSE, *KEEP_OR_POP})
 _SUPPORTED = frozenset(
     {
         OpCode.LOAD_CONST,
@@ -129,7 +125,10 @@ _SUPPORTED = frozenset(
         OpCode.CHECK_TYPE,
         OpCode.HALT,
         OpCode.RETURN,
+        OpCode.NOT,
         *ARITHMETIC,
+        *COMPARISONS,
+        *JUMPS,
     }
 )
 # Refused instructions whose effect on the stack we still follow, so the kind check
@@ -225,11 +224,50 @@ class _Problem:
 
 @dataclass(frozen=True)
 class _Slot:
-    """One slot of Pebble's stack: its kind, and where the value in it was made."""
+    """One slot of Pebble's stack: its kind, and where the value in it was made.
+
+    `mixed` is True when paths that brought different kinds met in this slot, such as
+    the number and the text in `1 or "a"`: such a value cannot be printed as text.
+    """
 
     kind: Kind
     made_at: SourceLocation | None
     null_literal: bool = False
+    mixed: bool = False
+
+
+# How "awkward" each kind is. Where two paths meet, the more awkward kind wins, so a
+# value that might be text is treated as text and refused wherever text is refused.
+_AWKWARDNESS = {Kind.INT: 0, Kind.BOOL: 1, Kind.NULL: 2, Kind.MAYBE: 3, Kind.TEXT: 4}
+
+type _Stack = tuple[_Slot, ...]
+
+
+def _place_key(place: SourceLocation | None) -> tuple[int, int]:
+    """Sort places in the source; no place goes last."""
+    return (WORD_MAX, WORD_MAX) if place is None else (place.line, place.column)
+
+
+def _meet(first: _Slot, second: _Slot) -> _Slot:
+    """Mix two slots that arrive at the same instruction by different paths.
+
+    Two numbers stay a number; a number and a true/false make a true/false (the
+    contract's rule for `and`/`or`); otherwise the more awkward kind wins. The value is
+    said to be made at the earliest place either path made it, so errors point at the
+    start of an `and`/`or` rather than its end.
+    """
+    if first == second:
+        return first
+    winner = max(first, second, key=lambda slot: _AWKWARDNESS[slot.kind])
+    made_at = winner.made_at
+    if first.kind is second.kind:
+        made_at = min(first.made_at, second.made_at, key=_place_key)
+    return _Slot(
+        winner.kind,
+        made_at,
+        null_literal=first.null_literal or second.null_literal,
+        mixed=first.mixed or second.mixed or first.kind is not second.kind,
+    )
 
 
 def located(instructions: Sequence[Instruction]) -> list[SourceLocation | None]:
@@ -248,7 +286,14 @@ def located(instructions: Sequence[Instruction]) -> list[SourceLocation | None]:
 
 
 class _CodeChecker:
-    """Check one code object: walk it once, keeping the kind of every stack slot."""
+    """Check one code object: follow every path, keeping the kind of every stack slot.
+
+    It works like a to-do list. Start with instruction 0 and an empty stack. Playing an
+    instruction gives the stack each next instruction will see (two of them after a jump
+    that may or may not be taken); a next instruction goes on the list the first time it
+    is reached, and again whenever a new path changes what it sees. When the list is
+    empty, every path has been followed.
+    """
 
     def __init__(self, name: str, code: CodeObject, program: CompiledProgram) -> None:
         """Get ready to check `code`, which belongs to `program`."""
@@ -264,18 +309,14 @@ class _CodeChecker:
         self.deepest = 0
 
     def check(self) -> CheckedCode:
-        """Walk every instruction and return what the translator needs to know."""
-        walking = True
+        """Check every instruction and every path, and return what the translator needs."""
         for index, instruction in enumerate(self.code.instructions):
-            place = self.places[index]
             feature = self._opcode_problem(instruction)
             if feature is not None:
-                self._problem(feature, place)
-                # Most refused instructions have a stack effect we do not follow, so
-                # stop tracking kinds there and only look for opcode problems.
-                walking = walking and instruction.opcode in _KEEP_WALKING
-            if walking:
-                walking = self._step(index, instruction, place)
+                self._problem(feature, self.places[index])
+            if instruction.opcode == OpCode.STORE_NAME:
+                self._store(str(instruction.operand), self.places[index])
+        self._follow_every_path()
         if self.problems:
             first = min(self.problems, key=_Problem.key)
             location = first.location
@@ -291,6 +332,41 @@ class _CodeChecker:
             frozenset(self.prints_text),
             self.deepest,
         )
+
+    def _follow_every_path(self) -> None:
+        """Play the code along every path, mixing kinds where paths meet."""
+        instructions = self.code.instructions
+        seen: dict[int, _Stack] = {0: ()} if instructions else {}
+        todo = set(seen)
+        while todo:
+            index = min(todo)
+            todo.remove(index)
+            instruction = instructions[index]
+            # A refused instruction's effect on the stack is not followed (most are
+            # refused precisely because PyCPU has no idea what they would do).
+            if self._opcode_problem(instruction) and instruction.opcode not in _KEEP_WALKING:
+                continue
+            self.stack = list(seen[index])
+            for target, stack in self._step(index, instruction, self.places[index]):
+                if self._arrive(target, stack, seen):
+                    todo.add(target)
+
+    def _arrive(self, target: int, stack: _Stack, seen: dict[int, _Stack]) -> bool:
+        """Bring a stack to instruction `target`; return True if what it sees changed."""
+        before = seen.get(target)
+        if before is None:
+            seen[target] = stack
+            return True
+        if len(before) != len(stack):
+            # Pebble's compiler promises this never happens, so it is our bug or Pebble's.
+            msg = (
+                f"translator bug: two paths reach instruction {target} of {self.name} "
+                f"with different stack depths ({len(before)} and {len(stack)})"
+            )
+            raise PebbleCPUError(msg)
+        after = tuple(_meet(old, new) for old, new in zip(before, stack, strict=True))
+        seen[target] = after
+        return after != before
 
     def _problem(self, feature: str, place: SourceLocation | None) -> None:
         """Note one problem; the earliest in the source is reported in the end."""
@@ -346,37 +422,70 @@ class _CodeChecker:
         elif slot.kind in refusals:
             self._problem(refusals[slot.kind], slot.made_at)
 
-    def _step(self, index: int, instruction: Instruction, place: SourceLocation | None) -> bool:
-        """Play one instruction on the imagined stack; return False to stop walking."""
+    def _need_condition(self, slot: _Slot) -> None:
+        """Complain unless a slot can steer a jump: a number or a true/false.
+
+        Any word can be tested against 0, so both are fine. Text cannot: its word is an
+        address, never 0, but Pebble calls empty text false.
+        """
+        if slot.kind is not Kind.BOOL:
+            self._need_number(slot)
+
+    def _step(
+        self, index: int, instruction: Instruction, place: SourceLocation | None
+    ) -> list[tuple[int, _Stack]]:
+        """Play one instruction; return each instruction that may come next, with its stack."""
+        opcode, target = instruction.opcode, instruction.operand
+        if opcode in (OpCode.HALT, OpCode.RETURN):
+            self._play(index, instruction, place)
+            return []
+        if opcode == OpCode.JUMP:
+            return [(int(target or 0), tuple(self.stack))]
+        if opcode == OpCode.JUMP_IF_FALSE:
+            self._need_condition(self._pop())
+            stack = tuple(self.stack)
+            return [(index + 1, stack), (int(target or 0), stack)]
+        if opcode in KEEP_OR_POP:
+            # The value decides the answer: jump, keeping it. Otherwise: pop it, go on.
+            slot = self._pop()
+            self._need_condition(slot)
+            stack = tuple(self.stack)
+            return [(index + 1, stack), (int(target or 0), (*stack, slot))]
+        self._play(index, instruction, place)
+        return [(index + 1, tuple(self.stack))]
+
+    def _play(self, index: int, instruction: Instruction, place: SourceLocation | None) -> None:
+        """Play the stack effect of one instruction that is not a jump."""
         opcode = instruction.opcode
         if opcode == OpCode.LOAD_CONST:
             self._load_constant(int(instruction.operand or 0), place)
         elif opcode == OpCode.LOAD_NAME:
             self._push(Kind.INT, place)
-        elif opcode == OpCode.STORE_NAME:
-            self._need_number(self._pop())
-            self._store(str(instruction.operand), place)
-        elif opcode in ARITHMETIC:
+        elif opcode in (OpCode.STORE_NAME, OpCode.POP):
+            slot = self._pop()
+            if opcode == OpCode.STORE_NAME:
+                self._need_number(slot)
+        elif opcode in ARITHMETIC or opcode in COMPARISONS:
             right, left = self._pop(), self._pop()
             self._need_number(left)
             self._need_number(right)
-            self._push(Kind.INT, place)
+            self._push(Kind.INT if opcode in ARITHMETIC else Kind.BOOL, place)
         elif opcode == OpCode.NEGATE:
             self._need_number(self._pop())
             self._push(Kind.INT, place)
-        elif opcode == OpCode.POP:
-            self._pop()
+        elif opcode == OpCode.NOT:
+            self._need_condition(self._pop())
+            self._push(Kind.BOOL, place)
         elif opcode == OpCode.PRINT:
             slot = self._pop()
-            if slot.kind is Kind.TEXT:
+            if slot.kind is Kind.TEXT and not slot.mixed:
                 self.prints_text.add(index)
             else:
                 self._need_number(slot)
         elif opcode == OpCode.RETURN:
             slot = self._pop()
-            if slot.kind is not Kind.NULL:
+            if slot.kind is not Kind.NULL or slot.mixed:
                 self._need_number(slot)
-        return opcode not in (OpCode.HALT, OpCode.RETURN)
 
     def _load_constant(self, number: int, place: SourceLocation | None) -> None:
         """Push a constant's kind, complaining about values PyCPU cannot hold."""

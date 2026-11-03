@@ -138,6 +138,6 @@ is part of being a programmer.
 
 ## What's Next
 
-You have seen `__mul` and `__divmod` at work in these sums. Find out how a machine with no
-multiply or divide instruction builds them out of shifting and adding, in
-[Multiply and Divide](multiply-and-divide.md).
+So far every program has run from its first line to its last, once. Find out how a
+machine with no "if" and no "while" makes a program choose and repeat, in
+[If and While as Jumps](if-and-while-as-jumps.md).

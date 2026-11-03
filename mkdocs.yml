@@ -71,6 +71,7 @@ nav:
       - From Pebble to Machine Code: concepts/from-pebble-to-machine-code.md
       - Variables in Memory: concepts/variables-in-memory.md
       - Why 16-Bit Numbers Wrap: concepts/why-16-bit-numbers-wrap.md
+      - If and While as Jumps: concepts/if-and-while-as-jumps.md
       - Multiply and Divide: concepts/multiply-and-divide.md
       - Printing a Number: concepts/printing-a-number.md
   - The Bench: concepts/the-bench.md

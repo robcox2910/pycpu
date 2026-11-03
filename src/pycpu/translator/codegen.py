@@ -12,6 +12,10 @@ register from one step to the next. `r0` always holds 0, `r1` to `r6` are scratc
 and `r7` is the **frame pointer**: it points at the frame, the block of memory that holds
 this piece of code's variables, and a variable is always found at the same distance
 below it. See the Variables in Memory page for the picture.
+
+Jumps work like page numbers in a choose-your-own-adventure book. Every bytecode
+instruction that some jump goes to gets a label named after its position, such as
+`__main_7`, and a Pebble jump becomes a `jmp` to that label (see If and While as Jumps).
 """
 
 from dataclasses import dataclass
@@ -19,13 +23,29 @@ from dataclasses import dataclass
 from pebble import Instruction, OpCode
 
 from pycpu.translator.runtime import RUNTIME, RUNTIME_STACK_WORDS
-from pycpu.translator.subset import CheckedCode, CheckedProgram, PebbleCPUError, located
+from pycpu.translator.subset import (
+    COMPARISONS,
+    JUMPS,
+    CheckedCode,
+    CheckedProgram,
+    PebbleCPUError,
+    located,
+)
 
 BYTE_MAX = 255
 COLUMN = 24
 MAIN_LABEL = "__main"
 END_LABEL = "__end"
 _ALU = {OpCode.ADD: "add", OpCode.SUBTRACT: "sub"}
+# Each comparison, the signed branch condition that says "yes", and how to say it.
+_BRANCHES: dict[str, tuple[str, str]] = {
+    OpCode.LESS_THAN: ("lt", "<"),
+    OpCode.LESS_EQUAL: ("le", "<="),
+    OpCode.GREATER_THAN: ("gt", ">"),
+    OpCode.GREATER_EQUAL: ("ge", ">="),
+    OpCode.EQUAL: ("eq", "=="),
+    OpCode.NOT_EQUAL: ("ne", "!="),
+}
 
 
 @dataclass(frozen=True)
@@ -91,6 +111,8 @@ class _CodeWriter:
         self.places = located(self.code.instructions)
         first = next((place for place in self.places if place is not None), None)
         self.first_line = first.line if first else None
+        # Every instruction some jump goes to gets a label: its "page number".
+        self.targets = {int(i.operand or 0) for i in self.code.instructions if i.opcode in JUMPS}
 
     def write(self) -> None:
         """Write the prologue, then the cards for every bytecode instruction."""
@@ -98,8 +120,14 @@ class _CodeWriter:
         for index, instruction in enumerate(self.code.instructions):
             place = self.places[index]
             line = place.line if place else None
+            if index in self.targets:
+                self.out.raw(f"{self._page(index)}:", line)
             self.out.raw(f"    ; {self._describe(instruction, line)}", line)
             self._instruction(index, instruction, line)
+
+    def _page(self, index: int) -> str:
+        """Return the label of instruction `index`, such as `__main_7`."""
+        return f"{self.label}_{index}"
 
     def _describe(self, instruction: Instruction, line: int | None) -> str:
         """Say which Pebble instruction the next few lines come from, for a reader."""
@@ -140,24 +168,16 @@ class _CodeWriter:
         out, opcode = self.out, instruction.opcode
         if opcode == OpCode.LOAD_CONST:
             self._load_constant(int(instruction.operand or 0), line)
-        elif opcode == OpCode.LOAD_NAME:
-            name = str(instruction.operand)
-            out.op(f"load r1, [r7{self.slots[name]}]", f"r1 = {name}", line)
-            out.op("push r1", "onto the stack", line)
-        elif opcode == OpCode.STORE_NAME:
-            name = str(instruction.operand)
-            out.op("pop  r1", "r1 = the value on top of the stack", line)
-            out.op(f"store r1, [r7{self.slots[name]}]", f"{name} = r1", line)
-        elif opcode in _ALU:
-            self._two_numbers(line)
-            out.op(f"{_ALU[opcode]}  r1, r1, r2", "work it out", line)
-            out.op("push r1", "the answer goes on the stack", line)
-        elif opcode == OpCode.MULTIPLY:
-            self._two_numbers(line)
-            out.op("call __mul", "r1 = r1 * r2", line)
-            out.op("push r1", "the answer goes on the stack", line)
-        elif opcode in (OpCode.FLOOR_DIVIDE, OpCode.MODULO):
-            self._divide(index, opcode, line)
+        elif opcode in (OpCode.LOAD_NAME, OpCode.STORE_NAME):
+            self._variable(opcode, str(instruction.operand), line)
+        elif opcode in (*_ALU, OpCode.MULTIPLY, OpCode.FLOOR_DIVIDE, OpCode.MODULO):
+            self._arithmetic(index, opcode, line)
+        elif opcode in COMPARISONS:
+            self._compare(index, opcode, line)
+        elif opcode == OpCode.NOT:
+            self._not(index, line)
+        elif opcode in JUMPS:
+            self._jump(index, opcode, int(instruction.operand or 0), line)
         elif opcode == OpCode.NEGATE:
             out.op("pop  r1", "r1 = the number", line)
             out.op("sub  r1, r0, r1", "r1 = 0 - r1", line)
@@ -176,6 +196,29 @@ class _CodeWriter:
             # The subset check should have refused it; writing nothing would be wrong code.
             msg = f"translator bug: no code for {opcode}"
             raise PebbleCPUError(msg)
+
+    def _variable(self, opcode: OpCode, name: str, line: int | None) -> None:
+        """Write `LOAD_NAME` or `STORE_NAME`: copy between the stack and the name's slot."""
+        out = self.out
+        if opcode == OpCode.LOAD_NAME:
+            out.op(f"load r1, [r7{self.slots[name]}]", f"r1 = {name}", line)
+            out.op("push r1", "onto the stack", line)
+        else:
+            out.op("pop  r1", "r1 = the value on top of the stack", line)
+            out.op(f"store r1, [r7{self.slots[name]}]", f"{name} = r1", line)
+
+    def _arithmetic(self, index: int, opcode: OpCode, line: int | None) -> None:
+        """Write `+`, `-` and `*` here; `//` and `%` need a divide-by-zero check first."""
+        out = self.out
+        if opcode in (OpCode.FLOOR_DIVIDE, OpCode.MODULO):
+            self._divide(index, opcode, line)
+            return
+        self._two_numbers(line)
+        if opcode in _ALU:
+            out.op(f"{_ALU[opcode]}  r1, r1, r2", "work it out", line)
+        else:
+            out.op("call __mul", "r1 = r1 * r2", line)
+        out.op("push r1", "the answer goes on the stack", line)
 
     def _load_constant(self, number: int, line: int | None) -> None:
         """Write the cards that put a number, or the address of a text, on the stack."""
@@ -198,6 +241,56 @@ class _CodeWriter:
         """Pop the two numbers an operator works on: the right one is on top."""
         self.out.op("pop  r2", "r2 = the right-hand number", line)
         self.out.op("pop  r1", "r1 = the left-hand number", line)
+
+    def _compare(self, index: int, opcode: OpCode, line: int | None) -> None:
+        """Write a comparison: `cmp` lights the flags, a signed branch reads them."""
+        out, yes = self.out, f"{self.label}_yes_{index}"
+        condition, symbol = _BRANCHES[opcode]
+        self._two_numbers(line)
+        out.op("li   r3, 1", "r3 = 1 (true), unless we find otherwise", line)
+        out.op("cmp  r1, r2", "work out r1 - r2, keeping only the flags", line)
+        out.op(f"br   {condition}, {yes}", f"is r1 {symbol} r2? then keep the 1", line)
+        out.op("li   r3, 0", "no: r3 = 0 (false)", line)
+        out.raw(f"{yes}:", line)
+        out.op("push r3", "true or false goes on the stack", line)
+
+    def _not(self, index: int, line: int | None) -> None:
+        """Write `not`: 0 (false) becomes 1, and anything else becomes 0."""
+        out, yes = self.out, f"{self.label}_yes_{index}"
+        out.op("pop  r1", "r1 = the condition", line)
+        out.op("li   r3, 1", "r3 = 1 (true), unless we find otherwise", line)
+        out.op("cmp  r1, r0", "is the condition 0 (false)?", line)
+        out.op(f"br   eq, {yes}", "yes: not false is true, keep the 1", line)
+        out.op("li   r3, 0", "no: not true is false", line)
+        out.raw(f"{yes}:", line)
+        out.op("push r3", "true or false goes on the stack", line)
+
+    def _jump(self, index: int, opcode: OpCode, target: int, line: int | None) -> None:
+        """Write a jump to instruction `target`.
+
+        A `br` only reaches 255 words forwards or 256 back, and a loop can be longer, so
+        a jump that depends on a condition branches *over* a `jmp`, which reaches anywhere.
+        """
+        out, page, go_on = self.out, self._page(target), f"{self.label}_go_on_{index}"
+        if opcode == OpCode.JUMP:
+            out.op(f"jmp  {page}", f"go to instruction {target}", line)
+            return
+        if opcode == OpCode.JUMP_IF_FALSE:
+            out.op("pop  r1", "r1 = the condition", line)
+            out.op("cmp  r1, r0", "is it 0 (false)?", line)
+            out.op(f"br   ne, {go_on}", "no, it is true: carry on", line)
+            out.op(f"jmp  {page}", f"yes, false: go to instruction {target}", line)
+        else:
+            # `and` stops at a false left side, `or` at a true one; either way that
+            # value is the answer, so it goes back on the stack before the jump.
+            decides = "false" if opcode == OpCode.JUMP_IF_FALSE_OR_POP else "true"
+            other = "eq" if decides == "true" else "ne"
+            out.op("pop  r1", "r1 = the left-hand side", line)
+            out.op("cmp  r1, r0", "is it 0 (false)?", line)
+            out.op(f"br   {other}, {go_on}", "the right-hand side decides: work it out", line)
+            out.op("push r1", f"it is {decides}, so it is the answer: keep it", line)
+            out.op(f"jmp  {page}", f"and skip to instruction {target}", line)
+        out.raw(f"{go_on}:", line)
 
     def _divide(self, index: int, opcode: str, line: int | None) -> None:
         """Write `//` or `%`: check the divisor is not 0, then call `__divmod`."""

@@ -6,12 +6,16 @@ friendly-error tests take one row of the subset contract each and check the feat
 name, the Pebble line and the column.
 """
 
+import operator
+from collections.abc import Callable
 from dataclasses import replace
 
 import pebble
 import pytest
+from hypothesis import given
+from hypothesis import strategies as st
 
-from pycpu.assembler import assemble
+from pycpu.assembler import OFF9_MAX, assemble
 from pycpu.fast import FastMachine
 from pycpu.isa import Fault
 from pycpu.memory import RAM_WORDS
@@ -360,9 +364,9 @@ class TestFriendlyErrors:
 
     def test_an_instruction_the_checker_wrongly_lets_through_is_a_loud_bug(self) -> None:
         """If the code generator meets an instruction it has no cards for, it says so."""
-        code = pebble.compile_source("let a = 1\nprint(a < 2)").compiled.main
+        code = pebble.compile_source("let a = 1\nprint(a / 2)").compiled.main
         unchecked = CheckedCode("main", code, ("a",), frozenset(), deepest=2)
-        with pytest.raises(PebbleCPUError, match="translator bug: no code for LESS_THAN"):
+        with pytest.raises(PebbleCPUError, match="translator bug: no code for DIVIDE"):
             generate(CheckedProgram(unchecked, {}))
 
     def test_a_pebble_mistake_is_passed_through_unchanged(self) -> None:
@@ -370,3 +374,205 @@ class TestFriendlyErrors:
         with pytest.raises(pebble.PebbleError) as caught:
             translate("print(")
         assert not isinstance(caught.value, PebbleCPUError)
+
+
+COMPARISONS: dict[str, Callable[[int, int], bool]] = {
+    "<": operator.lt,
+    "<=": operator.le,
+    ">": operator.gt,
+    ">=": operator.ge,
+    "==": operator.eq,
+    "!=": operator.ne,
+}
+WORDS = st.integers(min_value=SMALLEST, max_value=32767)
+LONG_BODY_PRINTS = 80
+SUM_TO_TEN = 55
+
+
+def decide(condition: str, setup: str = "") -> str:
+    """Write a program that prints 1 if `condition` holds and 0 if not."""
+    return f"{setup}if {condition} {{\n    print(1)\n}} else {{\n    print(0)\n}}\n"
+
+
+class TestConditionsAndLoops:
+    """`if`, `while`, comparisons, `not`, `and` and `or` behave as on the Pebble VM."""
+
+    @given(WORDS, WORDS)
+    def test_every_comparison_matches_python_for_signed_numbers(self, a: int, b: int) -> None:
+        """Each of the six comparisons on two 16-bit numbers gives Python's answer."""
+        setup = f"let a = {a}\nlet b = {b}\n"
+        source = setup + "".join(decide(f"a {op} b") for op in COMPARISONS)
+        expected = "".join(f"{int(test(a, b))}\n" for test in COMPARISONS.values())
+        assert run_and_compare(source).output == expected
+
+    def test_a_comparison_whose_subtraction_wraps_is_still_right(self) -> None:
+        """`-30000 < 30000` is true, though `-30000 - 30000` wraps to the positive 5536."""
+        source = "let a = -30000\nlet b = 30000\nlet d = a - b\nprint(d)\n" + decide("a < b")
+        run = run_pebble(source)
+        assert run.output == f"{-30000 - 30000 + 65536}\n1\n"
+        assert pebble.run_source(decide("a < b", "let a = -30000\nlet b = 30000\n")) == "1\n"
+
+    @pytest.mark.parametrize(("a", "expected"), [(1, "small\n"), (5, "medium\n"), (9, "big\n")])
+    def test_else_if_picks_exactly_one_block(self, a: int, expected: str) -> None:
+        """`if`/`else if`/`else` runs the first block whose condition holds, and only it."""
+        source = (
+            f"let a = {a}\n"
+            'if a < 3 {\n    print("small")\n} else if a < 7 {\n    print("medium")\n'
+            '} else {\n    print("big")\n}\nprint("done")'
+        )
+        assert run_and_compare(source).output == expected + "done\n"
+
+    def test_ifs_inside_ifs_choose_the_right_path(self) -> None:
+        """Nested `if`s inside a loop print the FizzBuzz pattern."""
+        source = (
+            "let n = 1\nwhile n <= 15 {\n"
+            '    if n % 3 == 0 {\n        if n % 5 == 0 { print("fizzbuzz") } '
+            'else { print("fizz") }\n'
+            '    } else if n % 5 == 0 {\n        print("buzz")\n'
+            "    } else {\n        print(n)\n    }\n"
+            "    n = n + 1\n}"
+        )
+        assert run_and_compare(source).output.split()[-1] == "fizzbuzz"
+
+    def test_a_while_loop_counts_up_to_ten(self) -> None:
+        """A counter loop adds 1 to 10 and gets 55."""
+        source = "let i = 1\nlet total = 0\nwhile i <= 10 {\n    total = total + i\n    i = i + 1\n}\nprint(total)"
+        assert run_and_compare(source).output == f"{SUM_TO_TEN}\n"
+
+    def test_a_loop_that_never_starts_runs_its_body_zero_times(self) -> None:
+        """`while 0 > 1` skips straight past its body."""
+        assert (
+            run_and_compare("let a = 0\nwhile a > 1 {\n    print(a)\n}\nprint(7)").output == "7\n"
+        )
+
+    def test_break_leaves_a_while_true_loop(self) -> None:
+        """`while true` with a `break` stops when the `if` says so."""
+        source = "let a = 1\nwhile true {\n    if a > 3 { break }\n    a = a + 1\n}\nprint(a)"
+        assert run_and_compare(source).output == "4\n"
+
+    def test_a_loop_longer_than_a_branch_can_reach_still_jumps_back(self) -> None:
+        """A loop body far longer than 255 words still loops, because jumps use `jmp`."""
+        body = "".join("    print(i)\n" for _ in range(LONG_BODY_PRINTS))
+        source = f"let i = 0\nwhile i < 2 {{\n{body}    i = i + 1\n}}"
+        last = len(pebble.compile_source(source).compiled.main.instructions) - 1
+        program = translate(source).program
+        assert program.labels[f"__main_{last}"] - program.labels["__main_2"] > OFF9_MAX
+        assert run_and_compare(source).output == "0\n" * LONG_BODY_PRINTS + "1\n" * LONG_BODY_PRINTS
+
+    def test_for_over_range_runs_as_a_while_loop(self) -> None:
+        """`for i in range(3)` is lowered by Pebble to a loop with a hidden `$for_limit_0`."""
+        source = "for i in range(3) {\n    print(i)\n}"
+        assert run_and_compare(source).output == "0\n1\n2\n"
+        assert "$for_limit_0" in translate(source).assembly
+
+    def test_and_does_not_work_out_its_right_side_when_the_left_is_false(self) -> None:
+        """`false and (1 // 0 == 0)` never divides, so nothing faults."""
+        source = "if false and (1 // 0 == 0) {\n    print(1)\n}\nprint(2)"
+        assert run_and_compare(source).output == "2\n"
+        source = "let z = 0\nif z != 0 and 10 // z > 1 {\n    print(1)\n} else {\n    print(2)\n}"
+        assert run_and_compare(source).output == "2\n"
+
+    def test_or_does_not_work_out_its_right_side_when_the_left_is_true(self) -> None:
+        """`true or (1 // 0 == 0)` never divides either."""
+        source = "if true or (1 // 0 == 0) {\n    print(1)\n}"
+        assert run_and_compare(source).output == "1\n"
+
+    def test_and_or_work_out_both_sides_when_they_must(self) -> None:
+        """When the left side does not decide, the right side does, and it can fault."""
+        run = run_pebble("let z = 0\nif z == 0 and 10 // z > 1 {\n    print(1)\n}")
+        assert run.fault is Fault.DIVIDE_BY_ZERO
+        assert run.line == SECOND_LINE
+        for left in (0, 1):
+            for right in (0, 1):
+                setup = f"let p = {left}\nlet q = {right}\n"
+                run_and_compare(decide("p == 1 and q == 1", setup))
+                run_and_compare(decide("p == 1 or q == 1", setup))
+
+    def test_not_flips_a_condition_and_a_number(self) -> None:
+        """`not (a < 2)` is the opposite of `a < 2`, and `not x` is true only when x is 0."""
+        for a in (1, 2, 3):
+            run_and_compare(decide("not (a < 2)", f"let a = {a}\n"))
+        for x in (0, 7, -1):
+            run_and_compare(decide("not x", f"let x = {x}\n"))
+        run_and_compare(decide("x", "let x = -1\n"))
+
+    @pytest.mark.parametrize(
+        ("left", "word", "right", "printed"),
+        [(0, "or", 5, "5\n"), (3, "or", 5, "3\n"), (0, "and", 4, "0\n"), (3, "and", 4, "4\n")],
+    )
+    def test_and_or_on_two_numbers_keep_the_deciding_number(
+        self, left: int, word: str, right: int, printed: str
+    ) -> None:
+        """`let x = 0 or 5` stores 5: with numbers on both sides the answer is a number."""
+        source = f"let p = {left}\nlet x = p {word} {right}\nprint(x)"
+        assert run_and_compare(source).output == printed
+        assert run_and_compare(f"let x = {left} {word} {right}\nprint(x)").output == printed
+
+    def test_jump_targets_get_one_label_each_named_after_their_index(self) -> None:
+        """A loop's top is `__main_2` and the instruction after it `__main_13`."""
+        source = "let n = 3\nwhile n > 0 {\n    print(n)\n    n = n - 1\n}"
+        assembly = translate(source).assembly
+        assert "__main_2:" in assembly
+        assert "__main_13:" in assembly
+        assert "    jmp  __main_2" in assembly
+        assert assembly.count("__main_2:") == 1
+
+    def test_kinds_are_followed_into_both_branches_and_past_the_join(self) -> None:
+        """Text printed after an `if` is still known to be text."""
+        source = 'let a = 1\nif a > 0 {\n    print("yes")\n} else {\n    print(a)\n}\nprint("end")'
+        assert run_and_compare(source).output == "yes\nend\n"
+
+
+class TestConditionRefusals:
+    """True and false can steer a jump, but cannot be kept, printed or counted with."""
+
+    @pytest.mark.parametrize(
+        ("source", "feature", "line", "column"),
+        [
+            ("let b = 1 < 2", BOOL_OUTSIDE_CONDITIONS, 1, 9),
+            ("print(1 == 1)", BOOL_OUTSIDE_CONDITIONS, 1, 7),
+            ("let a = 4\nlet big = a > 2", BOOL_OUTSIDE_CONDITIONS, 2, 13),
+            ("let a = 4\nprint(a == 4)", BOOL_OUTSIDE_CONDITIONS, 2, 9),
+            ("let a = 4\nprint(not a)", BOOL_OUTSIDE_CONDITIONS, 2, 7),
+            ("let a = 4\nlet b = a < 2 or 5", BOOL_OUTSIDE_CONDITIONS, 2, 11),
+            ("let a = 4\nprint(a + (a < 2))", BOOL_OUTSIDE_CONDITIONS, 2, 14),
+            ("let a = 4\nif (a < 2) == (a < 3) {\n    print(1)\n}", BOOL_OUTSIDE_CONDITIONS, 2, 7),
+            ('let a = 4\nif "yes" {\n    print(a)\n}', TEXT_OUTSIDE_PRINT, 2, 4),
+            ('let a = 4\nprint(a or "no")', TEXT_OUTSIDE_PRINT, 2, 12),
+            (
+                "let a = 4\nif a > 0 {\n    print(1)\n}\nlet b = a > 1",
+                BOOL_OUTSIDE_CONDITIONS,
+                5,
+                11,
+            ),
+        ],
+    )
+    def test_a_true_or_false_outside_a_decision_is_refused(
+        self, source: str, feature: str, line: int, column: int
+    ) -> None:
+        """Storing, printing or counting with true/false is refused at the place it was made."""
+        error = refusal(source)
+        assert (error.feature, error.line, error.column) == (feature, line, column)
+
+    def test_the_message_names_true_and_false(self) -> None:
+        """The refusal reads as a sentence about true and false."""
+        assert str(refusal("let b = 1 < 2")) == (
+            "true and false outside if and while are not supported on PyCPU yet at line 1, column 9"
+        )
+
+    def test_paths_that_meet_with_different_stack_depths_are_a_loud_bug(self) -> None:
+        """Pebble promises equal stack depths where paths meet; if not, we say so loudly."""
+        place = pebble.SourceLocation(1, 1)
+        code = pebble.CodeObject(
+            "main",
+            instructions=[
+                pebble.Instruction(pebble.OpCode.LOAD_CONST, 0, place),
+                pebble.Instruction(pebble.OpCode.JUMP_IF_FALSE, 3, place),
+                pebble.Instruction(pebble.OpCode.LOAD_CONST, 0, place),
+                pebble.Instruction(pebble.OpCode.HALT, None, place),
+            ],
+            constants=[1],
+        )
+        compiled = pebble.CompiledProgram(main=code, functions={})
+        with pytest.raises(PebbleCPUError, match="stack depth"):
+            check_program(compiled)
