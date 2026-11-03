@@ -106,7 +106,7 @@ that is checked against the gates, and the Bench, where you can pause a running
 program and look inside it down to a single gate. The third translates Pebble programs
 into machine code for that processor, so they run on it and print the same answers
 as Pebble's own way of running them, for numbers that fit in 16 bits. Only part of
-Pebble runs so far (whole numbers, variables, `if`, `while`, functions and `print`),
+Pebble runs so far (whole numbers, variables, `if`, `while`, `for` over a range, functions and `print`),
 and anything else gets a friendly "not supported yet" message. The full Cockpit comes
 on a later climb, and each time a new rung is built, a new page joins these.
 

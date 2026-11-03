@@ -57,6 +57,15 @@ ADD3_FRAME = 4090
 _LABEL_SUFFIXES = ("", "_room", "_0", "_12", "_yes_3", "_go_on_4", "_divisor_ok_5")
 
 
+def vm_crashes_or_runs_on(source: str, crash: type[Exception]) -> None:
+    """Check Pebble's VM either crashes with `crash` (the bug) or finishes (it was fixed)."""
+    try:
+        output = pebble.run_source(source)
+    except crash:
+        return
+    assert isinstance(output, str)
+
+
 def run_and_compare(source: str) -> PebbleRun:
     """Run `source` on PyCPU, check it finished cleanly and printed what the Pebble VM prints."""
     run = run_pebble(source)
@@ -147,9 +156,9 @@ print(a(-7))"""
         """Its maybe-a-number answer is fine to throw away."""
         source = "fn f(a) {\n    if a > 0 {\n        return 1\n    }\n}\nf(1)\nf(0)\nprint(2)"
         assert run_pebble(source).output == "2\n"
-        # Pebble's VM crashes when `f(0)` runs past the end of `f`; with `f(1)` alone it agrees.
-        with pytest.raises(IndexError):
-            pebble.run_source(source)
+        # Pebble v0.4.1: the VM crashes with IndexError when `f(0)` runs past the end of
+        # `f`; with `f(1)` alone it agrees. Once that is fixed it may return null instead.
+        vm_crashes_or_runs_on(source, IndexError)
         run_and_compare(source.replace("f(0)\n", ""))
 
     def test_a_function_with_no_parameters_needs_no_tidying(self) -> None:
@@ -238,9 +247,9 @@ class TestReturnKinds:
         assert self.kinds(source) == {"h": frozenset({Kind.NULL})}
         run = run_pebble(source)
         assert (run.output, run.fault) == ("", None)
-        # Pebble's VM crashes here when `h(0)` runs past the end of `h`.
-        with pytest.raises(IndexError):
-            pebble.run_source(source)
+        # Pebble v0.4.1: the VM crashes with IndexError when `h(0)` runs past the end of
+        # `h`. Once that is fixed it may return null instead.
+        vm_crashes_or_runs_on(source, IndexError)
 
     def test_a_function_that_never_returns_at_all_gives_nothing(self) -> None:
         """Endless recursion never comes back, so its answer is never really used."""
@@ -302,8 +311,8 @@ class TestFunctionErrors:
         Pebble's own VM v0.4.0 crashes on these with a Python `KeyError`, not a
         friendly error, so PyCPU refusing them is the kinder answer.
         """
-        with pytest.raises(KeyError):
-            pebble.run_source(source)
+        # Pebble VM bug: calling a variable crashes the VM with a Python KeyError.
+        vm_crashes_or_runs_on(source, KeyError)
         assert refusal(source).feature == FUNCTIONS_AS_VALUES
 
     def test_thirty_parameters_are_too_many(self) -> None:

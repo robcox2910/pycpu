@@ -70,6 +70,9 @@ PARAMETER_MAX = 3
 # 200 under the default "ci" profile; twice the profile's count under a bigger one,
 # so `--hypothesis-profile=thorough` (2000) runs 4000 random programs per property.
 RANDOM_EXAMPLES = max(200, 2 * settings().max_examples)
+# Measured about 0.05 s per random program; allow four times that, and a minute to start.
+SECONDS_PER_EXAMPLE = 0.2
+RANDOM_TIMEOUT_SECONDS = 60 + int(SECONDS_PER_EXAMPLE * RANDOM_EXAMPLES)
 
 GATE_ADDRESS_BITS = 12
 GATE_STEP_LIMIT = 1_500
@@ -774,6 +777,7 @@ fair_scripts = scripts().filter(fair_to_compare)
 
 
 @given(fair_scripts)
+@pytest.mark.timeout(RANDOM_TIMEOUT_SECONDS)
 @settings(max_examples=RANDOM_EXAMPLES, deadline=None)
 def test_random_programs_match_the_pebble_vm(script: Script) -> None:
     """A random program in the subset prints the same on PyCPU as on the VM."""
@@ -890,6 +894,7 @@ def assert_refused_or_same(source: str) -> None:
 
 
 @given(mixed_scripts())
+@pytest.mark.timeout(RANDOM_TIMEOUT_SECONDS)
 @settings(max_examples=RANDOM_EXAMPLES, deadline=None)
 def test_unsupported_programs_never_crash(script: Script) -> None:
     """The translator refuses politely, or runs the program and agrees with the VM."""

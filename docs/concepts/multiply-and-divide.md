@@ -87,8 +87,9 @@ print("stack words the routines need:", RUNTIME_STACK_WORDS)
 ```
 
 Some things to notice. `300 * 300` is really 90000, but a register only holds 16 bits
-(up to 65535), so the answer **wraps around**: 90000 minus 65536 is 24464. The computer
-does this on purpose, and [Negative Numbers](negative-numbers.md) explains why a
+(up to 65535), so the answer **wraps around**, as you saw in
+[Why 16-Bit Numbers Wrap](why-16-bit-numbers-wrap.md): 90000 minus 65536 is 24464. The
+computer does this on purpose, and [Negative Numbers](negative-numbers.md) explains why a
 wrapped answer is still useful. The step counts include the `call` and the `halt`
 around the routine. And `-7 // 2` is `-4`, not `-3`: more on that below.
 

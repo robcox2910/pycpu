@@ -183,7 +183,9 @@ print(repr(run.fault), "at line", run.line)
 ```
 
 The machine stopped itself with fault code 2, **stack overflow**, and the translator's
-source map points at line 2, where `f`'s code starts. Nothing was printed, and nothing
+source map points at line 2, where the call `f(n + 1)` that found no room sits. (How
+the line is found is told in [What Happens When Things Go
+Wrong](what-happens-when-things-go-wrong.md).) Nothing was printed, and nothing
 in the program was overwritten. Pebble's own VM keeps its frames in a Python list with
 no limit, so on the VM this program just keeps going (we gave up
 waiting). PyCPU's memory is only 4,096 words, so it finds out much sooner.
@@ -260,7 +262,8 @@ the runtime routines. A `call` to another Pebble function needs only 1 more word
 return address, which fits inside those 9. The *called* function then checks its own
 frame in its own prologue. So the stack can never grow into the program: endless
 recursion ends with `halt 2`, and every word of the program and its text is untouched.
-The fault is reported at the function's first line.
+The fault is reported at the line of the call that found no room; [What Happens When
+Things Go Wrong](what-happens-when-things-go-wrong.md) shows how that line is found.
 
 **Step 7: the checker works out what each function gives back.** A function that ends
 without a `return` gives back **null**, Pebble's word for "nothing", and so does a

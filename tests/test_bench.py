@@ -44,6 +44,8 @@ ALU_GATE = "cpu.alu.adder.bit0.full_adder.half_adder.and"
 TOO_MANY_WORDS = "\n".join([".word 0"] * (WORDS + 1))
 PEBBLE_BITS = 8  # 256 words: room for a small Pebble program and its runtime routines
 PEBBLE_WORDS = 1 << PEBBLE_BITS
+PEBBLE_STACK_BITS = 7  # 128 words: three `print(1)` lines fit, with no room left for main's stack
+PEBBLE_STACK_PRINTS = 3
 COUNTDOWN = """\
 let n = 2
 while n > 0 {
@@ -480,6 +482,17 @@ class TestPebbleOnTheBench:
         body = _json(response)
         assert "at line 1" in body["message"]
         assert (body["line"], body["column"]) == (1, NOT_PEBBLE_COLUMN)
+        assert bench.machine()["pebble"] is None
+
+    def test_a_program_whose_stack_has_no_room_is_a_400(self) -> None:
+        """Three prints fit in 128 words, but main's first frame after them would not."""
+        bench = Bench(address_bits=PEBBLE_STACK_BITS)
+        source = "print(1)\n" * PEBBLE_STACK_PRINTS
+        translated = translate(source)
+        assert len(translated.program.words) <= (1 << PEBBLE_STACK_BITS)
+        response = bench.pebble(source)
+        assert response.status == BAD_REQUEST
+        assert "room for its stack" in _json(response)["message"]
         assert bench.machine()["pebble"] is None
 
     def test_a_program_too_big_for_this_benchs_memory_is_a_400(self) -> None:

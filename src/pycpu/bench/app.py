@@ -214,7 +214,7 @@ def load_pebble(computer: Computer, source: object) -> TranslatedProgram:
 
     Raises:
         HTTPError: 400 if `source` is not text, is longer than
-            `MAX_PEBBLE_CHARACTERS`, or the program needs more words than
+            `MAX_PEBBLE_CHARACTERS`, or the program (with room for its stack) needs more words than
             this Bench's memory has (only a small Bench; the full 4K is what the
             translator itself checks against).
         PebbleError: If Pebble itself finds a mistake in the program.
@@ -232,6 +232,13 @@ def load_pebble(computer: Computer, source: object) -> TranslatedProgram:
     needed, words = len(translated.program.words), computer.gate.words
     if needed > words:
         msg = f"this program needs {needed} words, but this Bench's memory has only {words}"
+        raise HTTPError(BAD_REQUEST, msg)
+    # Main's first frame sits just past the program; without room it would stop at once.
+    if translated.memory_needed > words:
+        msg = (
+            f"this program needs room for its stack too ({translated.memory_needed} words in all), "
+            f"but this Bench's memory has only {words}"
+        )
         raise HTTPError(BAD_REQUEST, msg)
     computer.load_program(translated.program)
     computer.pause()

@@ -294,6 +294,11 @@ def _meet(first: _Slot, second: _Slot) -> _Slot:
     )
 
 
+def first_place(places: Sequence[SourceLocation | None]) -> SourceLocation | None:
+    """Return the first place in the list that is not None, or None if there is none."""
+    return next((place for place in places if place is not None), None)
+
+
 def located(instructions: Sequence[Instruction]) -> list[SourceLocation | None]:
     """Give each instruction a place in the source, borrowing one if it has none.
 
@@ -367,9 +372,9 @@ class _CodeChecker:
         """Look at every instruction and every path, noting problems and what comes back."""
         if len(self.code.parameters) > MAX_PARAMETERS:
             # A frame has no place of its own in the source, so use its first line.
-            first = next((place for place in self.places if place is not None), None)
+            first = first_place(self.places)
             # With no line to point at (an empty body), name the function instead.
-            where = "" if first else f" (in {self.name})"
+            where = "" if first is not None else f" (in {self.name})"
             self._problem(TOO_MANY_PARAMETERS + where, first)
         for index, instruction in enumerate(self.code.instructions):
             feature = self._opcode_problem(instruction)

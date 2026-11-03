@@ -33,6 +33,7 @@ from pycpu.translator.subset import (
     CheckedCode,
     CheckedProgram,
     PebbleCPUError,
+    first_place,
     located,
 )
 
@@ -156,8 +157,8 @@ class _CodeWriter:
         self.slots = {name: 2 + (count - 1 - i) for i, name in enumerate(self.code.parameters)}
         self.slots.update({name: -1 - j for j, name in enumerate(checked.variables)})
         self.places = located(self.code.instructions)
-        first = next((place for place in self.places if place is not None), None)
-        self.first_line = first.line if first else None
+        first = first_place(self.places)
+        self.first_line = first.line if first is not None else None
         # Every instruction some jump goes to gets a label: its "page number".
         self.targets = {int(i.operand or 0) for i in self.code.instructions if i.opcode in JUMPS}
 

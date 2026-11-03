@@ -27,6 +27,9 @@ TOP_LEVEL_LINE = 3
 CALL_LINE = 4
 TOP_LEVEL_CALL_LINE = 5
 TWO_STEP_BUDGET = 500
+# Three prints fit in 128 words (119) but main's frame after them (130 in all) does not.
+MAIN_OVERFLOW_PRINTS = 3
+MAIN_OVERFLOW_WORDS = 128
 # Measured: the three-deep program stops with pc one past its `halt 3` word.
 HALT_WORD = 42
 ENDLESS_RECURSION_STEPS = 23654
@@ -153,6 +156,19 @@ class TestDescribe:
         assert run_pebble(ENDLESS_RECURSION).describe() == (
             "The stack ran out of room at line 2 (the call on that line found no room for another frame; does a function keep calling itself?)"
         )
+
+    def test_a_main_that_does_not_fit_blames_no_call(self) -> None:
+        """When main's own frame has no room, the sentence does not mention a call."""
+        source = "print(1)\n" * MAIN_OVERFLOW_PRINTS
+        translated = translate(source)
+        machine = FastMachine(MAIN_OVERFLOW_WORDS)
+        machine.load_program(translated.program.words)
+        steps = machine.run(TWO_STEP_BUDGET)
+        run = PebbleRun.from_state(translated, machine.state(), steps)
+        assert run.fault is Fault.STACK_OVERFLOW
+        assert not run.by_call
+        assert run.describe().startswith("The program needs more stack room than there is at line")
+        assert "call" not in run.describe()
 
     def test_still_running(self) -> None:
         """The sentence says how many steps it was given."""

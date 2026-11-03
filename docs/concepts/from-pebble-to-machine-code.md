@@ -260,8 +260,8 @@ first. Then a part called a **JIT compiler** ("just in time") translates the byt
 into the real machine code of your computer's processor while the program runs, often
 step by step much as ours does. (Standard Python makes stack bytecode too, but mostly
 follows it one step at a time with a **VM**, a "virtual machine": a program that obeys
-bytecode itself, the way Pebble's own VM does, instead of translating it.) And every debugger that shows you "the error is on line 12"
-is reading a source map like `pebble_lines`.
+bytecode itself, the way Pebble's own VM does, instead of translating it.) And every
+debugger that shows you "the error is on line 12" is reading a source map like `pebble_lines`.
 
 ## What's Next
 
