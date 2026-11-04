@@ -5,8 +5,9 @@ pilot, and the answer read back. Visitors can freeze the flight, nudge it forwar
 (`/api/step`: one gate, a beat, an instruction or a whole Pebble line), wind it back
 (`/api/rewind`), run it a set distance (`/api/run`), let it fly on its own and stop
 it (`/api/play`, `/api/pause`), load a new program (`/api/program`, or `/api/pebble`
-for one that comes with its lyric sheet), read its dials (`/api/machine`) and ask what
-any part is carrying (`/api/view`). `/api/events` is the radio left switched on: after
+for one that comes with its lyric sheet), pick from the flight plans kept on board
+(`/api/examples`), read its dials (`/api/machine`) and ask what any part is carrying
+(`/api/view`). `/api/events` is the radio left switched on: after
 every move, and every slice of play, the new picture goes out to every open page. These
 routes only parse the request, call the session and answer; every rule lives in
 `session.py` and every dial in `picture.py`.
@@ -42,6 +43,10 @@ from pycpu.view import circuit_view
 BAD_REQUEST = 400
 NOT_FOUND = 404
 CONFLICT = 409
+
+# The example programs in `examples/`, in the order the page lists them: the tour first,
+# then from the simplest to the one that goes wrong on purpose.
+EXAMPLE_NAMES = ("tour", "countdown", "times-table", "factorial", "greeting", "divide-by-zero")
 
 
 # The route checks type and range too so the 400 bodies stay byte-identical; the session
@@ -249,6 +254,26 @@ class _Live:
                 self.player = None
 
 
+def example_programs() -> list[dict[str, str]]:
+    """Read the example Pebble programs, in the order the page lists them.
+
+    Each file in `src/pycpu/cockpit/examples/` starts with a `#` comment line, which is
+    its title.
+
+    Returns:
+        One `{"name", "title", "source"}` for each example: the file's name without
+        `.pebble`, the words of its first-line comment, and the whole program.
+
+    """
+    folder = resources.files("pycpu.cockpit").joinpath("examples")
+    examples: list[dict[str, str]] = []
+    for name in EXAMPLE_NAMES:
+        source = folder.joinpath(f"{name}.pebble").read_text(encoding="utf-8")
+        title = source.splitlines()[0].removeprefix("#").strip()
+        examples.append({"name": name, "title": title, "source": source})
+    return examples
+
+
 def create_cockpit(
     address_bits: int = RAM_ADDRESS_BITS,
     start_example: str | None = None,
@@ -261,31 +286,49 @@ def create_cockpit(
         address_bits: How many address wires the RAM has. The real Cockpit uses the
             full 12 (4,096 words), which takes a few seconds to build; tests and the
             docs use 6 (64 words).
-        start_example: A file stem in `cockpit/examples/` to load at the start. Not
-            available yet: any value other than None raises `ValueError`.
+        start_example: The name of an example (one of `EXAMPLE_NAMES`, such as
+            `"tour"`) to load at the start, paused on its first line; None keeps
+            `DEMO_PROGRAM`, the little assembly countdown.
         tick_seconds: How long play waits between two slices; tests and the docs
             make it shorter to stay quick.
 
     Returns:
         A PyWeb `App` with the routes `GET /` (the page), `GET /api/machine`,
-        `GET /api/listing`, `GET /api/view`, `GET /api/events`, `POST /api/step`,
+        `GET /api/listing`, `GET /api/examples`, `GET /api/view`, `GET /api/events`,
+        `POST /api/step`,
         `POST /api/rewind`, `POST /api/run`, `POST /api/play`, `POST /api/pause`,
         `POST /api/program` and `POST /api/pebble`. See the Cockpit pages in the
         docs for each one.
 
     Raises:
-        ValueError: If `start_example` is given.
+        ValueError: If `start_example` is not the name of an example.
 
     """
+    cockpit = Cockpit(address_bits)
     if start_example is not None:
-        msg = f"no example called {start_example}"
-        raise ValueError(msg)
-    live = _Live(Cockpit(address_bits), tick_seconds)
+        _start_with(cockpit, start_example)
+    live = _Live(cockpit, tick_seconds)
     app = App()
     _reading_routes(app, live)
     _moving_routes(app, live)
     _play_routes(app, live)
     return app
+
+
+def _start_with(cockpit: Cockpit, name: str) -> None:
+    """Load the example called `name` on a new Cockpit, as if it had been there all along.
+
+    Raises:
+        ValueError: If there is no example called `name`.
+
+    """
+    if name not in EXAMPLE_NAMES:
+        msg = f"no example called {name}; the examples are {', '.join(EXAMPLE_NAMES)}"
+        raise ValueError(msg)
+    source = next(e["source"] for e in example_programs() if e["name"] == name)
+    cockpit.load_pebble(source)
+    # Nothing has moved yet, so nothing should be marked as changed from the demo program.
+    cockpit.before = cockpit.computer.state()
 
 
 def _reading_routes(app: App, live: _Live) -> None:
@@ -307,6 +350,11 @@ def _reading_routes(app: App, live: _Live) -> None:
     def rows(_request: HttpRequest) -> HttpResponse:  # pyright: ignore[reportUnusedFunction]
         """List every word of the loaded program, with its source line and labels."""
         return json(listing(cockpit))  # pyright: ignore[reportArgumentType]
+
+    @app.get("/api/examples")
+    def examples(_request: HttpRequest) -> HttpResponse:  # pyright: ignore[reportUnusedFunction]
+        """List the example programs the page offers to load, the tour first."""
+        return json(example_programs())  # pyright: ignore[reportArgumentType]
 
     @app.get("/api/view")
     def view(request: HttpRequest) -> HttpResponse:  # pyright: ignore[reportUnusedFunction]

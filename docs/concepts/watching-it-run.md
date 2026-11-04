@@ -173,8 +173,9 @@ paused. Showing those as if they were live would be faking it, and this project 
 fakes the gate view. So while playing, the picture's `variables` and `last_gate` are
 `null`, and `at_boundary` is always true (the fast engine only stops between
 instructions). If anyone asks `/api/view` while playing, the answer is the gate engine
-**as it was last paused**, never something made up. Press Pause, and every wire is real
-again.
+**as it was last paused**, never something made up. The Cockpit page does not even ask:
+while playing, its zoom panel just says "Pause to look inside the gates". Press Pause,
+and every wire is real again.
 
 ## Why Does This Matter?
 
@@ -194,7 +195,7 @@ your phone ask over and over.
 ## What's Next
 
 You can now step the machine a gate, an instruction or a Pebble line at a time, or let
-it play while you watch, and pause it to look inside. Next, the Cockpit page itself
-puts all of these buttons and pictures on one screen. Until then, go back to
-[The Cockpit](the-cockpit.md) to see every pane and route, or to
+it play while you watch, and pause it to look inside. The Cockpit page puts all of
+these buttons and pictures on one screen: go back to
+[The Cockpit](the-cockpit.md) to see its layout, every pane and every route, or to
 [Stepping a Pebble Line](stepping-a-pebble-line.md) to walk a program line by line.

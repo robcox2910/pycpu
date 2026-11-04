@@ -1,12 +1,15 @@
 """Tests for the Cockpit: the local page for watching the running computer."""
 
+import re
 import time
 from collections.abc import Coroutine
 from dataclasses import replace
+from pathlib import Path
 from typing import Any, cast
 
 import pytest
 from pynet.loop import run
+from pyweb.app import App
 from pyweb.aserver import AsyncServer
 from pyweb.testing import TestClient, TestResponse
 
@@ -616,7 +619,7 @@ def test_the_cockpit_opens_on_this_computer_only() -> None:
     """open_cockpit listens on 127.0.0.1, and the banner names the real address."""
 
     async def body() -> tuple[str, int]:
-        server = await open_cockpit(0, address_bits=SMALL)
+        server = await open_cockpit(0, address_bits=SMALL, start_example=None)
         try:
             return banner(server), server.port
         finally:
@@ -654,6 +657,7 @@ def test_serve_prints_the_banner_and_shuts_the_server_down(
     monkeypatch.setattr(AsyncServer, "serve_forever", finish)
     monkeypatch.setattr(entry, "PORT", 0)
     monkeypatch.setattr(entry, "ADDRESS_BITS", SMALL)
+    monkeypatch.setattr(entry, "START_EXAMPLE", None)
     _run(entry.serve())
     out = capsys.readouterr().out
     assert "Building the computer" in out
@@ -709,7 +713,7 @@ class TestSessionSeams:
     """The app's start example and busy answer, reached without adding public routes."""
 
     def test_an_unknown_start_example_is_refused(self) -> None:
-        """Until examples exist, any start_example raises ValueError."""
+        """A start_example that is not one of the examples raises ValueError."""
         with pytest.raises(ValueError, match="anything"):
             create_cockpit(SMALL, start_example="anything")
 
@@ -1211,3 +1215,126 @@ class TestVariables:
         picture = _step_to_line(session, NEGATIVE_PRINT_LINE)
         names = cast("dict[str, Any]", picture["variables"])["names"]
         assert [n["name"] for n in names] == ["n"]
+
+
+EXAMPLE_ORDER = ["tour", "countdown", "times-table", "factorial", "greeting", "divide-by-zero"]
+COUNTDOWN_TITLE = "Count down to lift off"
+COUNTDOWN_FIRST_LINE = 2  # line 1 is the title comment
+TOUR_BITS = 9  # 512 words: the tour needs 456
+PAGE_IDS = (
+    "pebble",
+    "listing",
+    "registers",
+    "flags",
+    "stack",
+    "variables",
+    "output",
+    "zoom",
+    "crumbs",
+    "parts",
+    "gates",
+    "play",
+    "pause",
+    "speed",
+    "examples",
+    "source",
+)
+PLAYING_MESSAGE = "Pause to look inside the gates"
+DOCS = Path(__file__).parent.parent / "docs" / "concepts"
+
+
+def _page() -> str:
+    """Fetch the Cockpit page's HTML."""
+    return _run(Cockpit().client.get("/")).text
+
+
+class TestExamples:
+    """GET /api/examples and start_example: the programs the page offers to load."""
+
+    def test_they_come_in_a_fixed_order_with_the_tour_first(self) -> None:
+        """The names are in the page's order, each with its title and whole source."""
+        examples = cast("list[dict[str, str]]", _run(Cockpit().client.get("/api/examples")).json())
+        assert [e["name"] for e in examples] == EXAMPLE_ORDER
+        countdown = examples[EXAMPLE_ORDER.index("countdown")]
+        assert countdown["title"] == COUNTDOWN_TITLE
+        assert countdown["source"].startswith(f"# {COUNTDOWN_TITLE}\n")
+
+    def test_a_cockpit_can_start_with_an_example_paused_on_its_first_line(self) -> None:
+        """create_cockpit(8, start_example="countdown") opens on its first line, nothing changed."""
+        client = TestClient(create_cockpit(PEBBLE_BITS, start_example="countdown"))
+        machine = _json(_run(client.get("/api/machine")))
+        assert machine["pebble"]["line"] == COUNTDOWN_FIRST_LINE
+        assert machine["pebble"]["source"][0] == f"# {COUNTDOWN_TITLE}"
+        assert machine["pc"] == 0
+        assert machine["paused"]
+        assert machine["at_boundary"]
+        assert machine["changed"] == {
+            "registers": [],
+            "pc": False,
+            "sp": False,
+            "flags": [],
+            "memory": [],
+        }
+
+    def test_main_opens_the_full_size_cockpit_on_the_tour(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """open_cockpit asks for the tour (checked here on a smaller machine that fits it)."""
+        asked: list[str | None] = []
+        real = entry.create_cockpit
+
+        def recording(address_bits: int, start_example: str | None = None) -> App:
+            """Note which example was asked for, and build a Cockpit just big enough for it."""
+            assert address_bits == RAM_ADDRESS_BITS
+            asked.append(start_example)
+            return real(TOUR_BITS, start_example)
+
+        monkeypatch.setattr(entry, "create_cockpit", recording)
+
+        async def body() -> None:
+            server = await open_cockpit(0)
+            await server.close()
+
+        _run(body())
+        assert asked == ["tour"]
+
+
+class TestThePage:
+    """GET / serves layout A: every id its script uses, nothing from outside."""
+
+    def test_it_has_every_id_the_script_uses(self) -> None:
+        """Each pane and control the script looks up is on the page."""
+        text = _page()
+        for name in PAGE_IDS:
+            assert f'id="{name}"' in text, name
+
+    def test_it_loads_nothing_from_the_internet(self) -> None:
+        """No src= or href= points at an http address, so the page works offline."""
+        assert not re.search(r"""(src|href)\s*=\s*["']?\s*http""", _page(), flags=re.IGNORECASE)
+
+    def test_it_has_a_dark_mode(self) -> None:
+        """The colours change when the computer is in dark mode."""
+        assert "@media (prefers-color-scheme: dark)" in _page()
+
+    def test_it_listens_for_live_events(self) -> None:
+        """The page opens an EventSource on /api/events and plays and pauses."""
+        text = _page()
+        for words in ("EventSource", "/api/events", "/api/play", "/api/pause", "/api/listing"):
+            assert words in text
+
+    def test_its_zoom_panel_waits_for_pause_while_playing(self) -> None:
+        """The zoom panel's playing message is the one the docs quote."""
+        assert PLAYING_MESSAGE in _page()
+        for page in ("the-cockpit.md", "watching-it-run.md"):
+            assert PLAYING_MESSAGE in (DOCS / page).read_text(encoding="utf-8")
+
+    def test_it_marks_changes_in_words_and_explains_hidden_names(self) -> None:
+        """Changed values carry the word "changed"; hidden names have a title."""
+        text = _page()
+        assert '"changed"' in text
+        assert "hidden" in text
+        assert "show this gate" in text
+
+    def test_the_first_tour_quotes_the_demo_program_exactly(self) -> None:
+        """The Cockpit page's first guided tour pastes DEMO_PROGRAM, word for word."""
+        assert DEMO_PROGRAM in (DOCS / "the-cockpit.md").read_text(encoding="utf-8")

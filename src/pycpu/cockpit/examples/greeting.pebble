@@ -1,0 +1,4 @@
+# Hello, world: printing words
+print("Hello, world!")
+print("I am a computer made of NAND gates.")
+print("Every letter you see went through my gates.")
