@@ -3,9 +3,10 @@
 Think of the pilot's seat: the pilot is the only one who moves the controls, and the
 seat refuses anything that would break the aeroplane. A `Cockpit` owns the single
 real `Computer`, the program on it (with its Pebble source map when there is one),
-and the state just before the last move. Every move goes through its methods, which
-refuse bad requests with a `CockpitRefusal` that names the reason; the web app only
-reads requests and answers, and the picture module only reads.
+and the state just before the last move. Every move goes through its methods (play
+too, one slice at a time through `play_tick`), which refuse bad requests with a
+`CockpitRefusal` that names the reason; the web app only reads requests and answers,
+and the picture module only reads.
 """
 
 from dataclasses import dataclass
@@ -21,6 +22,8 @@ MAX_RUN = 10_000  # the most instructions one press of Run may ask for
 MAX_GATE_STEPS = 100_000  # the most gate steps one request may ask for
 MAX_PEBBLE_CHARACTERS = 65_536  # far more Pebble than fits in 4K words once translated
 MAX_LINE_INSTRUCTIONS = 10_000  # the most instructions one line step may run before giving up
+MAX_SPEED = 100_000  # the fastest play, in instructions a second
+TICK_SECONDS = 0.1  # how long play waits between two slices (and two live events)
 
 DEMO_PROGRAM = """\
     set r1, 0xFFFF    ; the output port's address
@@ -40,6 +43,7 @@ show:
 BUSY_MESSAGE = "the computer is running: press pause first"
 FINISHED_NOTE = "The program has finished, so there is no next line."
 NOT_PEBBLE_MESSAGE = "line steps need a Pebble program: this one is assembly"
+NOT_PLAYING_MESSAGE = "the computer is not playing: press play first"
 
 
 class CockpitRefusal(Exception):  # noqa: N818
@@ -105,16 +109,66 @@ class Cockpit:
         self.note: str | None = None
         self.playing = False
 
-    def _begin(self, *, load: bool = False) -> None:
-        """Start a move: refuse it if playing (loads excepted), set `before` and clear notes."""
-        if self.playing and not load:
+    def _begin(self) -> None:
+        """Start a move: refuse it while playing, then set `before` and clear the notes."""
+        if self.playing:
             raise CockpitBusy(BUSY_MESSAGE)
+        self._mark()
+
+    def _mark(self) -> None:
+        """Remember the state before a move, and clear the last move's note and gate step."""
         self.before = self.computer.state()
         self.note = None
         self.last_gate = None
 
+    def start_playing(self) -> None:
+        """Let the computer run on its own: resume it onto the fast engine and mark it playing.
+
+        `resume` first finishes a part-done instruction in the gates. After this the
+        computer only moves through `play_tick`, until `stop_playing` (or a load)
+        pauses it again. Starting is a move, so `before` is set and the notes cleared.
+
+        Raises:
+            CockpitBusy: If it is already playing.
+
+        """
+        self._begin()
+        self.computer.resume()
+        self.playing = True
+
+    def play_tick(self, instructions: int) -> bool:
+        """Run one slice of play: up to `instructions` instructions on the fast engine.
+
+        A tick is a move, so `before` becomes the state at the start of the slice,
+        and the changed marks show what this slice changed. A tick of 0 instructions
+        is allowed: at slow speeds most ticks run nothing.
+
+        Returns:
+            True while the program is still going, False once it has halted.
+
+        Raises:
+            CockpitRefusal: If the computer is not playing.
+
+        """
+        if not self.playing:
+            raise CockpitRefusal(NOT_PLAYING_MESSAGE)
+        self._mark()
+        self.computer.run(instructions)
+        return not self.computer.state().halted
+
+    def stop_playing(self) -> None:
+        """Stop play and pause just before the next instruction, in the gate engine.
+
+        Stopping when not playing does nothing, so pause and load can both call it.
+        """
+        self.playing = False
+        if not self.computer.paused:
+            self.computer.pause()
+
     def load_assembly(self, source: str) -> None:
         """Assemble `source`, load it and pause at its start.
+
+        If the computer is playing, play stops first; a refused text leaves it playing.
 
         Raises:
             CockpitRefusal: Naming the line the assembler refused; the machine is left as it was.
@@ -124,7 +178,8 @@ class Cockpit:
             assembled = assemble(source, words=self.computer.gate.words)
         except AssemblyError as error:
             raise CockpitRefusal(str(error)) from None
-        self._begin(load=True)
+        self.stop_playing()
+        self._begin()
         self.computer.load_program(assembled)
         self.computer.pause()
         self.translated = None
@@ -133,6 +188,8 @@ class Cockpit:
 
     def load_pebble(self, source: str) -> None:
         """Translate a Pebble program, load it and pause at its start.
+
+        If the computer is playing, play stops first; a refused program leaves it playing.
 
         Raises:
             CockpitRefusal: If the text is longer than `MAX_PEBBLE_CHARACTERS` or the
@@ -158,7 +215,8 @@ class Cockpit:
                 f"in all), but this Cockpit's memory has only {words}"
             )
             raise CockpitRefusal(msg)
-        self._begin(load=True)
+        self.stop_playing()
+        self._begin()
         self.computer.load_program(translated.program)
         self.computer.pause()
         self.translated = translated
@@ -208,9 +266,10 @@ class Cockpit:
         _check_whole("instructions", instructions, MAX_RUN)
         self._begin()
         self.computer.resume()
-        ran = self.computer.run(instructions)
-        self.computer.pause()
-        return ran
+        try:
+            return self.computer.run(instructions)
+        finally:
+            self.computer.pause()
 
     def step_line(self, *, into: bool) -> LineStep:
         """Run to the next Pebble line on the fast engine, then pause there in the gates.

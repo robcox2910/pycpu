@@ -286,6 +286,5 @@ And they too need a way out when a line never ends: you press pause.
 
 You can now walk through a Pebble program a line at a time, follow a call or step over
 it, and drop into the gates at any line. The next part of the Cockpit is play and pause:
-letting the program run on its own while you watch. Until then, go back to
-[The Cockpit](the-cockpit.md) and try the new buttons on its tours, or return to
-[the start of the story](../index.md) to see how far you have climbed.
+letting the program run on its own while you watch, in
+[Watching It Run](watching-it-run.md).
