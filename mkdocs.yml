@@ -80,5 +80,6 @@ nav:
       - The Cockpit: concepts/the-cockpit.md
       - Stepping a Pebble Line: concepts/stepping-a-pebble-line.md
       - Watching It Run: concepts/watching-it-run.md
+      - A Tour of the Cockpit: concepts/a-tour-of-the-cockpit.md
   - Reference:
       - Instruction Set: reference/instruction-set.md

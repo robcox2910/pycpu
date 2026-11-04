@@ -210,6 +210,91 @@ What Plan 3 learned, measured on the same Intel Core i7-9750H laptop (macOS 26.5
   - Long source lines in `printing-a-number.md` and `from-pebble-to-machine-code.md` (render fine).
   - The engine speed limits now live once, in `pycpu.proof.ENGINE_LIMITS` (done in Plan 3).
 
+## Notes for Plan 5
+
+What Plan 4 left, and what it learned. Measured on the same Intel Core i7-9750H laptop
+(macOS 26.5, Python 3.14.3) on 2026-11-04, with a throwaway script (not in the repo), two
+fresh runs.
+
+### Definition of done (spec section 9), dry run
+
+| Spec item | Status | Evidence |
+|---|---|---|
+| A Pebble program using every subset feature runs on PyCPU in the Cockpit | Done | `src/pycpu/cockpit/examples/tour.pebble`; `tests/test_examples_programs.py` (`TestTheTour`: every feature opcode, recursion, text and number printing, `for` over `range`; `test_each_example_prints_what_pebbles_vm_prints`); `test_main_opens_the_full_size_cockpit_on_the_tour` in `tests/test_cockpit.py` (`python -m pycpu` opens it) |
+| It can be paused at any moment | Done | `tests/test_live.py` (`test_pause_stops_play_at_a_boundary`, `test_loading_stops_play_first`); and from part-way through an instruction: `test_a_step_started_part_way_through_an_instruction_finishes_it_first` in `tests/test_line_steps.py`; page [Watching It Run](../../concepts/watching-it-run.md) |
+| ...and zoomed from Pebble line to individual gate, the gate view showing the real circuit's real values | Done | Page [A Tour of the Cockpit](../../concepts/a-tour-of-the-cockpit.md) (its Try It, run by `tests/test_docs.py`, goes from `n = n - 1` to gate 41226 and its wires) and `examples/cockpit_tour.py` (`tests/test_examples.py`); `TestZoomTargets` in `tests/test_cockpit.py` (every `parts` path and cell `part` is a real scope); `last_gate` is null while playing and on a clock-edge step (never faked), in `tests/test_live.py` and `test_the_first_gate_step_moves_a_clock_wire_and_says_so` in `tests/test_cockpit.py` |
+| Both engines pass lockstep equivalence | Done | `tests/test_lockstep.py` (random states, assembled programs, self-modifying code) |
+| Conformance against the Pebble VM passes | Done | `tests/test_conformance.py` (`test_corpus_matches_the_pebble_vm` over `tests/pebble_programs/`, plus `test_random_programs_match_the_pebble_vm`); the Cockpit examples in `tests/test_examples_programs.py` |
+| Every layer has concept docs | Done | 35 pages under `docs/concepts/` from gates to the tour, each guarded by `tests/test_docs.py` (sections, Try It output, `KEY_IDEAS`, nav, What's Next) |
+| PyStack launches it and `import "cpu"` works | **Left for Plan 5** | No `pycpu` plugin in `pystack/src/pystack/plugins/` yet |
+
+Only PyStack's launcher (a shell command that opens the Cockpit) and the `import "cpu"`
+Pebble module are left, with the release steps in the table at the top.
+
+### Measured
+
+- **Line steps at full size (4K words).** Through `TestClient`, every line step of the
+  `tour` example from load to halt (28 steps, the last one reaching the halt): min 0.071
+  to 0.073 s, median 0.077 to 0.078 s, max 0.095 s, over two runs. The slow test
+  `test_a_line_step_at_full_size_answers_in_under_a_second` printed a slowest line step of
+  0.080 s for the docs' countdown. Much of a line step is the pause back into the gates (see
+  `stop_playing` below), not the fast engine. `create_cockpit(start_example="tour")` built in 3.21 to 3.22 s.
+- **Play at full size.** One play tick at the fastest speed (`MAX_SPEED` x `TICK_SECONDS`
+  = 10,000 instructions, on an endless `while true` loop): median 0.023 to 0.045 s, max
+  0.030 to 0.175 s (the 0.175 s was a single outlier in the first run). Building and
+  encoding the picture for that tick's event: median 0.0004 to 0.0012 s. So a tick's work
+  fits well inside its 0.1 s. `POST /api/play` answered in 0.026 s, `POST /api/pause` in
+  0.045 to 0.053 s, and `Cockpit.stop_playing` (pause into the gates) took 0.036 to
+  0.057 s. Loading a small Pebble program with `POST /api/pebble` took 0.104 to 0.108 s.
+- **Size of one `/api/events` picture at 4K.** While playing, each `machine` event's data
+  was 2,296 to 2,315 bytes (the same in both runs); the play answer 2,030 bytes, the
+  pause answer 2,466 bytes, and the paused picture after the tour's halt 3,203 bytes. The
+  picture does not grow with the RAM: it sends a window of memory and the top 16 stack
+  cells, not all 4,096 words.
+
+### Owner items still open
+
+- **Pebble v0.4.1 release** (pending on the owner). It ships the fix for a function that
+  falls off its end after a `return` inside an `if`. Once it is out: raise the floor to
+  `fromscratch-pebble>=0.4.1` and remove the `# Pebble v0.4.1:` workarounds in the tests
+  (today in `tests/test_conformance.py` and `tests/test_functions.py`).
+- **Pebble VM `KeyError`** when a variable is called as a function (`let x = 1` then
+  `x()`). Not yet reported upstream. PyCPU refuses the program ("functions used as
+  values"), so nothing is wrong on this side.
+
+### Minors parked in the Plan 4 ledger
+
+- Task 1: the size test in `tests/test_translator.py` (around lines 413-419) does not
+  prove the `memory_needed` (frame) branch fires separately from the assembler's own size
+  check; the boundary-search loop there is duplicated; a bare `max()` can raise
+  `ValueError` in the label test; the handler-table `id()` test is weak (the brief asked
+  for it).
+- Task 2: inline `# noqa: N818` on `CockpitRefusal`/`CockpitBusy` (consistent with Plan 3's
+  ruling for `UnsupportedFeature`); resetting `last_gate` relies on `Computer.step`
+  returning None for cycle and instruction steps; `_ConflictError` always answers JSON
+  (PyWeb's base answers HTML to a browser that asks for it); a test loop compares bound
+  methods.
+- Task 3: `session.py` has a 101-column docstring line (older than Plan 4).
+- Task 4: the `## How It Works` code blocks in `the-cockpit.md` are not run by
+  `tests/test_docs.py` (true of every page: only Try It is run).
+- Task 5: `Cockpit.run` pauses without `try`/`finally` (the shape `step_line` used to have);
+  the `/api/listing` handler is named `rows` only to fit 100 columns.
+- Task 6: the live-test fixture patches `app.EventHub`/`Cockpit` by import path; the
+  `MAX_SPEED` tick bound is only pinned constant to constant.
+- Task 7: `_start_with` reads all six example files to load one; the page's listing
+  refetch could loop if a program overwrites its own code; `page.html` is about 650 lines
+  (organized, but large); the no-gate note shows twice (the top note and the zoom panel's
+  show-gate slot); the "clk clock wire" wording.
+- Rulings that shape the code: a line step that starts on a word whose frame is not ready
+  (a prologue word, a return's `ret`) takes its start frame pointer from the first ready
+  word it reaches, then applies the contract's rule, so step over never stops inside a
+  callee; `variables` and `last_gate` are null while playing, and the zoom panel says to
+  pause; the tour's "`for` over `range`" is checked from the source plus the lowered
+  opcodes, because Pebble lowers `for` to jumps.
+- Found in Task 8: `pyweb.testing.TestClient.stream(path, count=n)` waits for ever if
+  fewer than `n` events ever come (for example, a play that halts in its first tick sends
+  one event). Tests and measurements must only ask for events that are sure to arrive.
+
 ## Rule #1: docs ship with the code
 
 Documentation is as important as code, and it outranks everything else in these plans. The

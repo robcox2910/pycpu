@@ -195,7 +195,6 @@ your phone ask over and over.
 ## What's Next
 
 You can now step the machine a gate, an instruction or a Pebble line at a time, or let
-it play while you watch, and pause it to look inside. The Cockpit page puts all of
-these buttons and pictures on one screen: go back to
-[The Cockpit](the-cockpit.md) to see its layout, every pane and every route, or to
-[Stepping a Pebble Line](stepping-a-pebble-line.md) to walk a program line by line.
+it play while you watch, and pause it to look inside. The last page puts all of those
+buttons together: [A Tour of the Cockpit](a-tour-of-the-cockpit.md) follows one Pebble
+line all the way down to a single NAND gate, and back up again.
