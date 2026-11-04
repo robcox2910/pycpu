@@ -11,6 +11,7 @@ from pyweb.testing import TestClient, TestResponse
 from pycpu.cockpit.app import create_cockpit
 from pycpu.cockpit.session import (
     FINISHED_NOTE,
+    LIMIT_REASON,
     MAX_LINE_INSTRUCTIONS,
     Cockpit,
     CockpitBusy,
@@ -59,6 +60,18 @@ RECURSIVE_LINE = 5
 RECURSION_CALLER_LINE = 7
 RECURSION_FIRST_LINE = 2
 ENDLESS = "while true { }\n"
+LONG_CALL = """\
+fn slow() {
+    let i = 0
+    while i < 2000 {
+        i = i + 1
+    }
+    return i
+}
+let x = slow()
+print(x)
+"""
+LONG_CALL_LINE = 8
 DIVIDE_BY_ZERO = "let a = 7\nprint(a // 0)\n"
 DIVIDE_LINE = 2
 GATE_STEPS = 50
@@ -288,10 +301,24 @@ class TestStepsThatCannotReachALine:
         step = cockpit.step_line(into=False)
         assert step == LineStep(MAX_LINE_INSTRUCTIONS, "limit")
         assert MAX_LINE_INSTRUCTIONS == 10_000  # noqa: PLR2004 - the page says 10,000
-        assert cockpit.note is not None
-        assert "10,000" in cockpit.note
+        assert cockpit.note == (
+            "Ran 10,000 instructions without reaching another line, so the step gave up "
+            f"there; {LIMIT_REASON}."
+        )
+        page = Path(__file__).parent.parent / "docs" / "concepts" / "stepping-a-pebble-line.md"
+        assert f'"{LIMIT_REASON}"' in " ".join(page.read_text(encoding="utf-8").split())
         assert cockpit.computer.paused
         assert cockpit.computer.gate.at_boundary
+
+    def test_a_step_over_a_very_long_call_stops_at_the_limit_too(self) -> None:
+        """A call that runs past 10,000 instructions is cut short like an endless loop."""
+        cockpit = _pebble(LONG_CALL)
+        while _line(cockpit) != LONG_CALL_LINE:
+            cockpit.step(StepSize.INSTRUCTION)
+        step = cockpit.step_line(into=False)
+        assert step == LineStep(MAX_LINE_INSTRUCTIONS, "limit")
+        assert cockpit.note is not None
+        assert cockpit.note.endswith(f"{LIMIT_REASON}.")
 
     def test_a_halted_machine_does_not_move(self) -> None:
         """Once the program has finished, a line step runs nothing and says so."""

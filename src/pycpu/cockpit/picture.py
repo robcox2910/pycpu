@@ -103,17 +103,24 @@ def _signed(word: int) -> int:
 
 
 def variables_picture(
-    translated: TranslatedProgram | None, start: MachineState
+    translated: TranslatedProgram | None,
+    start: MachineState,
+    now: MachineState | None = None,
 ) -> dict[str, object] | None:
     """Describe the Pebble names of the running code: each one's address and value.
 
     The frame is the one of the instruction that started in `start` (its `pc`), found
     in `translated.frames`, and `r7` says where that frame sits. Each name lives at `r7`
     plus its slot's offset; a name whose address falls outside memory is left out.
+    The frame and `r7` come from `start`, because part-way through an epilogue's
+    `pop r7` the register has already moved on to the caller's frame. Each value is
+    read from `now`, so that part-way through a store the variable agrees with the
+    memory pane and its changed mark.
 
     Args:
         translated: The Pebble program, or None for assembly.
         start: The state at the start of the current instruction.
+        now: The state to read each name's word from; `start` when None.
 
     Returns:
         `function` (None for the top level), `frame_pointer` and `names`, or None for
@@ -127,12 +134,13 @@ def variables_picture(
     if layout is None:
         return None
     pointer = start.registers[FRAME_POINTER]
+    memory = start.memory if now is None else now.memory
     names: list[dict[str, object]] = []
     for slot in layout.slots:
         address = pointer + slot.offset
-        if not 0 <= address < len(start.memory):
+        if not 0 <= address < len(memory):
             continue
-        word = start.memory[address]
+        word = memory[address]
         names.append(
             {
                 "name": slot.name,
@@ -173,7 +181,8 @@ def listing(cockpit: Cockpit) -> dict[str, object]:
         cockpit: The session whose program to list.
 
     Returns:
-        `rows`, and `pebble`: the Pebble source as a list of lines, or None for assembly.
+        `rows`; `pebble`, the Pebble source as a list of lines, or None for assembly;
+        and `program`, the session's load count, which the picture carries too.
 
     """
     program, translated = cockpit.program, cockpit.translated
@@ -194,7 +203,8 @@ def listing(cockpit: Cockpit) -> dict[str, object]:
                 "pebble_line": None if translated is None else translated.line_at(address),
             }
         )
-    return {"rows": rows, "pebble": None if translated is None else translated.source.splitlines()}
+    pebble = None if translated is None else translated.source.splitlines()
+    return {"rows": rows, "pebble": pebble, "program": cockpit.loads}
 
 
 def pebble_picture(
@@ -255,7 +265,8 @@ def machine_picture(cockpit: Cockpit) -> dict[str, object]:
     a program's own `halt 1` to `halt 3` shares those codes. `pebble` is the
     `pebble_picture` when the program came from Pebble, and None for assembly.
     `variables` is the `variables_picture` of the current instruction (None while
-    playing).
+    playing). `program` is the session's load count, so the page can tell whether its
+    listing is of the program on the machine.
 
     Args:
         cockpit: The session to describe.
@@ -302,9 +313,10 @@ def machine_picture(cockpit: Cockpit) -> dict[str, object]:
         "pebble": pebble,
         "changed": _changed(cockpit.before, state),
         "stack": _stack(state),
-        "variables": None if playing else variables_picture(translated, start),
+        "variables": None if playing else variables_picture(translated, start, state),
         "last_gate": None if playing else _last_gate(cockpit),
         "note": cockpit.note,
+        "program": cockpit.loads,
         "parts": {
             "registers": [f"cpu.registers.r{i}" for i in range(len(state.registers))],
             "pc": "cpu.pc",

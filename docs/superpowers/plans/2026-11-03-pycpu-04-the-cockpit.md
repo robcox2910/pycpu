@@ -87,6 +87,7 @@ Every move sets `before` first, then clears `note` and `last_gate`. A move is a 
 | `variables` | `null` for assembly, or when the current word's frame is not ready. Otherwise `{"function": name or null for the top level, "frame_pointer": r7, "names": [{"name", "kind": "parameter" or "variable", "hidden": bool, "address", "word", "value" (signed), "part"}]}` |
 | `last_gate` | `null`, or `{"id", "path", "value"}` for the last gate step (`path` from `Circuit.scope_of`) |
 | `note` | `cockpit.note` |
+| `program` | `cockpit.loads`: how many programs the session has loaded, bumped on every load. `/api/listing` carries the same `program`, so the page refetches the listing whenever the two differ (added in the final fix wave) |
 | `parts` | `{"registers": ["cpu.registers.r0", ...], "pc": "cpu.pc", "sp": "cpu.sp", "flags": "cpu.flags", "instruction": part_for_instruction(word)}` |
 
 Each `memory`/`stack` cell gains `"part": "ram.word<address>"`.
@@ -111,7 +112,7 @@ A test checks that every path in `parts` and every `part` exists (`Circuit.has_s
 | Route | Does |
 |---|---|
 | `GET /`, `GET /api/machine`, `GET /api/view`, `POST /api/step`, `/api/rewind`, `/api/run`, `/api/program`, `/api/pebble` | As the Bench. `/api/step`'s `size` also takes `"line"` (step over) and `"line_into"` (step into) |
-| `GET /api/listing` | The whole loaded program: `{"rows": [{"address", "word", "text", "first", "labels", "pebble_line"}], "pebble": [lines] or null}`. `text` is the source line the word came from (`Program.lines`). `first` is true for the first word of its source line. `labels` lists the label names at this address |
+| `GET /api/listing` | The whole loaded program: `{"rows": [{"address", "word", "text", "first", "labels", "pebble_line"}], "pebble": [lines] or null, "program": cockpit.loads}`. `text` is the source line the word came from (`Program.lines`). `first` is true for the first word of its source line. `labels` lists the label names at this address |
 | `GET /api/examples` | `[{"name", "title", "source"}]`, read from `src/pycpu/cockpit/examples/*.pebble` |
 | `GET /api/events` | `EventStream` of `ServerEvent(json(picture), event="machine")`, one after every move and every play tick |
 | `POST /api/play` | `{"speed": n}`, with n instructions a second from 1 to `MAX_SPEED`. Starts play and answers the picture at once |

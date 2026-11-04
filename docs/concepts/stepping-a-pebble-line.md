@@ -15,9 +15,9 @@ footnote and come back, and put the bookmark on the next line of the *story*. Or
 **step into** it: follow the footnote, and put the bookmark on the footnote's first line.
 
 In a Pebble program, a footnote is a **function**. The Cockpit has two new buttons that
-do exactly this. **Next line** (step over) runs to the next line of the code you are
-in, running any function it calls all the way through. **Step into** follows a call and
-stops on the first line inside the function.
+do exactly this. **Line** (step over) runs to the next line of the code you are
+in, running any function it calls all the way through. **Line into** (step into)
+follows a call and stops on the first line inside the function.
 
 | Reading aloud | In PyCPU |
 |---------------|----------|
@@ -35,7 +35,7 @@ stops on the first line inside the function.
 ## Try It
 
 We load the countdown from [The Cockpit](the-cockpit.md) into a Cockpit with 256 words
-of memory, and press "next line" until the program finishes. After each step we print the
+of memory, and press **Line** until the program finishes. After each step we print the
 line the Pebble pane marks, the `note` that says how far the step ran, and `r7`, the
 frame pointer. When the program has finished, we press it once more.
 
@@ -146,12 +146,12 @@ run(into_and_over())
 #    the program printed '6\n'
 ```
 
-Both times we first press "next line" once, which makes main's frame, runs `let x = 3`
+Both times we first press **Line** once, which makes main's frame, runs `let x = 3`
 and stops on line 5, `print(double(x))`. (Line 1, `fn double(n) {`, only names the
-function; main's own code starts at line 4.) Then "step into" follows the call: 12
+function; main's own code starts at line 4.) Then **Line into** follows the call: 12
 instructions later the machine is paused on line 2, `return n * 2`, inside `double`, with
 its own frame (`r7` is 251, lower down the stack than main's 255) and its parameter `n`
-holding 3. "Next line" from the same place steps *over* the call: it runs `double`, the
+holding 3. **Line** from the same place steps *over* the call: it runs `double`, the
 multiply routine, the printing routine and the program's end, 223 instructions, without
 ever stopping inside `double`. The line after `print(double(x))` is the end of the
 program, so it halts with `6` printed.
@@ -265,8 +265,10 @@ it can never stop half-way through making one.
 `while true { }` written on one line never reaches another line. If a step simply waited
 for the next line, the request would never be answered and the page would hang. So a
 step gives up after `MAX_LINE_INSTRUCTIONS`, 10,000 instructions, pauses wherever it got
-to, and its note says that it gave up and why. You can press it again, or look inside to
-see what the loop is doing.
+to, and its note says that it gave up and why: "the line may be stuck in a loop, or a
+call it makes is very long". A step over a call that runs more than 10,000
+instructions gives up the same way, even though the call would finish if left alone.
+You can press it again, or look inside to see what the loop is doing.
 
 ## Why Does This Matter?
 

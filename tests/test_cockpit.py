@@ -16,6 +16,7 @@ from pyweb.testing import TestClient, TestResponse
 from pycpu import __main__ as entry
 from pycpu.__main__ import HOST, banner, open_cockpit
 from pycpu.assembler import assemble
+from pycpu.circuit import Circuit
 from pycpu.cockpit import picture as picture_module
 from pycpu.cockpit.app import create_cockpit
 from pycpu.cockpit.picture import (
@@ -36,6 +37,7 @@ from pycpu.cockpit.session import Cockpit as Session
 from pycpu.computer import Computer, StepSize
 from pycpu.cpu import GateMachine
 from pycpu.fast import FastMachine
+from pycpu.isa import Opcode, decode
 from pycpu.memory import RAM_ADDRESS_BITS
 from pycpu.state import REGISTER_COUNT
 from pycpu.translator import FRAME_POINTER, translate
@@ -1064,6 +1066,34 @@ class TestListing:
         for row in body["rows"]:
             assert row["pebble_line"] == translated.line_at(row["address"])
 
+    def test_every_load_gives_the_picture_and_the_listing_a_new_program_number(self) -> None:
+        """`program` counts loads, the same in both answers, even for the same text twice."""
+        cockpit = Cockpit(PEBBLE_BITS)
+
+        def numbers() -> tuple[object, object]:
+            """Read `program` from the picture and from the listing."""
+            machine = _json(_run(cockpit.client.get("/api/machine")))
+            listed = _json(_run(cockpit.client.get("/api/listing")))
+            return machine["program"], listed["program"]
+
+        assert numbers() == (0, 0)  # the demo it starts with
+        assert cockpit.pebble(COUNTDOWN).status == OK
+        assert numbers() == (1, 1)
+        assert cockpit.pebble(COUNTDOWN).status == OK  # the same text, loaded again
+        assert numbers() == (2, 2)
+        assert cockpit.load(DEMO_PROGRAM).status == OK
+        assert numbers() == (LOADS_AFTER_THREE, LOADS_AFTER_THREE)
+        session = Session(PEBBLE_BITS)
+        session.step(StepSize.INSTRUCTION)
+        session.run(1)
+        assert machine_picture(session)["program"] == 0  # moves are not loads
+
+    def test_a_refused_load_keeps_the_program_number(self) -> None:
+        """A program the assembler refuses is not loaded, so the number stays put."""
+        cockpit = Cockpit(PEBBLE_BITS)
+        assert cockpit.load("nonsense r9\n").status == BAD_REQUEST
+        assert _json(_run(cockpit.client.get("/api/machine")))["program"] == 0
+
 
 NEGATIVE = "let n = 0 - 3\nprint(n)\n"
 NEGATIVE_VALUE = -3
@@ -1076,6 +1106,10 @@ ADD_A_OFFSET, ADD_B_OFFSET = 3, 2
 RANGE_LOOP = "for i in range(3) {\n    print(i)\n}\n"
 RANGE_PRINT_LINE = 2
 RANGE_LIMIT = 3
+LOADS_AFTER_THREE = 3
+STORE_TO_N = "let n = 2\nn = n - 1\n"
+STORE_LINE = 2
+STORE_OLD, STORE_BETWEEN, STORE_NEW = 2, 3, 1
 
 
 def _pebble_session(source: str) -> Session:
@@ -1206,6 +1240,32 @@ class TestVariables:
         session = _pebble_session(COUNTDOWN)
         start = replace(session.computer.instruction_start, pc=PEBBLE_WORDS - 1)
         assert variables_picture(session.translated, start) is None
+
+    def test_part_way_through_a_store_the_variable_agrees_with_memory(self) -> None:
+        """Gate-stepping the store to `n` updates `n`'s value as soon as its word changes."""
+        session = _pebble_session(STORE_TO_N)
+        picture = _step_to_line(session, STORE_LINE)
+        while decode(cast("dict[str, Any]", picture["instruction"])["word"]).opcode != Opcode.STORE:
+            session.step(StepSize.INSTRUCTION)
+            picture = machine_picture(session)
+        (n,) = cast("dict[str, Any]", picture["variables"])["names"]
+        address: int = n["address"]
+        assert n["word"] == STORE_OLD
+        # The word's bits flip one gate at a time, so it passes through an in-between
+        # value (3: bit 0 turns on before bit 1 turns off) before it settles on 1.
+        # The variable must agree with memory both times.
+        for expected in (STORE_BETWEEN, STORE_NEW):
+            while session.computer.state().memory[address] in {STORE_OLD, STORE_BETWEEN} - {
+                expected
+            }:
+                session.step(StepSize.GATE)
+            picture = machine_picture(session)
+            (n,) = cast("dict[str, Any]", picture["variables"])["names"]
+            word = session.computer.state().memory[address]
+            assert word == expected
+            assert not picture["at_boundary"]  # still part-way through the store
+            assert (n["address"], n["word"], n["value"]) == (address, word, word)
+            assert address in cast("dict[str, Any]", picture["changed"])["memory"]
 
     def test_loading_another_program_shows_its_names(self) -> None:
         """After a reload nothing of the old program's names leaks through."""
@@ -1354,12 +1414,42 @@ class TestThePage:
         assert f'const NO_GATE = "{NO_GATE_ENDING}";' in text
         assert "m.note.endsWith(NO_GATE)" in text
 
+    def test_a_no_gate_note_is_shown_only_once(self) -> None:
+        """The general note line stays empty for a no-gate note, which the zoom panel shows."""
+        text = _page()
+        assert "const noGate = m.note && m.note.endsWith(NO_GATE);" in text
+        assert 'document.getElementById("note").textContent = noGate ? "" : (m.note || "");' in text
+        assert text.count('showGate.append(el("p", m.note, "muted"));') == 1
+
+    def test_the_line_buttons_have_the_names_the_docs_use(self) -> None:
+        """The two line-step buttons say Line and Line into, as every page that names them does."""
+        labels = dict(re.findall(r'data-size="(line|line_into)"[^>]*>([^<]+)</button>', _page()))
+        assert labels == {"line": "Line", "line_into": "Line into"}
+        for page in ("the-cockpit.md", "stepping-a-pebble-line.md", "a-tour-of-the-cockpit.md"):
+            text = (DOCS / page).read_text(encoding="utf-8")
+            assert f"**{labels['line']}**" in text, page
+        for page in ("the-cockpit.md", "stepping-a-pebble-line.md"):
+            assert f"**{labels['line_into']}**" in (DOCS / page).read_text(encoding="utf-8")
+        for page in DOCS.glob("*.md"):
+            text = page.read_text(encoding="utf-8")
+            assert "**Next line**" not in text, page.name
+            assert "**Step into**" not in text, page.name
+
+    def test_it_refetches_the_listing_whenever_the_program_number_changes(self) -> None:
+        """The listing is stale when its `program` is not the picture's, and is re-checked."""
+        text = _page()
+        assert "return !listing || listing.program !== m.program;" in text
+        assert "if (listingIsStale(m)) fetchListing(m); else moveMarks(m);" in text
+        assert "if (latest.program !== askedFor) fetchListing(latest);" in text
+        assert "listing.rows[i.address].word" not in text  # the old word-by-word guess is gone
+
     def test_the_first_tour_quotes_the_demo_program_exactly(self) -> None:
         """The Cockpit page's first guided tour pastes DEMO_PROGRAM, word for word."""
         assert DEMO_PROGRAM in (DOCS / "the-cockpit.md").read_text(encoding="utf-8")
 
 
 CLOCK_NOTE = "That step moved the write clock wire, not a gate, so there is no gate to show."
+MAIN_CLOCK_NOTE = "That step moved the clock wire, not a gate, so there is no gate to show."
 TOUR_FIRST_WORDS = [(0xC200, True), (0x24B8, True), (0x3401, False)]
 TOUR_FIRST_LINE = 18
 
@@ -1407,7 +1497,98 @@ class TestFreshTour:
         assert session.last_gate.kind == "end"
         assert session.note == END_NOTE
 
+    def test_a_gate_step_ending_on_the_main_clock_calls_it_the_clock_wire(self) -> None:
+        """The main clock, `clk`, is "the clock wire" in the note, never "the clk clock wire"."""
+        counter = Session(SMALL)
+        steps = 0
+        while True:
+            steps += 1
+            micro = counter.computer.step(StepSize.GATE)
+            assert micro is not None
+            if micro.kind == "edge" and micro.wire == "clk":
+                break
+        session = Session(SMALL)
+        session.step(StepSize.GATE, steps)
+        assert session.note == MAIN_CLOCK_NOTE
+        assert '`clk`, is just "the clock wire"' in (DOCS / "the-cockpit.md").read_text(
+            encoding="utf-8"
+        )
+
     def test_a_tour_too_big_for_the_memory_is_a_value_error(self) -> None:
         """Starting a 64-word Cockpit on the tour is refused as a ValueError, naming why."""
         with pytest.raises(ValueError, match="cannot start this Cockpit"):
             create_cockpit(SMALL, start_example="tour")
+
+
+TOUR_GATE = 41226
+TOUR_LINE_N = 5  # n = n - 1 in the countdown example
+TOUR_N = 2
+TOUR_GATE_STEPS = 2122
+TOUR_ADDER = "cpu.alu.adder.bit0.full_adder"
+XOR_GATES = 4
+EXAMPLES = Path(__file__).parent.parent / "src" / "pycpu" / "cockpit" / "examples"
+
+
+def _all_gates(circuit: Circuit, path: str) -> list[int]:
+    """Collect every gate under `path`, in its own gates and every part nested inside."""
+    gates = circuit.gates_in(path)
+    for child in circuit.children(path):
+        gates += _all_gates(circuit, f"{path}.{child}")
+    return gates
+
+
+def _wires_in_and_out(circuit: Circuit, path: str) -> tuple[set[int], set[int]]:
+    """Return the wires a part takes in from outside, and the wires its own gates drive."""
+    first, second, out = circuit.gate_wires
+    gates = _all_gates(circuit, path)
+    driven = {out[g] for g in gates}
+    taken = {first[g] for g in gates} | {second[g] for g in gates}
+    return taken - driven, driven - taken
+
+
+class TestTheTourGate:
+    """The XOR gate the tour page stops on, read straight from the real circuit."""
+
+    def test_it_is_one_of_four_nands_fed_by_the_first_sum_and_the_carry_in(self) -> None:
+        """Gate 41226 sits in the second half adder's 4-gate XOR, fed 0 (first sum) and 1 (carry)."""
+        session = Session(PEBBLE_BITS)
+        session.load_pebble((EXAMPLES / "countdown.pebble").read_text(encoding="utf-8"))
+        picture = machine_picture(session)
+        while not (
+            cast("dict[str, Any]", picture["pebble"])["line"] == TOUR_LINE_N
+            and cast("dict[str, Any]", picture["variables"])["names"][0]["value"] == TOUR_N
+        ):
+            session.step_line(into=False)
+            picture = machine_picture(session)
+        while not cast("dict[str, Any]", picture["instruction"])["text"].startswith("sub"):
+            session.step(StepSize.INSTRUCTION)
+            picture = machine_picture(session)
+        steps = 0
+        while not (cast("dict[str, Any] | None", picture["last_gate"]) or {"path": ""})[
+            "path"
+        ].startswith("cpu.alu.adder"):
+            session.step(StepSize.GATE)
+            steps += 1
+            picture = machine_picture(session)
+        gate = cast("dict[str, Any]", picture["last_gate"])
+        assert (steps, gate["id"]) == (TOUR_GATE_STEPS, TOUR_GATE)
+
+        simulator = session.computer.gate.simulator
+        circuit = simulator.circuit
+        xor = f"{TOUR_ADDER}.half_adder#1.xor"
+        assert gate["path"] == xor
+        assert len(circuit.gates_in(xor)) == XOR_GATES
+        assert TOUR_GATE in circuit.gates_in(xor)
+        first, second, _out = circuit.gate_wires
+        inputs = {first[TOUR_GATE], second[TOUR_GATE]}
+        assert inputs == _wires_in_and_out(circuit, xor)[0]  # the XOR's own two inputs
+        (first_sum,) = _wires_in_and_out(circuit, f"{TOUR_ADDER}.half_adder.xor")[1]
+        (carry_in,) = (
+            _wires_in_and_out(circuit, TOUR_ADDER)[0]
+            - _wires_in_and_out(circuit, f"{TOUR_ADDER}.half_adder")[0]
+        )
+        assert inputs == {first_sum, carry_in}
+        assert (simulator.get(first_sum), simulator.get(carry_in)) == (0, 1)
+        text = (DOCS / "a-tour-of-the-cockpit.md").read_text(encoding="utf-8")
+        assert "one of the\nfour NANDs" in text
+        assert f"{TOUR_GATE:,}" in text

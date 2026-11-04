@@ -20,7 +20,8 @@ variables, and whatever it has printed. Buttons move the machine forward by one
 **gate**, one clock beat, one whole **instruction** or one whole Pebble line, or let it
 run on its own. And the zoom panel lets you **zoom** (move from a big part into the
 smaller parts it is made of) from the whole CPU down to a single NAND gate, with the
-real 0s and 1s on its wires. Nothing on it is drawn from memory or faked.
+real 0s and 1s on its wires. Nothing on it is faked: every value comes from the
+machine itself, never made up by the page.
 
 One line of Pebble is many machine instructions. Step one instruction at a time and you
 can watch the Pebble line's mark sit still for a while, then jump, and the Cockpit lets
@@ -100,8 +101,10 @@ Three kinds of click take you into the circuit:
   opens the zoom panel on the part that holds the gate that just changed, and highlights
   that gate until the next move. A clock beat is made of clock-wire moves as well as
   gates, so a gate step can end on a clock wire instead (the very first **1 gate** of a
-  program does). Then there is no gate to show, and the page says so:
+  program does). Then there is no gate to show, and the page says so in the zoom panel,
+  where the button would be:
   "That step moved the write clock wire, not a gate, so there is no gate to show."
+  The memory's `write` clock is named; the main clock, `clk`, is just "the clock wire".
 
 While the computer is playing the step buttons are switched off, and the zoom panel
 says "Pause to look inside the gates": the gates are not running then, so there is
@@ -472,7 +475,10 @@ layout A, from the picture every route answers with:
   "Inside a ready-made routine", or, once halted, how the run ended). For an assembly
   program it says there is no Pebble to show.
 - **The machine code pane** is drawn once from `GET /api/listing` after each load. Every
-  picture after that only moves the marks: `>` on the current instruction (none once the
+  picture carries `program`, a count the session adds one to on every load, and the
+  listing carries the `program` it was made for; when the two differ, the page fetches
+  the listing again, so it never shows a program that is not loaded. Every other
+  picture only moves the marks: `>` on the current instruction (none once the
   machine has halted, because nothing runs next) and shading on every row whose
   `pebble_line` is the running line. Above it, a sentence names the current
   instruction; clicking it zooms to `parts["instruction"]`.
@@ -663,6 +669,13 @@ a list of lines (or `null` for an assembly program). Each row has:
 - `pebble_line`: the Pebble line that made this word, or `null` for assembly and for
   the ready-made routines.
 
+Next to `rows` and `pebble` sits `program`, a count of how many programs this Cockpit
+has loaded. Every picture carries the same count, so the page can tell a listing of
+the program on the machine from a listing of one that has since been replaced. The
+listing shows each word as the program was loaded: a program that writes over its own
+instructions changes them in memory, where the memory pane and the zoom panel show the
+new words, but not in the listing.
+
 ```python
 from pynet.loop import run
 from pyweb.testing import TestClient
@@ -755,7 +768,7 @@ async def zoom() -> None:
 run(zoom())
 # Output:
 # add r3, r3, r2 is zoomed to cpu.alu
-# ['control', 'operand', 'adder', 'overflow', 'and_bus']
+# ['control', 'operand', 'adder', 'overflow', 'and_bus', 'or_bus', 'xor_bus', 'select', 'flags']
 # cpu.registers.r1 ram.word4
 ```
 
@@ -792,13 +805,13 @@ async def follow() -> None:
 
 run(follow())
 # Output:
-# {'id': 10016, 'path': 'cpu.sp.bit12.slave', 'value': 0}
+# {'id': 10015, 'path': 'cpu.sp.bit12.slave', 'value': 1}
 # None
 ```
 
-After 100 gate steps the last gate to think was number 10,016 (a number that belongs to this small
+After 100 gate steps the last gate to think was number 10,015 (a number that belongs to this small
 6-bit machine and is different on a machine of another size), a part of the stack
-pointer's own wiring, and it settled on 0. Then an instruction step ran many gates at
+pointer's own wiring, and its new output was 1. Then an instruction step ran many gates at
 once, so there is no single last one to name and the answer goes back to `null`. The
 picture also carries a `note`, one sentence about the last move, which is `null` here.
 A gate step that ends on a clock wire or an instruction's end, not a gate, uses it to
@@ -814,6 +827,11 @@ read as a signed number (so the word 65533 shows as -3), its `kind` (`"parameter
 [Variables in Memory](variables-in-memory.md). For an assembly program, inside a
 ready-made routine, while a frame is still being built, and while the computer is
 playing, `variables` is `null`.
+
+Which frame to show, and its `r7`, come from the start of the current instruction, so a
+half-finished `pop r7` cannot jump the pane to the caller's boxes too early. Each value,
+though, is read from memory as it is right now. Gate-step a store to `n` and `n`'s value
+changes, with its changed mark, at the very gate where its word in memory does.
 
 `hidden` marks the compiler's own helpers. A `for` loop needs to remember where to stop,
 so Pebble quietly makes a variable for the loop's end value and gives it a name that
@@ -869,7 +887,7 @@ map, turns that address back into a line of your code. Without that table, the
 computer could tell you only the address of an instruction, and nothing more.
 
 It matters for teaching too. The promise of this project is "nothing is faked", and the
-Cockpit is where you check that promise yourself. Every number on the page is read from
+Cockpit is where you check that promise yourself. While paused, every number on the page is read from
 the gate engine, the computer made of NAND gates.
 
 ## What's Next

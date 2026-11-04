@@ -225,7 +225,7 @@ fresh runs.
 | ...and zoomed from Pebble line to individual gate, the gate view showing the real circuit's real values | Done | Page [A Tour of the Cockpit](../../concepts/a-tour-of-the-cockpit.md) (its Try It, run by `tests/test_docs.py`, goes from `n = n - 1` to gate 41226 and its wires) and `examples/cockpit_tour.py` (`tests/test_examples.py`); `TestZoomTargets` in `tests/test_cockpit.py` (every `parts` path and cell `part` is a real scope); `last_gate` is null while playing and on a clock-edge step (never faked), in `tests/test_live.py` and `test_the_first_gate_step_moves_a_clock_wire_and_says_so` in `tests/test_cockpit.py` |
 | Both engines pass lockstep equivalence | Done | `tests/test_lockstep.py` (random states, assembled programs, self-modifying code) |
 | Conformance against the Pebble VM passes | Done | `tests/test_conformance.py` (`test_corpus_matches_the_pebble_vm` over `tests/pebble_programs/`, plus `test_random_programs_match_the_pebble_vm`); the Cockpit examples in `tests/test_examples_programs.py` |
-| Every layer has concept docs | Done | 35 pages under `docs/concepts/` from gates to the tour, each guarded by `tests/test_docs.py` (sections, Try It output, `KEY_IDEAS`, nav, What's Next) |
+| Every layer has concept docs | Done | Every page under `docs/concepts/`, from gates to the tour, guarded by `tests/test_docs.py` (sections, the output of every block with an `# Output:` marker, `KEY_IDEAS`, nav, What's Next) |
 | PyStack launches it and `import "cpu"` works | **Left for Plan 5** | No `pycpu` plugin in `pystack/src/pystack/plugins/` yet |
 
 Only PyStack's launcher (a shell command that opens the Cockpit) and the `import "cpu"`

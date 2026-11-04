@@ -360,6 +360,24 @@ class TestButtonsWhilePlaying:
         pictures = [_picture(event) for event in _run(main())]
         assert [picture["pc"] for picture in pictures[1:]] == ONE_TICK_PCS
 
+    def test_play_again_after_a_load_runs_one_loop(self, rig_maker: Callable[..., Rig]) -> None:
+        """Load during play, then play at once: the old loop is gone, so each tick runs one."""
+        rig = rig_maker(SMALL, QUICK_TICK)
+
+        async def main() -> list[ServerEvent]:
+            """Play, load the same program again, play again, and hear four ticks."""
+            await rig.post("/api/program", {"source": COUNT_UP})
+            await rig.post("/api/play", {"speed": ONE_PER_QUICK_TICK})
+            await rig.post("/api/program", {"source": COUNT_UP})
+            listener = await rig.listen(1 + len(ONE_TICK_PCS))
+            await rig.post("/api/play", {"speed": ONE_PER_QUICK_TICK})
+            events = await listener
+            await rig.post("/api/pause")
+            return events
+
+        pictures = [_picture(event) for event in _run(main())]
+        assert [picture["pc"] for picture in pictures[1:]] == ONE_TICK_PCS
+
 
 class TestPlayRequests:
     """`/api/play` checks its speed like every other number the Cockpit takes."""

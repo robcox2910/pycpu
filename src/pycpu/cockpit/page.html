@@ -399,31 +399,36 @@ function drawZoom(m) {
 
 // ---- the machine code and the Pebble program -------------------------------
 
-async function fetchListing() {
+// Fetch the listing for picture m. While one fetch is out, later calls are dropped, and
+// the check when it lands catches anything they would have done.
+async function fetchListing(m) {
   if (fetchingListing) return;
   fetchingListing = true;
+  const askedFor = m.program;
   try {
     const response = await fetch("/api/listing");
     if (response.ok) {
       listing = await response.json();
       drawListing();
-      if (latest) moveMarks(latest);
     }
   } catch (e) {
     showError("Could not reach the Cockpit");
   } finally {
     fetchingListing = false;
   }
+  // A program may have been loaded while that fetch was out: look again at the newest picture.
+  if (!latest) return;
+  if (listingIsStale(latest)) {
+    if (latest.program !== askedFor) fetchListing(latest);
+  } else {
+    moveMarks(latest);
+  }
 }
 
-// The listing is drawn once per program; later pictures only move its marks.
+// The listing is drawn once per program; later pictures only move its marks. Each load
+// gives the program a new number, and the listing says which number it was made for.
 function listingIsStale(m) {
-  if (!listing) return true;
-  const source = m.pebble ? m.pebble.source.join("\n") : null;
-  const listed = listing.pebble ? listing.pebble.join("\n") : null;
-  if (source !== listed) return true;
-  const i = m.instruction;
-  return i.word !== null && i.address < listing.rows.length && listing.rows[i.address].word !== i.word;
+  return !listing || listing.program !== m.program;
 }
 
 function drawListing() {
@@ -515,7 +520,7 @@ function drawCode(m) {
     b.onclick = () => zoomFromClick(m.parts.instruction);
     current.append(b);
   }
-  if (listingIsStale(m)) fetchListing(); else moveMarks(m);
+  if (listingIsStale(m)) fetchListing(m); else moveMarks(m);
 }
 
 function drawPebbleNote(m) {
@@ -549,7 +554,9 @@ function drawStatus(m) {
     const why = m.fault ? m.fault.toLowerCase().replaceAll("_", " ") : (m.halt_code === 0 ? "finished" : "stopped");
     status.append(el("span", "halted: " + why + " (code " + m.halt_code + ")", "lamp on"));
   }
-  document.getElementById("note").textContent = m.note || "";
+  // A no-gate note is shown once, in the zoom panel where the gate button would be.
+  const noGate = m.note && m.note.endsWith(NO_GATE);
+  document.getElementById("note").textContent = noGate ? "" : (m.note || "");
 }
 
 function drawRegisters(m) {

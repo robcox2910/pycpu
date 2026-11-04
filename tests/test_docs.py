@@ -136,6 +136,15 @@ def _last_nav_page() -> str:
     return re.findall(r":\s*(concepts/\S+\.md)\s*$", nav, flags=re.MULTILINE)[-1]
 
 
+def _run_block(block: str, expected: list[str], name: str) -> None:
+    """Run one python block on its own and fail unless it prints exactly `expected`."""
+    buffer = io.StringIO()
+    with contextlib.redirect_stdout(buffer):
+        exec(compile(block, name, "exec"), {"__name__": "__try_it__"})  # noqa: S102
+    actual = [line.rstrip() for line in buffer.getvalue().splitlines()]
+    assert actual == expected, f"{name} printed {actual}, expected {expected}"
+
+
 def run_try_it(text: str, name: str) -> None:
     """Run every Try It block; each must exist, carry an Output marker, and match it."""
     blocks = _python_blocks(_try_it_section(text))
@@ -143,11 +152,24 @@ def run_try_it(text: str, name: str) -> None:
     for block in blocks:
         expected = _expected_output(block)
         assert expected is not None, f"{name} has a Try It block with no '# Output:' marker"
-        buffer = io.StringIO()
-        with contextlib.redirect_stdout(buffer):
-            exec(compile(block, name, "exec"), {"__name__": "__try_it__"})  # noqa: S102
-        actual = [line.rstrip() for line in buffer.getvalue().splitlines()]
-        assert actual == expected, f"{name} printed {actual}, expected {expected}"
+        _run_block(block, expected, name)
+
+
+def run_marked_blocks(text: str, name: str) -> int:
+    """Run every python block outside Try It that carries an Output marker; return how many.
+
+    Try It blocks are run by `run_try_it`, so between the two every block that says
+    what it prints, in any section of any page, is checked against what it really prints.
+    """
+    try_it: set[str] = set(_python_blocks(_try_it_section(text))) if "## Try It" in text else set()
+    count = 0
+    for block in _python_blocks(text):
+        expected = _expected_output(block)
+        if expected is None or block in try_it:
+            continue
+        _run_block(block, expected, name)
+        count += 1
+    return count
 
 
 GOOD_PAGE = """# Title
@@ -223,6 +245,29 @@ def test_a_block_without_an_output_marker_is_caught() -> None:
         run_try_it(GOOD_PAGE.replace("# Output:\n# 1\n", ""), "bad")
 
 
+HOW_IT_WORKS_BLOCK = """
+```python
+print(2)
+# Output:
+# 2
+```
+"""
+
+
+def test_a_marked_block_outside_try_it_is_run() -> None:
+    """A block under How It Works with an Output marker runs, and a wrong one fails."""
+    page = GOOD_PAGE + HOW_IT_WORKS_BLOCK
+    assert run_marked_blocks(page, "good") == 1
+    with pytest.raises(AssertionError, match="expected"):
+        run_marked_blocks(page.replace("# 2\n", "# 3\n"), "bad")
+
+
+def test_an_unmarked_block_outside_try_it_is_left_alone() -> None:
+    """A block that does not say what it prints is shown to the reader, not run."""
+    page = GOOD_PAGE + "```python\nraise SystemExit\n```\n"
+    assert run_marked_blocks(page, "good") == 0
+
+
 def test_a_whats_next_without_a_link_is_caught(tmp_path: Path) -> None:
     """A page whose What's Next links nowhere fails the climb guard."""
     check_whats_next("## What's Next\n\nRead [RAM](ram.md).\n", "good")
@@ -264,6 +309,12 @@ def test_every_page_is_in_the_nav(page: Path) -> None:
 def test_try_it_examples_run(page: Path) -> None:
     """Each Try It has python blocks, and each prints exactly what its `# Output:` says."""
     run_try_it(page.read_text(encoding="utf-8"), _page_id(page))
+
+
+@pytest.mark.parametrize("page", _all_pages(), ids=_page_id)
+def test_every_marked_block_prints_what_it_says(page: Path) -> None:
+    """Every python block with an `# Output:` marker, wherever it sits, prints exactly that."""
+    run_marked_blocks(page.read_text(encoding="utf-8"), _page_id(page))
 
 
 @pytest.mark.parametrize(("page", "words"), sorted(KEY_IDEAS.items()), ids=lambda v: str(v))

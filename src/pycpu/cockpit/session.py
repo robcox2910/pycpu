@@ -44,14 +44,18 @@ BUSY_MESSAGE = "the computer is running: press pause first"
 FINISHED_NOTE = "The program has finished, so there is no next line."
 NOT_PEBBLE_MESSAGE = "line steps need a Pebble program: this one is assembly"
 NOT_PLAYING_MESSAGE = "the computer is not playing: press play first"
+MAIN_CLOCK = "clk"  # the CPU's main clock wire, named plainly in notes
 NO_GATE_ENDING = "so there is no gate to show."  # the page looks for these words
+LIMIT_REASON = "the line may be stuck in a loop, or a call it makes is very long"
 END_NOTE = f"That step finished the instruction, not a gate, {NO_GATE_ENDING}"
 
 
 def _no_gate_note(micro: MicroStep) -> str:
     """Say why a gate step whose last movement was not a gate has no gate to show."""
     if micro.kind == "edge":
-        return f"That step moved the {micro.wire} clock wire, not a gate, {NO_GATE_ENDING}"
+        # The main clock is simply "the clock"; "the clk clock wire" would say it twice.
+        wire = "the clock wire" if micro.wire == MAIN_CLOCK else f"the {micro.wire} clock wire"
+        return f"That step moved {wire}, not a gate, {NO_GATE_ENDING}"
     return END_NOTE
 
 
@@ -103,6 +107,8 @@ class Cockpit:
         last_gate: The micro step of the last gate step, else None.
         note: One sentence about the last move, else None.
         playing: Whether the computer is running on its own.
+        loads: How many programs have been loaded, 0 for the demo it starts with. Every
+            load adds one, so the page can tell which program a listing belongs to.
 
     """
 
@@ -117,6 +123,7 @@ class Cockpit:
         self.last_gate: MicroStep | None = None
         self.note: str | None = None
         self.playing = False
+        self.loads = 0
 
     def _begin(self) -> None:
         """Start a move: refuse it while playing, then set `before` and clear the notes."""
@@ -210,6 +217,7 @@ class Cockpit:
         self.translated = None
         self.assembly = source
         self.program = assembled
+        self.loads += 1
 
     def load_pebble(self, source: str) -> None:
         """Translate a Pebble program, load it and pause at its start.
@@ -247,6 +255,7 @@ class Cockpit:
         self.translated = translated
         self.assembly = translated.assembly
         self.program = translated.program
+        self.loads += 1
 
     def step(self, size: StepSize, count: int = 1) -> None:
         """Step the paused computer by `size`, `count` times.
@@ -379,5 +388,5 @@ def _line_note(ran: int, stopped: str, line: int | None) -> str:
         return f"Ran {_instructions(ran)}, and then the program stopped."
     return (
         f"Ran {_instructions(ran)} without reaching another line, so the step gave up "
-        "there; the program may be stuck in a loop on one line."
+        f"there; {LIMIT_REASON}."
     )
