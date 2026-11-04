@@ -7,6 +7,7 @@ does with them instead.
 
 import re
 from dataclasses import replace
+from pathlib import Path
 
 import pebble
 import pytest
@@ -516,3 +517,24 @@ class TestTheSourceMap:
         words = translated.program.words
         rets = [translated.line_at(a) for a in range(start, stop) if words[a] == ret]
         assert rets == [THIRD_LINE, FIFTH_LINE]
+
+
+def test_every_label_after_a_function_label_starts_with_a_safe_character() -> None:
+    """An addition to `__fn_<name>` never starts with `_` or `x`, over the whole corpus."""
+    corpus = sorted(Path(__file__).parent.joinpath("pebble_programs").glob("*.pebble"))
+    assert corpus
+    additions = 0
+    for path in corpus:
+        source = path.read_text(encoding="utf-8")
+        bases = {function_label(n) for n in re.findall(r"^fn (\w+)", source, flags=re.MULTILINE)}
+        labels = re.findall(r"^(__fn_\w+):", translate(source).assembly, flags=re.MULTILINE)
+        for label in labels:
+            # A label belongs to the function whose label is the longest start of it.
+            base = max((b for b in bases if label.startswith(b)), key=len)
+            if label == base:
+                continue
+            addition = label[len(base) :]
+            assert addition[0] == "_"
+            assert addition[1:2] not in {"_", "x", ""}, label
+            additions += 1
+    assert additions

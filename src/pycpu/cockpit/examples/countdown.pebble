@@ -1,0 +1,7 @@
+# Count down to lift off
+let n = 5
+while n > 0 {
+    print(n)
+    n = n - 1
+}
+print("Lift off!")

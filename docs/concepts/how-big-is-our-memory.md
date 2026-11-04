@@ -189,5 +189,5 @@ program, which is why we will need a faster way of running it too.
 The RAM is big enough and quick enough, so 4K words it stays. We now have every
 part we need: gates, an ALU, registers and memory. What we lack is something to
 *use* them. Read [What Is a CPU?](what-is-a-cpu.md) to meet the machine that
-follows a list of instructions, one after another. [The Bench](the-bench.md) comes
+follows a list of instructions, one after another. [The Cockpit](the-cockpit.md) comes
 later in the climb, once there is a whole computer to look inside.

@@ -85,6 +85,73 @@ be put back (at the start it is 0). Just below it, 4094 holds `a` (10), 4093 hol
 (20) and 4092 holds `c` (30). `a` is one below the hand, `b` two below, `c` three below,
 exactly as the `load` and `store` lines say.
 
+### Seeing Them in the Cockpit
+
+The machine never learns the name `n`; only the translator knows it. So the translator
+leaves a note for every word of machine code it writes: "when this word is about to run,
+`r7` points at *this* frame, and here is where each name sits in it". That note is the
+**frame map**. With it, the [Cockpit](the-cockpit.md) can do what the night clerk does:
+put its hand where `r7` points, count along the row, and read each name's box.
+
+Here a small Cockpit (256 words, every bit real gates) runs a countdown one instruction
+at a time. Each time the program arrives at `print(n)`, line 3, we ask the Cockpit's
+picture for its `variables`. We also peek once just after the program jumps into the
+ready-made printing routine.
+
+```python
+from pycpu.cockpit.picture import machine_picture
+from pycpu.cockpit.session import Cockpit
+from pycpu.computer import StepSize
+
+COUNTDOWN = """\
+let n = 2
+while n > 0 {
+    print(n)
+    n = n - 1
+}
+"""
+
+cockpit = Cockpit(8)  # 256 words of memory, every bit real gates
+cockpit.load_pebble(COUNTDOWN)
+picture = machine_picture(cockpit)
+print("first instruction:", picture["instruction"]["text"], "- variables:", picture["variables"])
+
+line, visits = picture["pebble"]["line"], 0
+while visits < 2:
+    cockpit.step(StepSize.INSTRUCTION)
+    picture = machine_picture(cockpit)
+    if picture["pebble"]["line"] == 3 and line != 3:  # just arrived at print(n)
+        visits += 1
+        variables = picture["variables"]
+        print("print(n) is next; the frame pointer r7 is", variables["frame_pointer"])
+        for name in variables["names"]:
+            print("   ", name["name"], "is at address", name["address"], "and holds", name["value"])
+    if line == 3 and picture["pebble"]["line"] is None:  # just went into the print routine
+        print("inside the print routine - variables:", picture["variables"])
+    line = picture["pebble"]["line"]
+print("printed so far", repr(picture["output"]))
+# Output:
+# first instruction: getsp r1 - variables: None
+# print(n) is next; the frame pointer r7 is 255
+#     n is at address 254 and holds 2
+# inside the print routine - variables: None
+# print(n) is next; the frame pointer r7 is 255
+#     n is at address 254 and holds 1
+# printed so far '2\n'
+```
+
+This memory has 256 words, so the top word is 255. Main's prologue saved the old `r7`
+there and pointed `r7` at it, so `n`, one below the hand, is word 254. The first time we
+reach `print(n)` it holds 2; the next time round the loop, 1.
+
+Two answers are `None`, and both are on purpose. At the very first instruction the frame
+does not exist yet: the prologue is still checking for room and building it, so there is
+nothing safe to read. Inside the printing routine `r7` still holds main's address, but the
+routine is not Pebble code and has no names of its own, so the Cockpit shows none rather
+than pretend. The frame map says "not ready" for every word of a prologue, for the last
+word of a `return` (by then `r7` has already been handed back to the caller), and for the
+routines and the text.
+
 ## How It Works
 
 The frame is built by the first few instructions of the program, the **prologue**,
@@ -121,6 +188,14 @@ the order they first appear. The first name on the list gets `[r7-1]`, the secon
 `[r7-2]`, and so on. After that, the name is gone: the machine code only ever says
 `[r7-2]`. That is why a name *becomes* an address. The translator also writes a comment
 like `; b = r1` so a person reading the assembly can still see which slot is which.
+
+The translator keeps one more copy of that list for the Cockpit. `translate` gives back
+a `TranslatedProgram` whose `frames` has one entry for every word of machine code: either
+`None` (no frame is ready) or a `FrameLayout`, which names the function (`None` for the
+top level) and lists a `Slot` for each name: its `name`, its `offset` from `r7` (such as
+-1), its `kind` (`"parameter"` or `"variable"`) and whether it is `hidden`. The offsets
+come from the very same table the code generator uses to write `[r7-1]`, so the map and
+the code can never disagree.
 
 The number after `r7` has to fit inside the instruction. `load` and `store` keep it in
 6 bits, which can count from -32 to 31, so one frame can hold at most 32 variables, at

@@ -22,7 +22,7 @@ sums, RAM is the computer's big notebook, the CPU is the processor that follows 
 and the Assembler turns readable instructions into the numbers the CPU understands. The docs explain every word.
 
 ```
-  The Cockpit               <- coming later (the Bench is its first piece)
+  The Cockpit               <- built
   Pebble programs           <- built for part of Pebble
   Assembler                 <- built
   The CPU                   <- built
@@ -34,15 +34,17 @@ and the Assembler turns readable instructions into the numbers the CPU understan
 
 The destination is the **Cockpit**, a screen where you can watch a program written in
 Pebble (a small programming language from the same series) run on this computer, pause at any moment, and zoom all the way down to individual gates.
-The Cockpit is not built yet, but a big piece of it is: the **Bench**, a local page
-where a program runs on the CPU, paused, so you can watch its registers and memory,
-step it by a gate, a clock beat or an instruction, rewind it, and zoom from the CPU down
-to a single gate. Load a Pebble program on it and it marks the Pebble line that is running,
-next to the machine code. Pebble programs run on PyCPU: whole numbers, variables, `if`,
+The Cockpit is built: a local page (`uv run python -m pycpu`) that opens with the **tour**
+loaded, a Pebble program using every piece of Pebble PyCPU can run. It shows the Pebble
+program and its machine code side by side, the registers, the stack, the variables and
+the output, and lets you step by a gate, a clock beat, an instruction or a whole Pebble
+line, rewind, run, or play the program while the page updates live, then pause and zoom
+from the CPU down to a single gate. Pebble programs run on PyCPU: whole numbers, variables, `if`,
 `while`, `for` over a range, functions and `print`, translated into machine code, with
 multiplying, dividing and printing done by small assembly routines. The rest of Pebble
-(decimals, lists, text in variables, ...) is refused with a friendly message, and the
-Cockpit is still to come.
+(decimals, lists, text in variables, ...) is refused with a friendly message. What is
+left comes next: PyCPU in PyStack (the series' project that joins the others together),
+and the first release.
 
 ## Features
 
@@ -59,7 +61,7 @@ Cockpit is still to come.
 - **Two engines** -- a fast engine in plain Python, checked in lockstep against the gates
 - **Pause and rewind** -- run fast, pause into the gates, step by a gate, a beat or an instruction, rewind, resume
 - **Pebble on the CPU** -- a translator from Pebble's compiled programs to PyCPU assembly, with frames, jumps, calls, fault lines and a source map
-- **The Bench** -- a local web page (served by [PyWeb](https://github.com/robcox2910/pyweb)) showing the running computer, down to single gates, and the running Pebble line
+- **The Cockpit** -- a local web page (served by [PyWeb](https://github.com/robcox2910/pyweb)) showing the running Pebble line, machine code, registers, stack and variables, with line steps, live play and pause, and a zoom down to single gates
 
 ## Example
 
@@ -89,9 +91,10 @@ uv sync --all-extras
 uv run pytest
 uv run python examples/run_assembly.py   # assemble and run a program that prints Hi
 uv run python examples/run_pebble.py   # translate a Pebble program and run it: prints 6, 4, 2
+uv run python examples/cockpit_tour.py   # follow one Pebble line down to a single gate
 uv run python examples/alu_tour.py   # more programs live in examples/
 uv run mkdocs serve   # read the docs at http://127.0.0.1:8000
-uv run python -m pycpu   # open the Bench at http://127.0.0.1:8765
+uv run python -m pycpu   # open the Cockpit at http://127.0.0.1:8765
 ```
 
 ## Concepts
@@ -132,7 +135,10 @@ Every idea gets its own page, with an everyday analogy:
 | Multiply and divide | [multiply-and-divide.md](docs/concepts/multiply-and-divide.md) | Long multiplication on paper |
 | Printing a number | [printing-a-number.md](docs/concepts/printing-a-number.md) | A cash register with one slot per letter |
 | What happens when things go wrong | [what-happens-when-things-go-wrong.md](docs/concepts/what-happens-when-things-go-wrong.md) | The referee's whistle |
-| The Bench | [the-bench.md](docs/concepts/the-bench.md) | A workbench with the lid off, and the lyric sheet beside it |
+| The Cockpit | [the-cockpit.md](docs/concepts/the-cockpit.md) | An aeroplane cockpit: every dial in view, and a pilot who can freeze the flight |
+| Stepping a Pebble line | [stepping-a-pebble-line.md](docs/concepts/stepping-a-pebble-line.md) | Reading aloud with a bookmark |
+| Watching it run | [watching-it-run.md](docs/concepts/watching-it-run.md) | Live radio commentary of a match |
+| A tour of the Cockpit | [a-tour-of-the-cockpit.md](docs/concepts/a-tour-of-the-cockpit.md) | Following one letter through the post |
 
 ## Read the docs
 

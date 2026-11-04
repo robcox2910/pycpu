@@ -76,6 +76,10 @@ nav:
       - Multiply and Divide: concepts/multiply-and-divide.md
       - Printing a Number: concepts/printing-a-number.md
       - What Happens When Things Go Wrong: concepts/what-happens-when-things-go-wrong.md
-  - The Bench: concepts/the-bench.md
+  - The Cockpit:
+      - The Cockpit: concepts/the-cockpit.md
+      - Stepping a Pebble Line: concepts/stepping-a-pebble-line.md
+      - Watching It Run: concepts/watching-it-run.md
+      - A Tour of the Cockpit: concepts/a-tour-of-the-cockpit.md
   - Reference:
       - Instruction Set: reference/instruction-set.md

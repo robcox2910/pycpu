@@ -1,0 +1,765 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>The Cockpit - PyCPU</title>
+<link rel="icon" href="data:,">
+<style>
+  :root { --bg:#fafafa; --fg:#1d1d27; --card:#fff; --line:#d5d5e0; --accent:#5e35b1; --hot:#ffb300; --hotfg:#201600; --muted:#5d5d70; --here:#ede7f6; --shade:#f3f0f9; --picked:#00897b; --error:#c62828; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg:#17171f; --fg:#ececf4; --card:#222230; --line:#3a3a4e; --accent:#b39ddb; --hot:#ffb300; --hotfg:#201600; --muted:#a4a4b8; --here:#33294d; --shade:#29243a; --picked:#4db6ac; --error:#ef9a9a; }
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; font:16px/1.5 system-ui, sans-serif; background:var(--bg); color:var(--fg); }
+  main { max-width:80rem; margin:0 auto; padding:1rem; }
+  h1 { margin:.2rem 0; } h2 { margin:0 0 .4rem; font-size:1.05rem; } h3 { margin:.8rem 0 .3rem; font-size:.95rem; }
+  p { margin:.3rem 0; }
+  .muted { color:var(--muted); }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:8px; padding:.7rem; min-width:0; }
+  .row { display:flex; flex-wrap:wrap; gap:.4rem; align-items:center; }
+  .controls { position:sticky; top:0; z-index:1; display:flex; flex-wrap:wrap; gap:.4rem .9rem; align-items:center; margin-bottom:.5rem; }
+  label { display:flex; align-items:center; font-size:.9rem; gap:.3rem; }
+  input, select, textarea, button { font:inherit; padding:.3rem .5rem; border:1px solid var(--line); border-radius:6px; background:var(--bg); color:var(--fg); }
+  textarea { font-family:ui-monospace,monospace; font-size:.9rem; width:100%; min-height:8rem; }
+  input[type=number] { width:5.5rem; }
+  button { background:var(--accent); color:var(--bg); cursor:pointer; border-color:var(--accent); }
+  button:disabled { opacity:.45; cursor:not-allowed; }
+  button.quiet { background:transparent; color:var(--accent); border-color:var(--line); }
+  button.link { background:transparent; color:inherit; border:0; padding:0; text-align:left; cursor:pointer; text-decoration:underline dotted var(--accent); }
+  .lamp { border:1px solid var(--line); border-radius:999px; padding:.05rem .6rem; font-size:.85rem; }
+  .lamp.on, .wire.on { background:var(--hot); color:var(--hotfg); border-color:var(--hot); }
+  #error { color:var(--error); font-weight:600; min-height:1.4rem; }
+  #note { min-height:1.4rem; }
+  /* Layout A: Pebble and machine code on top, the dials in the middle, the zoom panel below. */
+  .layout { display:grid; grid-template-columns:1fr 1fr; grid-template-areas:"pebble code" "dials dials" "zoom zoom" "load load"; gap:.8rem; }
+  .pebble-pane { grid-area:pebble; } .code-pane { grid-area:code; } .dials { grid-area:dials; } #zoom { grid-area:zoom; } .load { grid-area:load; }
+  .dials { display:grid; grid-template-columns:repeat(auto-fit,minmax(15rem,1fr)); gap:.8rem; }
+  @media (max-width:44rem) {
+    .layout { grid-template-columns:1fr; grid-template-areas:"pebble" "code" "dials" "zoom" "load"; }
+    main { padding:.5rem; }
+  }
+  .scroll { max-height:22rem; overflow:auto; border:1px solid var(--line); border-radius:6px; }
+  table { border-collapse:collapse; width:100%; font-family:ui-monospace,monospace; font-size:.85rem; }
+  td, th { text-align:left; padding:.1rem .45rem; border-bottom:1px solid var(--line); vertical-align:top; white-space:nowrap; }
+  th { background:var(--card); font-family:system-ui, sans-serif; font-weight:600; }
+  .scroll th { position:sticky; top:0; }
+  td.code { white-space:pre; }
+  td.muted { white-space:normal; }
+  tr.clickable { cursor:pointer; }
+  tr.line td { background:var(--shade); }
+  tr.picked td { box-shadow:inset 0 2px 0 var(--picked), inset 0 -2px 0 var(--picked); }
+  tr.here td { background:var(--here); font-weight:700; }
+  tr.here td:first-child::before { content:"> "; color:var(--accent); }
+  .regs { display:grid; grid-template-columns:repeat(auto-fill,minmax(7.5rem,1fr)); gap:.3rem; }
+  .reg { width:100%; text-align:left; background:var(--bg); color:var(--fg); border-color:var(--line); font-family:ui-monospace,monospace; font-size:.85rem; padding:.25rem .45rem; }
+  .reg strong { font-family:system-ui, sans-serif; }
+  .changed { background:var(--hot) !important; color:var(--hotfg) !important; border-color:var(--hot) !important; }
+  tr.changed td { background:var(--hot); color:var(--hotfg); }
+  .tag { font-family:system-ui, sans-serif; font-size:.7rem; font-weight:700; text-transform:uppercase; letter-spacing:.03em; margin-left:.35rem; }
+  .dim { opacity:.55; }
+  .load label { flex:1 1 12rem; min-width:0; max-width:100%; }
+  #examples { flex:1 1 auto; min-width:0; max-width:100%; }
+  #output { font-family:ui-monospace,monospace; white-space:pre-wrap; margin:0; min-height:1.5rem; max-height:12rem; overflow:auto; }
+  nav#crumbs { display:flex; flex-wrap:wrap; gap:.3rem; align-items:center; }
+  nav#crumbs button { background:transparent; color:var(--accent); border-color:var(--line); }
+  #level { background:var(--bg); border:1px solid var(--line); border-left:4px solid var(--accent); border-radius:6px; padding:.5rem .7rem; margin:.5rem 0; }
+  #playing-note { font-weight:600; padding:1rem; text-align:center; border:2px dashed var(--line); border-radius:8px; }
+  ul#parts { list-style:none; padding:0; margin:0; display:grid; grid-template-columns:repeat(auto-fill,minmax(13rem,1fr)); gap:.4rem; }
+  ul#parts button { width:100%; text-align:left; background:var(--bg); color:var(--fg); border-color:var(--line); }
+  .gate { display:flex; flex-wrap:wrap; gap:.4rem; align-items:center; background:var(--bg); border:1px solid var(--line); border-radius:6px; padding:.35rem .6rem; margin:.3rem 0; }
+  .gate.picked { outline:3px solid var(--picked); }
+  .wire { border:1px solid var(--line); border-radius:4px; padding:0 .45rem; font-family:ui-monospace,monospace; font-size:.85rem; }
+</style>
+</head>
+<body>
+<main>
+  <h1>The Cockpit</h1>
+  <p class="muted">A whole computer made of NAND gates, with the lid off. Run a Pebble program, pause it, step it a gate, an instruction or a line at a time, and click any value to zoom down through the circuit to the single gates that hold it. Everything shown is read from the real machine; a wire carrying a 1 is highlighted.</p>
+
+  <div class="card controls" role="group" aria-label="Controls">
+    <span class="row">
+      <button type="button" id="play">Play</button>
+      <button type="button" id="pause" class="quiet">Pause</button>
+      <label>speed
+        <select id="speed" aria-label="Instructions a second while playing">
+          <option value="1">1 a second</option>
+          <option value="10">10 a second</option>
+          <option value="100" selected>100 a second</option>
+          <option value="1000">1,000 a second</option>
+          <option value="10000">10,000 a second</option>
+          <option value="100000">100,000 a second</option>
+        </select>
+      </label>
+    </span>
+    <span class="row" role="group" aria-label="Step">
+      <button type="button" class="step" data-size="gate" data-count="1">1 gate</button>
+      <button type="button" class="step" data-size="gate" data-count="100">100 gates</button>
+      <button type="button" class="step" data-size="cycle">1 cycle</button>
+      <button type="button" class="step" data-size="instruction">1 instruction</button>
+      <button type="button" class="step" data-size="line" title="Run to the next Pebble line, running any function it calls all the way through">Line</button>
+      <button type="button" class="step" data-size="line_into" title="Run to the next Pebble line, following a call into the function">Line into</button>
+    </span>
+    <span class="row">
+      <button type="button" id="rewind" class="quiet step">Rewind</button>
+      <input id="count" type="number" min="1" max="10000" value="10" aria-label="Instructions to run">
+      <button type="button" id="run" class="step">Run</button>
+    </span>
+  </div>
+  <div id="error" role="alert"></div>
+  <div class="row" id="status" aria-live="polite"></div>
+  <p id="note" class="muted"></p>
+
+  <div class="layout">
+    <section class="card pebble-pane" aria-label="Pebble program">
+      <h2>Pebble</h2>
+      <p class="muted" id="pebble-note"></p>
+      <div class="scroll" id="pebble-scroll">
+        <table><thead><tr><th>line</th><th>Pebble <span class="muted">(click a line to outline its machine code)</span></th></tr></thead><tbody id="pebble"></tbody></table>
+      </div>
+    </section>
+
+    <section class="card code-pane" aria-label="Machine code">
+      <h2>Machine code</h2>
+      <p id="current"></p>
+      <div class="scroll" id="listing-scroll">
+        <table><thead><tr><th>addr</th><th>word</th><th>line</th><th>from the source</th></tr></thead><tbody id="listing"></tbody></table>
+      </div>
+    </section>
+
+    <div class="dials">
+      <section class="card" aria-label="Registers and flags">
+        <h2>Registers and flags</h2>
+        <div class="regs" id="registers"></div>
+        <div class="row" id="flags" style="margin-top:.5rem"></div>
+      </section>
+      <section class="card" aria-label="The stack">
+        <h2>The stack</h2>
+        <table><thead><tr><th>address</th><th>word</th></tr></thead><tbody id="stack"></tbody></table>
+      </section>
+      <section class="card" aria-label="Variables">
+        <h2>Variables</h2>
+        <div id="variables"></div>
+      </section>
+      <section class="card" aria-label="Printed so far">
+        <h2>Printed so far</h2>
+        <pre id="output"></pre>
+      </section>
+    </div>
+
+    <section class="card" id="zoom" aria-label="Zoom panel">
+      <h2>Zoom panel</h2>
+      <p id="playing-note" hidden>Pause to look inside the gates. While the computer plays, the gates are not running, so there is nothing real to show here.</p>
+      <div id="inside">
+        <nav id="crumbs" aria-label="Breadcrumb trail"></nav>
+        <div id="level"></div>
+        <div id="show-gate"></div>
+        <h3>Parts inside</h3>
+        <ul id="parts"></ul>
+        <h3>Gates here</h3>
+        <div id="gates"></div>
+      </div>
+    </section>
+
+    <section class="card load" aria-label="Load a program">
+      <h2>Load</h2>
+      <div class="row">
+        <label>example <select id="examples"></select></label>
+        <button type="button" id="load-example">Load example</button>
+      </div>
+      <h3>Or your own program</h3>
+      <textarea id="source" spellcheck="false" aria-label="Your program, in Pebble or assembly">let n = 3
+while n > 0 {
+    print(n)
+    n = n - 1
+}
+</textarea>
+      <div class="row" style="margin-top:.4rem">
+        <button type="button" id="load-pebble">Load Pebble</button>
+        <button type="button" id="load" class="quiet">Load assembly</button>
+        <span class="muted">Translated (for Pebble) or assembled, put in memory, and paused at its start.</span>
+      </div>
+    </section>
+  </div>
+</main>
+<script>
+"use strict";
+// What a part means, in plain words, and which concept page explains it.
+// Whole paths come first, because some names (like "flags") mean different things in different places.
+const PATHS = {
+  "": ["The whole circuit: the CPU and the RAM, filed into named parts.", "Looking Inside a Circuit (looking-inside.md)"],
+  "cpu.flags": ["The flags register: four bits remembering whether the last result was zero, negative, carried or overflowed.", "Machine Code (machine-code.md)"],
+  "cpu.operand": ["The operand chooser: picks what goes into the ALU's second input for this instruction.", "The Control Unit (the-control-unit.md)"],
+  "cpu.alu.control": ["The ALU's control: works out from the op dial whether this job is a subtraction.", "The ALU (the-alu.md)"],
+  "cpu.alu.flags": ["The ALU's flags part: it holds the zero check, which lights up when the result is all 0s.", "The ALU (the-alu.md)"],
+};
+const LEVELS = {
+  "ram": ["The RAM: memory, every bit of every word a latch made of gates.", "RAM (ram.md)"],
+  "cpu": ["The CPU: its registers, the control unit, the ALU and the wires between them.", "What Is a CPU? (what-is-a-cpu.md)"],
+  "phase": ["The phase register: one bit saying whether the next beat fetches or executes.", "Fetch, Decode, Execute (fetch-decode-execute.md)"],
+  "ir": ["The instruction register: holds the instruction being worked on.", "Fetch, Decode, Execute (fetch-decode-execute.md)"],
+  "pc": ["The program counter: the address of the next instruction.", "What Is a CPU? (what-is-a-cpu.md)"],
+  "sp": ["The stack pointer: the address of the top of the stack.", "The Stack (the-stack.md)"],
+  "halt": ["The halt registers: whether the machine has stopped, and its halt code.", "Machine Code (machine-code.md)"],
+  "halted": ["The halted bit: 1 once the machine has stopped.", "Machine Code (machine-code.md)"],
+  "halt_code": ["The halt code: why the machine stopped (0 means it finished normally).", "Machine Code (machine-code.md)"],
+  "decode": ["The decoder: turns the opcode into one lit wire per kind of instruction.", "The Control Unit (the-control-unit.md)"],
+  "control": ["The control: works out which jobs this instruction needs done.", "The Control Unit (the-control-unit.md)"],
+  "registers": ["The register file: r0 to r7, and the choosers that read and write them.", "The Control Unit (the-control-unit.md)"],
+  "condition": ["The condition check: decides whether a branch should be taken.", "The Control Unit (the-control-unit.md)"],
+  "sp_minus_1": ["An adder that works out sp - 1, for pushing.", "The Stack (the-stack.md)"],
+  "sp_plus_1": ["An adder that works out sp + 1, for popping.", "The Stack (the-stack.md)"],
+  "next_sp": ["Choosers that pick the stack pointer's next value.", "The Stack (the-stack.md)"],
+  "pc_plus_1": ["An adder that works out pc + 1, the next instruction's address.", "Fetch, Decode, Execute (fetch-decode-execute.md)"],
+  "branch_target": ["An adder that works out where a branch would land.", "Fetch, Decode, Execute (fetch-decode-execute.md)"],
+  "next_pc": ["Choosers that pick the program counter's next value.", "Fetch, Decode, Execute (fetch-decode-execute.md)"],
+  "address_mux": ["Choosers that pick which address goes to memory.", "Fetch, Decode, Execute (fetch-decode-execute.md)"],
+  "address_check": ["The check that an address is inside memory.", "Fetch, Decode, Execute (fetch-decode-execute.md)"],
+  "port": ["The check for a store to the output port, the computer's screen.", "Fetch, Decode, Execute (fetch-decode-execute.md)"],
+  "fault": ["The fault check: spots a bad address and stops the machine.", "Fetch, Decode, Execute (fetch-decode-execute.md)"],
+  "write_back": ["Choosers that pick the value written back into a register.", "Fetch, Decode, Execute (fetch-decode-execute.md)"],
+  "ram_data": ["Choosers that pick the word a store writes to memory.", "Fetch, Decode, Execute (fetch-decode-execute.md)"],
+  "ram_wires": ["Buffers that carry the CPU's address, data and write wires over to the RAM.", "Fetch, Decode, Execute (fetch-decode-execute.md)"],
+  "alu": ["The ALU: two numbers go in, a dial picks the job, a result and four flag lamps come out.", "The ALU (the-alu.md)"],
+  "adder": ["The adder: sixteen columns that add, one after the other, passing a carry along.", "Adding (adding.md)"],
+  "bit": ["One bit: one column of a sum, or one storage cell of a register.", "Adding (adding.md)"],
+  "full_adder": ["A full adder: adds two bits and a carry that came in.", "Adding (adding.md)"],
+  "half_adder": ["A half adder: adds two bits, giving a sum digit and a carry.", "Adding (adding.md)"],
+  "xor": ["An XOR gate, made of 4 NANDs: on when its inputs differ.", "Logic Gates from NAND (gates.md)"],
+  "and": ["An AND gate, made of 2 NANDs: on only when both inputs are on.", "Logic Gates from NAND (gates.md)"],
+  "or": ["An OR gate, made of 3 NANDs: on when either input is on.", "Logic Gates from NAND (gates.md)"],
+  "mux": ["A chooser: picks one of two wires, steered by a select wire.", "Choosing and Decoding (choosing-and-decoding.md)"],
+  "choose": ["The inside of a chooser: gates that let one of the two wires through.", "Choosing and Decoding (choosing-and-decoding.md)"],
+  "or_many": ["An OR over many wires: on if any one of them is on.", "Logic Gates from NAND (gates.md)"],
+  "is_zero": ["The zero check: on only when every wire of the result is off.", "The ALU (the-alu.md)"],
+  "operand": ["The operand: flips the bits of B when subtracting.", "Negative Numbers (negative-numbers.md)"],
+  "overflow": ["The overflow check: spots a signed answer that does not fit.", "Negative Numbers (negative-numbers.md)"],
+  "select": ["The select: choosers steered by the op dial pick the answer.", "Choosing and Decoding (choosing-and-decoding.md)"],
+  "master": ["The master latch: the first half of a flip-flop, open while the clock is low.", "The Clock (the-clock.md)"],
+  "slave": ["The slave latch: the second half of a flip-flop, open when the clock rises.", "The Clock (the-clock.md)"],
+  "word": ["One word of memory: sixteen latches made of gates, one for each bit.", "RAM (ram.md)"],
+  "register": ["One register: sixteen flip-flops holding one number.", "Registers (registers.md)"],
+};
+const GATE_LINE = ["One NAND gate: its output is 0 only when both inputs are 1. Every part above is built from these.", "Switches and NAND (switches-and-nand.md)"];
+const FALLBACK = ["A part of the circuit, made of smaller parts and gates.", "Looking Inside a Circuit (looking-inside.md)"];
+const FLAGS = ["zero", "negative", "carry", "overflow"];
+const CHANGED = "changed";
+const NO_GATE = "so there is no gate to show.";
+const HIDDEN_TITLE = "A hidden helper: Pebble made this box for itself (a for loop keeps its end value here). Its name starts with $, which no program could write.";
+
+let path = "cpu";          // the part the zoom panel shows
+let busy = false;          // a button's request is on its way
+let latest = null;         // the last picture drawn
+let latestText = "";       // ... and its JSON, to skip drawing the same picture twice
+let pickedLine = null;     // the Pebble line whose machine code is outlined
+let pickedGate = null;     // {id, path}: the gate "show this gate" highlights, for its own picture only
+let zoomSeq = 0;           // counts zoom requests, so only the newest answer is drawn
+let listing = null;        // the last GET /api/listing
+let listingRows = [];      // one <tr> per word of machine code
+let lineRows = new Map();  // Pebble line -> its machine code rows
+let pebbleRows = [];       // one <tr> per Pebble line
+let marked = { here: null, line: [], picked: [] };
+let fetchingListing = false;
+
+function levelFor(p) {
+  if (p in PATHS) return PATHS[p];
+  let last = p.split(".").pop().replace(/#\d+$/, "");
+  if (/^bit\d+$/.test(last)) last = "bit";
+  else if (/^word\d+$/.test(last)) last = "word";
+  else if (/^r\d$/.test(last)) last = "register";
+  else if (/^(and|or|xor)_bus$/.test(last)) return ["A row of 16 identical gates, one per bit.", "Logic Gates from NAND (gates.md)"];
+  else if (last === "mux_bus") return ["A row of choosers: each picks one of two wires, steered by a select wire.", "Choosing and Decoding (choosing-and-decoding.md)"];
+  return LEVELS[last] || FALLBACK;
+}
+
+function el(tag, text, cls) {
+  const e = document.createElement(tag);
+  if (text !== undefined) e.textContent = text;
+  if (cls) e.className = cls;
+  return e;
+}
+
+function hex(n) { return "0x" + n.toString(16).toUpperCase().padStart(4, "0"); }
+
+function showError(text) { document.getElementById("error").textContent = text; }
+
+// A highlight and the word "changed", so a change can be seen and read aloud.
+function markChanged(node, changed) {
+  if (!changed) return;
+  node.classList.add(CHANGED);
+  node.append(el("span", CHANGED, "tag"));
+}
+
+// Scroll a pane (not the whole page) so that `row` is in view.
+function keepVisible(box, row) {
+  if (!row) return;
+  const top = row.getBoundingClientRect().top - box.getBoundingClientRect().top + box.scrollTop;
+  if (top < box.scrollTop + 24 || top > box.scrollTop + box.clientHeight - 24) {
+    box.scrollTop = Math.max(0, top - box.clientHeight / 3);
+  }
+}
+
+// ---- the zoom panel -------------------------------------------------------
+
+async function zoomTo(next) {
+  if (latest && latest.running) return;
+  const mine = ++zoomSeq;
+  try {
+    const response = await fetch("/api/view?path=" + encodeURIComponent(next));
+    if (mine !== zoomSeq) return;  // a newer request has been sent: its answer is the one to draw
+    if (!response.ok) { showError("Could not open " + (next || "the whole circuit") + " (" + response.status + ")"); return; }
+    const view = await response.json();
+    if (mine !== zoomSeq) return;
+    if (latest && latest.running) return;  // play started while we waited: never show stale gates
+    path = next;
+    drawView(view);
+  } catch (e) {
+    showError("Could not reach the Cockpit");
+  }
+}
+
+function zoomFromClick(part) {
+  pickedGate = null;
+  zoomTo(part).then(() => document.getElementById("zoom").scrollIntoView({ behavior: "smooth", block: "start" }));
+}
+
+function drawView(view) {
+  const crumbs = document.getElementById("crumbs");
+  crumbs.replaceChildren();
+  const names = path === "" ? [] : path.split(".");
+  const home = el("button", "whole circuit");
+  home.type = "button";
+  home.onclick = () => { pickedGate = null; zoomTo(""); };
+  crumbs.append(home);
+  names.forEach((name, i) => {
+    crumbs.append(el("span", ">", "muted"));
+    const b = el("button", name);
+    b.type = "button";
+    b.onclick = () => { pickedGate = null; zoomTo(names.slice(0, i + 1).join(".")); };
+    crumbs.append(b);
+  });
+
+  const [words, page] = levelFor(path);
+  const level = document.getElementById("level");
+  level.replaceChildren(el("div", words), el("div", "Read more: " + page, "muted"));
+  if (view.gates.length > 0) level.append(el("div", GATE_LINE[0] + " (" + GATE_LINE[1] + ")", "muted"));
+
+  const parts = document.getElementById("parts");
+  parts.replaceChildren();
+  view.children.forEach((child) => {
+    const li = el("li");
+    const b = el("button", child.name + " - " + child.gate_count + " gates");
+    b.type = "button";
+    b.onclick = () => { pickedGate = null; zoomTo(path ? path + "." + child.name : child.name); };
+    li.append(b);
+    parts.append(li);
+  });
+  if (view.children.length === 0) parts.append(el("li", "No smaller parts here.", "muted"));
+
+  const gates = document.getElementById("gates");
+  gates.replaceChildren();
+  let picked = null;
+  view.gates.forEach((g) => {
+    const row = el("div", undefined, "gate");
+    row.append(el("strong", "gate " + g.id));
+    const wire = (label, id, value) => el("span", label + " w" + id + " = " + value, "wire" + (value ? " on" : ""));
+    row.append(wire("in", g.a, g.value_a), wire("in", g.b, g.value_b), el("span", "NAND ->"), wire("out", g.out, g.value_out));
+    if (pickedGate && g.id === pickedGate.id && path === pickedGate.path) {
+      row.classList.add("picked");
+      row.append(el("span", "the gate that just changed", "tag"));
+      picked = row;
+    }
+    gates.append(row);
+  });
+  if (view.gates.length === 0) gates.append(el("div", "No gates directly here, look in the parts above.", "muted"));
+  if (picked) picked.scrollIntoView({ block: "nearest" });
+}
+
+function drawZoom(m) {
+  document.getElementById("playing-note").hidden = !m.running;
+  document.getElementById("inside").hidden = m.running;
+  const showGate = document.getElementById("show-gate");
+  showGate.replaceChildren();
+  // The "just changed" label belongs to the picture that offered the button: any later
+  // move that did not change that same gate takes it away, so it can never go stale.
+  const g = m.last_gate;
+  if (!g || !pickedGate || g.id !== pickedGate.id || g.path !== pickedGate.path) pickedGate = null;
+  if (m.running) return;
+  if (g) {
+    const b = el("button", "show this gate (gate " + g.id + ", now " + g.value + ", in " + g.path + ")", "quiet");
+    b.type = "button";
+    b.onclick = () => { pickedGate = { id: g.id, path: g.path }; zoomTo(g.path); };
+    showGate.append(b);
+  } else if (m.note && m.note.endsWith(NO_GATE)) {
+    // A gate step that ended on a clock wire (or an instruction's end): say why there is no button.
+    showGate.append(el("p", m.note, "muted"));
+  }
+  zoomTo(path);
+}
+
+// ---- the machine code and the Pebble program -------------------------------
+
+// Fetch the listing for picture m. While one fetch is out, later calls are dropped, and
+// the check when it lands catches anything they would have done.
+async function fetchListing(m) {
+  if (fetchingListing) return;
+  fetchingListing = true;
+  const askedFor = m.program;
+  try {
+    const response = await fetch("/api/listing");
+    if (response.ok) {
+      listing = await response.json();
+      drawListing();
+    }
+  } catch (e) {
+    showError("Could not reach the Cockpit");
+  } finally {
+    fetchingListing = false;
+  }
+  // A program may have been loaded while that fetch was out: look again at the newest picture.
+  if (!latest) return;
+  if (listingIsStale(latest)) {
+    if (latest.program !== askedFor) fetchListing(latest);
+  } else {
+    moveMarks(latest);
+  }
+}
+
+// The listing is drawn once per program; later pictures only move its marks. Each load
+// gives the program a new number, and the listing says which number it was made for.
+function listingIsStale(m) {
+  return !listing || listing.program !== m.program;
+}
+
+function drawListing() {
+  const body = document.getElementById("listing");
+  body.replaceChildren();
+  listingRows = [];
+  lineRows = new Map();
+  marked = { here: null, line: [], picked: [] };
+  listing.rows.forEach((r) => {
+    const row = el("tr", undefined, "clickable");
+    row.title = "Click to look at word " + r.address + " in the RAM";
+    const text = (r.labels.length ? r.labels.join(": ") + ": " : "") + (r.first ? r.text : "");
+    row.append(el("td", String(r.address)), el("td", hex(r.word)), el("td", r.pebble_line === null ? "" : String(r.pebble_line)), el("td", text, "code"));
+    row.onclick = () => zoomFromClick("ram.word" + r.address);
+    body.append(row);
+    listingRows.push(row);
+    if (r.pebble_line !== null) {
+      if (!lineRows.has(r.pebble_line)) lineRows.set(r.pebble_line, []);
+      lineRows.get(r.pebble_line).push(row);
+    }
+  });
+  drawPebbleLines();
+}
+
+function drawPebbleLines() {
+  const body = document.getElementById("pebble");
+  body.replaceChildren();
+  pebbleRows = [];
+  if (pickedLine !== null && !lineRows.has(pickedLine)) pickedLine = null;
+  const lines = listing && listing.pebble ? listing.pebble : [];
+  lines.forEach((text, i) => {
+    const n = i + 1;
+    const row = el("tr", undefined, "clickable");
+    const number = el("button", String(n), "link");
+    number.type = "button";
+    number.setAttribute("aria-label", "Outline the machine code of line " + n);
+    row.append(el("td"), el("td", text, "code"));
+    row.firstChild.append(number);
+    row.onclick = () => pickLine(n);
+    body.append(row);
+    pebbleRows.push(row);
+  });
+}
+
+function pickLine(n) {
+  pickedLine = pickedLine === n ? null : n;
+  if (latest) moveMarks(latest);
+  const rows = pickedLine === null ? [] : (lineRows.get(pickedLine) || []);
+  keepVisible(document.getElementById("listing-scroll"), rows[0]);
+}
+
+function moveMarks(m) {
+  marked.line.forEach((r) => r.classList.remove("line"));
+  marked.picked.forEach((r) => r.classList.remove("picked"));
+  if (marked.here) marked.here.classList.remove("here");
+  pebbleRows.forEach((r) => r.classList.remove("here", "picked"));
+
+  const running = m.pebble && !m.halted ? m.pebble.line : null;
+  marked.line = running === null ? [] : (lineRows.get(running) || []);
+  marked.line.forEach((r) => r.classList.add("line"));
+  marked.picked = pickedLine === null ? [] : (lineRows.get(pickedLine) || []);
+  marked.picked.forEach((r) => r.classList.add("picked"));
+  // Once halted nothing runs next, so no word is marked.
+  marked.here = m.halted ? null : (listingRows[m.instruction.address] || null);
+  if (marked.here) marked.here.classList.add("here");
+  keepVisible(document.getElementById("listing-scroll"), marked.here);
+
+  const blamed = m.pebble ? m.pebble.line : null;
+  if (blamed !== null && pebbleRows[blamed - 1]) {
+    pebbleRows[blamed - 1].classList.add("here");
+    keepVisible(document.getElementById("pebble-scroll"), pebbleRows[blamed - 1]);
+  }
+  if (pickedLine !== null && pebbleRows[pickedLine - 1]) pebbleRows[pickedLine - 1].classList.add("picked");
+}
+
+function drawCode(m) {
+  const current = document.getElementById("current");
+  current.replaceChildren();
+  const i = m.instruction;
+  if (m.halted) {
+    current.append("The machine has halted, so no instruction is next. pc is " + m.pc + ".");
+  } else if (i.word === null) {
+    current.append("Current instruction: address " + i.address + " is outside memory.");
+  } else {
+    current.append("Current instruction: ");
+    const b = el("button", i.text + " at address " + i.address, "link");
+    b.type = "button";
+    b.title = "Zoom to " + m.parts.instruction + ", the part that does its main work";
+    b.onclick = () => zoomFromClick(m.parts.instruction);
+    current.append(b);
+  }
+  if (listingIsStale(m)) fetchListing(m); else moveMarks(m);
+}
+
+function drawPebbleNote(m) {
+  const note = document.getElementById("pebble-note");
+  const p = m.pebble;
+  if (!p) {
+    note.textContent = "This program is written in assembly, so there is no Pebble to show. Pick an example, or write some Pebble in the box below and press Load Pebble.";
+  } else if (m.halted) {
+    note.textContent = p.message + "." + (p.line ? " The marked line is the one to blame." : "");
+  } else if (m.running) {
+    note.textContent = p.line === null ? "Playing: inside a ready-made routine." : "Playing: on line " + p.line + ".";
+  } else if (p.line === null) {
+    note.textContent = "Inside a ready-made routine (multiply, divide or print). It has no Pebble line of its own.";
+  } else {
+    note.textContent = "Running line " + p.line + ". One line is many instructions: its machine code is shaded.";
+  }
+}
+
+// ---- the dials ------------------------------------------------------------
+
+function drawStatus(m) {
+  const status = document.getElementById("status");
+  status.replaceChildren(el("span", m.running ? "playing" : "paused", "lamp" + (m.running ? " on" : "")));
+  if (!m.running) {
+    status.append(
+      el("span", "next beat: " + m.phase, "lamp"),
+      el("span", m.at_boundary ? "between instructions" : "part-way through an instruction", "lamp" + (m.at_boundary ? "" : " on")),
+    );
+  }
+  if (m.halted) {
+    const why = m.fault ? m.fault.toLowerCase().replaceAll("_", " ") : (m.halt_code === 0 ? "finished" : "stopped");
+    status.append(el("span", "halted: " + why + " (code " + m.halt_code + ")", "lamp on"));
+  }
+  // A no-gate note is shown once, in the zoom panel where the gate button would be.
+  const noGate = m.note && m.note.endsWith(NO_GATE);
+  document.getElementById("note").textContent = noGate ? "" : (m.note || "");
+}
+
+function drawRegisters(m) {
+  const registers = document.getElementById("registers");
+  registers.replaceChildren();
+  const box = (name, value, part, changed) => {
+    const b = el("button", undefined, "reg");
+    b.type = "button";
+    b.title = "Zoom to " + part;
+    b.append(el("strong", name + " "), document.createTextNode(value + " (" + hex(value) + ")"));
+    markChanged(b, changed);
+    b.onclick = () => zoomFromClick(part);
+    registers.append(b);
+  };
+  m.registers.forEach((value, i) => box("r" + i, value, m.parts.registers[i], m.changed.registers.includes(i)));
+  box("pc", m.pc, m.parts.pc, m.changed.pc);
+  box("sp", m.sp, m.parts.sp, m.changed.sp);
+
+  const flags = document.getElementById("flags");
+  flags.replaceChildren();
+  const name = el("button", "flags:", "link");
+  name.type = "button";
+  name.title = "Zoom to " + m.parts.flags;
+  name.onclick = () => zoomFromClick(m.parts.flags);
+  flags.append(name);
+  FLAGS.forEach((flag) => {
+    const lamp = el("span", flag + " " + m.flags[flag], "lamp" + (m.flags[flag] ? " on" : ""));
+    markChanged(lamp, m.changed.flags.includes(flag));
+    flags.append(lamp);
+  });
+}
+
+function cellRow(cells, part, changed) {
+  const row = el("tr", undefined, "clickable");
+  row.title = "Click to look at this word in the RAM (" + part + ")";
+  cells.forEach((c) => row.append(typeof c === "string" ? el("td", c) : c));
+  if (changed) {
+    row.classList.add(CHANGED);
+    row.lastChild.append(el("span", CHANGED, "tag"));
+  }
+  row.onclick = () => zoomFromClick(part);
+  return row;
+}
+
+function drawStack(m) {
+  const stack = document.getElementById("stack");
+  stack.replaceChildren();
+  if (m.stack.length === 0) {
+    const row = el("tr");
+    const td = el("td", "Empty: sp is at the very end of memory, where it starts.", "muted");
+    td.colSpan = 2;
+    row.append(td);
+    stack.append(row);
+    return;
+  }
+  m.stack.forEach((cell, i) => {
+    const where = (i === 0 ? "sp > " : "") + cell.address;
+    stack.append(cellRow([where, cell.word + " (" + hex(cell.word) + ")"], cell.part, m.changed.memory.includes(cell.address)));
+  });
+}
+
+function drawVariables(m) {
+  const box = document.getElementById("variables");
+  box.replaceChildren();
+  const v = m.variables;
+  if (!v) {
+    let why = "No frame is ready here: the code is still building its frame, or returning, or a ready-made routine is running. Step on and the names appear.";
+    if (!m.pebble) why = "This program is assembly, which has no variable names.";
+    else if (m.running) why = "Variables are shown while paused.";
+    else if (m.halted) why = "The program has stopped.";
+    box.append(el("p", why, "muted"));
+    return;
+  }
+  box.append(el("p", (v.function === null ? "The top level" : "Inside " + v.function) + ", frame pointer r7 = " + v.frame_pointer + ".", "muted"));
+  const table = el("table");
+  const head = el("thead");
+  const hr = el("tr");
+  ["name", "value", "address"].forEach((h) => hr.append(el("th", h)));
+  head.append(hr);
+  const body = el("tbody");
+  v.names.forEach((n) => {
+    const name = el("td", n.name + (n.kind === "parameter" ? " (parameter)" : ""));
+    const row = cellRow([name, String(n.value), String(n.address)], n.part, m.changed.memory.includes(n.address));
+    if (n.hidden) {
+      row.classList.add("dim");
+      row.title = HIDDEN_TITLE;
+    }
+    body.append(row);
+  });
+  if (v.names.length === 0) {
+    const row = el("tr");
+    row.append(el("td", "No variables here.", "muted"));
+    body.append(row);
+  }
+  table.append(head, body);
+  box.append(table);
+}
+
+// ---- drawing a picture, and the controls ------------------------------------
+
+function setControls() {
+  const running = latest ? latest.running : false;
+  document.querySelectorAll("button.step").forEach((b) => { b.disabled = busy || running; });
+  document.getElementById("play").disabled = busy || running;
+  document.getElementById("pause").disabled = busy || !running;
+  document.getElementById("count").disabled = busy || running;
+  ["load-example", "load-pebble", "load"].forEach((id) => { document.getElementById(id).disabled = busy; });
+}
+
+function drawText(text) {
+  if (text === latestText) return;  // a button's answer and its event carry the same picture
+  latestText = text;
+  const m = JSON.parse(text);
+  latest = m;
+  drawStatus(m);
+  drawRegisters(m);
+  drawStack(m);
+  drawVariables(m);
+  document.getElementById("output").textContent = m.output || "(nothing yet)";
+  drawPebbleNote(m);
+  drawCode(m);
+  drawZoom(m);
+  setControls();
+}
+
+async function send(url, body) {
+  if (busy) return;
+  busy = true;
+  setControls();
+  try {
+    const response = await fetch(url, { method: body === undefined ? "GET" : "POST", headers: { "Content-Type": "application/json" }, body: body === undefined ? undefined : JSON.stringify(body) });
+    const text = await response.text();
+    if (!response.ok) {
+      let message = "The Cockpit refused that (" + response.status + ").";
+      try { message = JSON.parse(text).message || message; } catch (e) { /* keep default */ }
+      showError(message);
+      refresh();  // e.g. a 409 while the stream had dropped: catch up with what is really happening
+      return;
+    }
+    showError("");
+    drawText(text);
+  } catch (e) {
+    showError("Could not reach the Cockpit");
+  } finally {
+    busy = false;
+    setControls();
+  }
+}
+
+async function loadExamples() {
+  try {
+    const response = await fetch("/api/examples");
+    if (!response.ok) return;
+    const examples = await response.json();
+    const select = document.getElementById("examples");
+    examples.forEach((x) => {
+      const option = el("option", x.title);
+      option.value = x.name;
+      select.append(option);
+    });
+    document.getElementById("load-example").onclick = () => {
+      const chosen = examples.find((x) => x.name === select.value);
+      if (chosen) { pickedLine = null; send("/api/pebble", { source: chosen.source }); }
+    };
+  } catch (e) {
+    showError("Could not reach the Cockpit");
+  }
+}
+
+// Read the picture without moving anything; used at the start and after the stream reconnects.
+async function refresh() {
+  try {
+    const response = await fetch("/api/machine");
+    if (response.ok) drawText(await response.text());
+  } catch (e) {
+    showError("Could not reach the Cockpit");
+  }
+}
+
+function listen() {
+  if (!window.EventSource) return;
+  const events = new EventSource("/api/events");
+  events.addEventListener("machine", (e) => drawText(e.data));
+  // After a dropped stream reconnects, catch up with anything missed in between.
+  events.addEventListener("open", refresh);
+}
+
+document.querySelectorAll("button[data-size]").forEach((b) => {
+  b.addEventListener("click", () => {
+    const body = { size: b.dataset.size };
+    if (b.dataset.count) body.count = Number(b.dataset.count);
+    send("/api/step", body);
+  });
+});
+document.getElementById("rewind").addEventListener("click", () => send("/api/rewind", {}));
+document.getElementById("run").addEventListener("click", () => send("/api/run", { instructions: Number(document.getElementById("count").value) }));
+document.getElementById("play").addEventListener("click", () => send("/api/play", { speed: Number(document.getElementById("speed").value) }));
+document.getElementById("pause").addEventListener("click", () => send("/api/pause", {}));
+document.getElementById("load").addEventListener("click", () => { pickedLine = null; send("/api/program", { source: document.getElementById("source").value }); });
+document.getElementById("load-pebble").addEventListener("click", () => { pickedLine = null; send("/api/pebble", { source: document.getElementById("source").value }); });
+loadExamples();
+refresh();
+listen();
+</script>
+</body>
+</html>

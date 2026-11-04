@@ -106,6 +106,8 @@ class FastMachine:
         self._halted = False
         self._halt_code = 0
         self._output: list[int] = []
+        # Built once: the table only holds bound methods, which never change.
+        self._handler_table: dict[Opcode, Callable[[Instruction], None]] = self._build_handlers()
         self.load_state(power_on(words))
 
     def load_state(self, state: MachineState) -> None:
@@ -126,6 +128,25 @@ class FastMachine:
         self._halted = state.halted
         self._halt_code = state.halt_code
         self._output = list(state.output)
+
+    @property
+    def pc(self) -> int:
+        """Return the program counter, without building a whole `state()`."""
+        return self._pc
+
+    @property
+    def halted(self) -> bool:
+        """Return True if the machine has stopped, without building a whole `state()`."""
+        return self._halted
+
+    def register(self, index: int) -> int:
+        """Return register `index` (0-7), without building a whole `state()`."""
+        return self._registers[index]
+
+    @property
+    def handler_table_for_tests(self) -> dict[Opcode, Callable[[Instruction], None]]:
+        """Return the opcode table `step` uses, so a test can check it is built only once."""
+        return self._handler_table
 
     def state(self) -> MachineState:
         """Return a frozen copy of the machine as it is now."""
@@ -171,10 +192,10 @@ class FastMachine:
             return True
         instruction = decode(self._memory[pc])
         self._pc = (pc + 1) & WORD_MASK
-        self._handlers()[instruction.opcode](instruction)
+        self._handler_table[instruction.opcode](instruction)
         return True
 
-    def _handlers(self) -> dict[Opcode, Callable[[Instruction], None]]:
+    def _build_handlers(self) -> dict[Opcode, Callable[[Instruction], None]]:
         """Map each opcode to the method that obeys it."""
         return {
             Opcode.ALU: self._alu,

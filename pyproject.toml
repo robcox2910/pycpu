@@ -60,7 +60,7 @@ version-file = "src/pycpu/_version.py"
 packages = ["src/pycpu"]
 
 [tool.hatch.build.targets.wheel.force-include]
-"src/pycpu/bench/page.html" = "pycpu/bench/page.html"
+"src/pycpu/cockpit/page.html" = "pycpu/cockpit/page.html"
 
 [tool.ruff]
 line-length = 100

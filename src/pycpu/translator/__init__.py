@@ -9,15 +9,19 @@ assembly), and `run_pebble` runs the result on the fast engine. The ready-made
 phrases, the multiply, divide and print routines, live in `runtime.py`.
 """
 
+from pycpu.translator.codegen import FRAME_POINTER, FrameLayout, Slot
 from pycpu.translator.program import PebbleRun, TranslatedProgram, run_pebble, translate
 from pycpu.translator.runtime import RUNTIME, RUNTIME_STACK_WORDS
 from pycpu.translator.subset import PebbleCPUError, UnsupportedFeature
 
 __all__ = [
+    "FRAME_POINTER",
     "RUNTIME",
     "RUNTIME_STACK_WORDS",
+    "FrameLayout",
     "PebbleCPUError",
     "PebbleRun",
+    "Slot",
     "TranslatedProgram",
     "UnsupportedFeature",
     "run_pebble",

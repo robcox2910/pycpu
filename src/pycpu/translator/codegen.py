@@ -48,6 +48,7 @@ _ASCII_LETTERS_AND_DIGITS = frozenset(
     "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
 )
 END_LABEL = "__end"
+FRAME_POINTER = 7  # r7 holds the frame pointer: the address of the running code's frame
 _ALU = {OpCode.ADD: "add", OpCode.SUBTRACT: "sub"}
 # Each comparison, the signed branch condition that says "yes", and how to say it.
 _BRANCHES: dict[str, tuple[str, str]] = {
@@ -61,6 +62,40 @@ _BRANCHES: dict[str, tuple[str, str]] = {
 
 
 @dataclass(frozen=True)
+class Slot:
+    """One named pigeonhole in a frame: where a parameter or variable lives.
+
+    Attributes:
+        name: The name, as Pebble knows it.
+        offset: How far from `r7` it sits: parameter i of N is at `2 + (N - 1 - i)`
+            (above the saved `r7` and the return address), variable j at `-1 - j`.
+        kind: `"parameter"` or `"variable"`.
+        hidden: True for a name the compiler made up, such as `$for_limit_0`, which
+            is not a name a Pebble program could write.
+
+    """
+
+    name: str
+    offset: int
+    kind: str
+    hidden: bool
+
+
+@dataclass(frozen=True)
+class FrameLayout:
+    """The slots of one piece of code's frame, so its names can be found from `r7`.
+
+    Attributes:
+        function: The function's name, or None for the top-level program.
+        slots: Its parameters (in order), then its variables (in slot order).
+
+    """
+
+    function: str | None
+    slots: tuple[Slot, ...]
+
+
+@dataclass(frozen=True)
 class Assembly:
     """The assembly text for a whole program, and the Pebble line of each text line.
 
@@ -68,11 +103,15 @@ class Assembly:
         text: The assembly, ready for `pycpu.assembler.assemble`.
         lines: For each line of `text` (the first is index 0), the Pebble line it was
             written for, or None for the runtime routines, the text data and headings.
+        frames: For each line of `text`, the frame layout that `r7` points at when the
+            line's instruction is about to run, or None where the frame is not ready:
+            the prologue, the `ret` of a return, the runtime routines and the data.
 
     """
 
     text: str
     lines: tuple[int | None, ...]
+    frames: tuple[FrameLayout | None, ...]
 
 
 def frame_words(checked: CheckedCode) -> int:
@@ -108,6 +147,15 @@ def function_label(name: str) -> str:
     return FUNCTION_PREFIX + "".join(pieces)
 
 
+def is_pebble_name(name: str) -> bool:
+    """Say whether `name` could be written in a Pebble program (a letter or `_`, then more)."""
+    return (
+        bool(name)
+        and (name[0].isalpha() or name[0] == "_")
+        and all(char.isalnum() or char == "_" for char in name)
+    )
+
+
 def _quote(text: str) -> str:
     """Write text in double quotes the way the assembler's `.string` reads it back."""
     escapes = {"\\": "\\\\", '"': '\\"', "\n": "\\n", "\t": "\\t"}
@@ -121,6 +169,9 @@ class _Writer:
         """Start with no lines and no text."""
         self.lines: list[str] = []
         self.pebble: list[int | None] = []
+        self.frames: list[FrameLayout | None] = []
+        # The frame that is ready for the lines being written now, if any.
+        self.frame: FrameLayout | None = None
         self.texts: dict[str, str] = {}
 
     def raw(self, text: str, line: int | None = None) -> None:
@@ -128,6 +179,7 @@ class _Writer:
         for piece in text.split("\n"):
             self.lines.append(piece)
             self.pebble.append(line)
+            self.frames.append(self.frame)
 
     def op(self, instruction: str, comment: str, line: int | None) -> None:
         """Add one indented instruction with a comment lined up beside it."""
@@ -156,6 +208,14 @@ class _CodeWriter:
         count = len(self.code.parameters)
         self.slots = {name: 2 + (count - 1 - i) for i, name in enumerate(self.code.parameters)}
         self.slots.update({name: -1 - j for j, name in enumerate(checked.variables)})
+        kinds = [(name, "parameter") for name in self.code.parameters]
+        kinds += [(name, "variable") for name in checked.variables]
+        self.layout = FrameLayout(
+            None if label == MAIN_LABEL else checked.name,
+            tuple(
+                Slot(name, self.slots[name], kind, not is_pebble_name(name)) for name, kind in kinds
+            ),
+        )
         self.places = located(self.code.instructions)
         first = first_place(self.places)
         self.first_line = first.line if first is not None else None
@@ -163,8 +223,15 @@ class _CodeWriter:
         self.targets = {int(i.operand or 0) for i in self.code.instructions if i.opcode in JUMPS}
 
     def write(self) -> None:
-        """Write the prologue, then the cards for every bytecode instruction."""
+        """Write the prologue, then the cards for every bytecode instruction.
+
+        The prologue's words have no ready frame (`r7` still points at the caller's
+        until `getsp r7`, and the variables are not made until the last `push r0`);
+        from just after it, the frame is this code's.
+        """
+        self.out.frame = None
         self._prologue()
+        self.out.frame = self.layout
         for index, instruction in enumerate(self.code.instructions):
             place = self.places[index]
             line = place.line if place else None
@@ -271,7 +338,10 @@ class _CodeWriter:
         out.op("pop  r1", "r1 = the value to give back", line)
         out.op("setsp r7", "drop the variables and the stack in one go", line)
         out.op("pop  r7", "get the caller's frame pointer back", line)
+        # `r7` is the caller's now, but `pc` is still in this code: no frame is ready.
+        out.frame = None
         out.op("ret", "go back to the caller", line)
+        out.frame = self.layout
 
     def _call(self, name: str, line: int | None) -> None:
         """Write a call to a Pebble function, whose arguments are already on the stack.
@@ -417,9 +487,11 @@ def generate(program: CheckedProgram) -> Assembly:
     out.raw("; ==== main: the Pebble program's own code ====")
     _CodeWriter(out, program.main, MAIN_LABEL, program).write()
     for name, checked in program.functions.items():
+        out.frame = None
         parameters = ", ".join(checked.code.parameters)
         out.raw(f"; ==== function {name}({parameters}): its own frame, like main's ====")
         _CodeWriter(out, checked, function_label(name), program).write()
+    out.frame = None
     out.raw("; ==== runtime: the ready-made routines for multiply, divide and print ====")
     out.raw(RUNTIME.strip("\n"))
     out.raw("; ==== text: every piece of text, one character per word, ending in 0 ====")
@@ -427,4 +499,4 @@ def generate(program: CheckedProgram) -> Assembly:
         out.raw(f"{label}: .string {_quote(text)}")
     out.raw(f"; ==== the end of the program: the stack must never grow down to {END_LABEL} ====")
     out.raw(f"{END_LABEL}:")
-    return Assembly("\n".join(out.lines) + "\n", tuple(out.pebble))
+    return Assembly("\n".join(out.lines) + "\n", tuple(out.pebble), tuple(out.frames))

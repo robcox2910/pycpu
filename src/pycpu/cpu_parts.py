@@ -8,7 +8,7 @@ with two windows to look through and one slot to post a new number into a locker
 
 Everything here is built from the gates in `logic.py` and the registers in
 `memory.py`, so underneath it is all NAND. Each part opens its own scope (`decode`,
-`condition`, `registers`, `address_check`) so the Bench can zoom in on it.
+`condition`, `registers`, `address_check`) so the Cockpit can zoom in on it.
 """
 
 from collections.abc import Sequence

@@ -438,3 +438,26 @@ def test_call_with_the_stack_pointer_at_zero_faults() -> None:
     before = machine.state()
     machine.step()
     _same_but_halted(before, machine.state(), pc=1)
+
+
+def test_pc_halted_and_register_agree_with_state_after_a_few_steps() -> None:
+    """The cheap readers give the same answers as a full `state()`."""
+    machine = make(COUNTDOWN)
+    for _ in range(3):
+        machine.step()
+        state = machine.state()
+        assert machine.pc == state.pc
+        assert machine.halted == state.halted
+        assert [machine.register(i) for i in range(len(state.registers))] == list(state.registers)
+    machine.run(100)
+    assert machine.halted is True
+    assert machine.pc == machine.state().pc
+
+
+def test_the_handler_table_is_built_once() -> None:
+    """Two steps use the very same table, so nothing is rebuilt per instruction."""
+    machine = make(COUNTDOWN)
+    machine.step()
+    first = id(machine.handler_table_for_tests)
+    machine.step()
+    assert id(machine.handler_table_for_tests) == first

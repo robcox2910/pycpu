@@ -1,0 +1,7 @@
+# Dividing by zero: what a fault looks like
+let cakes = 12
+let friends = 3
+print(cakes // friends)
+friends = friends - 3
+print(cakes // friends)
+print("never printed")
