@@ -26,9 +26,11 @@ from pycpu.cockpit.picture import (
 )
 from pycpu.cockpit.session import (
     DEMO_PROGRAM,
+    END_NOTE,
     MAX_GATE_STEPS,
     MAX_PEBBLE_CHARACTERS,
     MAX_RUN,
+    NO_GATE_ENDING,
 )
 from pycpu.cockpit.session import Cockpit as Session
 from pycpu.computer import Computer, StepSize
@@ -1323,18 +1325,89 @@ class TestThePage:
             assert words in text
 
     def test_its_zoom_panel_waits_for_pause_while_playing(self) -> None:
-        """The zoom panel's playing message is the one the docs quote."""
-        assert PLAYING_MESSAGE in _page()
+        """The playing message sits inside the zoom panel, and is the one the docs quote."""
+        zoom = re.search(r'<section[^>]*id="zoom".*?</section>', _page(), flags=re.DOTALL)
+        assert zoom is not None
+        assert PLAYING_MESSAGE in zoom.group(0)
         for page in ("the-cockpit.md", "watching-it-run.md"):
             assert PLAYING_MESSAGE in (DOCS / page).read_text(encoding="utf-8")
 
     def test_it_marks_changes_in_words_and_explains_hidden_names(self) -> None:
-        """Changed values carry the word "changed"; hidden names have a title."""
+        """Changed values get a "changed" tag; hidden names are dimmed with an explanation."""
         text = _page()
-        assert '"changed"' in text
-        assert "hidden" in text
-        assert "show this gate" in text
+        assert 'const CHANGED = "changed";' in text
+        assert 'node.append(el("span", CHANGED, "tag"));' in text
+        assert "if (n.hidden) {" in text
+        assert 'row.classList.add("dim");' in text
+        assert "row.title = HIDDEN_TITLE;" in text
+        assert "Pebble made this box for itself" in text
+
+    def test_show_this_gate_is_offered_only_for_the_picture_that_named_it(self) -> None:
+        """The button names last_gate, and a later picture without that gate drops the pick."""
+        text = _page()
+        assert '"show this gate (gate " + g.id' in text
+        assert "g.id !== pickedGate.id || g.path !== pickedGate.path) pickedGate = null;" in text
+
+    def test_a_gate_step_with_no_gate_shows_why(self) -> None:
+        """The page shows the session's no-gate note in the zoom panel's gate spot."""
+        text = _page()
+        assert f'const NO_GATE = "{NO_GATE_ENDING}";' in text
+        assert "m.note.endsWith(NO_GATE)" in text
 
     def test_the_first_tour_quotes_the_demo_program_exactly(self) -> None:
         """The Cockpit page's first guided tour pastes DEMO_PROGRAM, word for word."""
         assert DEMO_PROGRAM in (DOCS / "the-cockpit.md").read_text(encoding="utf-8")
+
+
+CLOCK_NOTE = "That step moved the write clock wire, not a gate, so there is no gate to show."
+TOUR_FIRST_WORDS = [(0xC200, True), (0x24B8, True), (0x3401, False)]
+TOUR_FIRST_LINE = 18
+
+
+class TestFreshTour:
+    """The figures the Cockpit page's drawing and tour quote, read from a tour Cockpit."""
+
+    def test_the_first_words_are_the_ones_the_drawing_shows(self) -> None:
+        """Words 0 to 2 are 0xC200, 0x24B8 and 0x3401, all on line 18; 1 and 2 share a `set`."""
+        client = TestClient(create_cockpit(TOUR_BITS, start_example="tour"))
+        rows = _json(_run(client.get("/api/listing")))["rows"][: len(TOUR_FIRST_WORDS)]
+        assert [(row["word"], row["first"]) for row in rows] == TOUR_FIRST_WORDS
+        assert {row["pebble_line"] for row in rows} == {TOUR_FIRST_LINE}
+        assert rows[0]["text"].startswith("getsp r1")
+        assert rows[1]["text"].startswith("set  r2, __end")
+        text = (DOCS / "the-cockpit.md").read_text(encoding="utf-8")
+        for word, _first in TOUR_FIRST_WORDS:
+            assert f"0x{word:04X}" in text
+
+    def test_the_first_gate_step_moves_a_clock_wire_and_says_so(self) -> None:
+        """The very first 1 gate has no gate to show, and the note the docs quote says why."""
+        client = TestClient(create_cockpit(TOUR_BITS, start_example="tour"))
+        body: dict[str, object] = {"size": "gate"}
+        machine = _json(_run(client.post("/api/step", json=body)))  # pyright: ignore[reportArgumentType]
+        assert machine["last_gate"] is None
+        assert machine["note"] == CLOCK_NOTE
+        assert CLOCK_NOTE in (DOCS / "the-cockpit.md").read_text(encoding="utf-8")
+        machine = _json(_run(client.post("/api/step", json=body)))  # pyright: ignore[reportArgumentType]
+        assert machine["last_gate"] is not None
+        assert machine["note"] is None
+
+    def test_a_gate_step_ending_an_instruction_says_so(self) -> None:
+        """A gate step whose last movement is an instruction's end names that instead."""
+        counter = Session(SMALL)
+        steps = 0
+        while True:
+            steps += 1
+            micro = counter.computer.step(StepSize.GATE)
+            assert micro is not None
+            if micro.kind == "end":
+                break
+        session = Session(SMALL)
+        session.step(StepSize.GATE, steps)
+        assert session.last_gate is not None
+        assert session.last_gate.kind == "end"
+        assert session.note == END_NOTE
+
+    def test_a_tour_too_big_for_the_memory_is_a_value_error(self) -> None:
+        """Starting a 64-word Cockpit on the tour is refused as a ValueError, naming why."""
+        with pytest.raises(ValueError, match="cannot start this Cockpit"):
+            create_cockpit(SMALL, start_example="tour")

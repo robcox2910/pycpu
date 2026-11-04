@@ -44,6 +44,15 @@ BUSY_MESSAGE = "the computer is running: press pause first"
 FINISHED_NOTE = "The program has finished, so there is no next line."
 NOT_PEBBLE_MESSAGE = "line steps need a Pebble program: this one is assembly"
 NOT_PLAYING_MESSAGE = "the computer is not playing: press play first"
+NO_GATE_ENDING = "so there is no gate to show."  # the page looks for these words
+END_NOTE = f"That step finished the instruction, not a gate, {NO_GATE_ENDING}"
+
+
+def _no_gate_note(micro: MicroStep) -> str:
+    """Say why a gate step whose last movement was not a gate has no gate to show."""
+    if micro.kind == "edge":
+        return f"That step moved the {micro.wire} clock wire, not a gate, {NO_GATE_ENDING}"
+    return END_NOTE
 
 
 class CockpitRefusal(Exception):  # noqa: N818
@@ -120,6 +129,22 @@ class Cockpit:
         self.before = self.computer.state()
         self.note = None
         self.last_gate = None
+
+    def start_with_pebble(self, source: str) -> None:
+        """Load a Pebble program as the Cockpit's starting program, with nothing marked changed.
+
+        This is for a Cockpit that has just been built: the program is loaded as
+        `load_pebble` would, and then the state before it is forgotten, because a
+        visitor never saw the demo program it replaced.
+
+        Raises:
+            CockpitRefusal: If the program does not fit this Cockpit's memory.
+            PebbleError: If Pebble itself finds a mistake in the program.
+            UnsupportedFeature: If the program uses something PyCPU cannot do yet.
+
+        """
+        self.load_pebble(source)
+        self.before = self.computer.state()
 
     def start_playing(self) -> None:
         """Let the computer run on its own: resume it onto the fast engine and mark it playing.
@@ -246,6 +271,11 @@ class Cockpit:
             # Only an instruction's end can leave the machine halted, so look only there.
             if micro is not None and micro.kind == "end" and self.computer.state().halted:
                 break
+        # A clock beat is made of clock-wire moves as well as gates, so a gate step can end
+        # on one; say so, rather than leave the page with nothing to show and no reason.
+        last = self.last_gate
+        if size == StepSize.GATE and last is not None and last.kind != "gate":
+            self.note = _no_gate_note(last)
 
     def rewind(self) -> None:
         """Go back to the start of the current instruction."""

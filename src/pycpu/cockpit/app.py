@@ -301,7 +301,8 @@ def create_cockpit(
         docs for each one.
 
     Raises:
-        ValueError: If `start_example` is not the name of an example.
+        ValueError: If `start_example` is not the name of an example, or that example
+            does not fit in `address_bits` of memory.
 
     """
     cockpit = Cockpit(address_bits)
@@ -319,16 +320,19 @@ def _start_with(cockpit: Cockpit, name: str) -> None:
     """Load the example called `name` on a new Cockpit, as if it had been there all along.
 
     Raises:
-        ValueError: If there is no example called `name`.
+        ValueError: If there is no example called `name`, or it does not fit this
+            Cockpit's memory.
 
     """
     if name not in EXAMPLE_NAMES:
         msg = f"no example called {name}; the examples are {', '.join(EXAMPLE_NAMES)}"
         raise ValueError(msg)
     source = next(e["source"] for e in example_programs() if e["name"] == name)
-    cockpit.load_pebble(source)
-    # Nothing has moved yet, so nothing should be marked as changed from the demo program.
-    cockpit.before = cockpit.computer.state()
+    try:
+        cockpit.start_with_pebble(source)
+    except CockpitRefusal as error:
+        msg = f"the example {name} cannot start this Cockpit: {error}"
+        raise ValueError(msg) from None
 
 
 def _reading_routes(app: App, live: _Live) -> None:

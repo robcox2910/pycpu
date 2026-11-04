@@ -244,6 +244,7 @@ const GATE_LINE = ["One NAND gate: its output is 0 only when both inputs are 1. 
 const FALLBACK = ["A part of the circuit, made of smaller parts and gates.", "Looking Inside a Circuit (looking-inside.md)"];
 const FLAGS = ["zero", "negative", "carry", "overflow"];
 const CHANGED = "changed";
+const NO_GATE = "so there is no gate to show.";
 const HIDDEN_TITLE = "A hidden helper: Pebble made this box for itself (a for loop keeps its end value here). Its name starts with $, which no program could write.";
 
 let path = "cpu";          // the part the zoom panel shows
@@ -251,7 +252,8 @@ let busy = false;          // a button's request is on its way
 let latest = null;         // the last picture drawn
 let latestText = "";       // ... and its JSON, to skip drawing the same picture twice
 let pickedLine = null;     // the Pebble line whose machine code is outlined
-let pickedGate = null;     // the gate "show this gate" highlights
+let pickedGate = null;     // {id, path}: the gate "show this gate" highlights, for its own picture only
+let zoomSeq = 0;           // counts zoom requests, so only the newest answer is drawn
 let listing = null;        // the last GET /api/listing
 let listingRows = [];      // one <tr> per word of machine code
 let lineRows = new Map();  // Pebble line -> its machine code rows
@@ -301,10 +303,13 @@ function keepVisible(box, row) {
 
 async function zoomTo(next) {
   if (latest && latest.running) return;
+  const mine = ++zoomSeq;
   try {
     const response = await fetch("/api/view?path=" + encodeURIComponent(next));
+    if (mine !== zoomSeq) return;  // a newer request has been sent: its answer is the one to draw
     if (!response.ok) { showError("Could not open " + (next || "the whole circuit") + " (" + response.status + ")"); return; }
     const view = await response.json();
+    if (mine !== zoomSeq) return;
     if (latest && latest.running) return;  // play started while we waited: never show stale gates
     path = next;
     drawView(view);
@@ -359,7 +364,7 @@ function drawView(view) {
     row.append(el("strong", "gate " + g.id));
     const wire = (label, id, value) => el("span", label + " w" + id + " = " + value, "wire" + (value ? " on" : ""));
     row.append(wire("in", g.a, g.value_a), wire("in", g.b, g.value_b), el("span", "NAND ->"), wire("out", g.out, g.value_out));
-    if (g.id === pickedGate) {
+    if (pickedGate && g.id === pickedGate.id && path === pickedGate.path) {
       row.classList.add("picked");
       row.append(el("span", "the gate that just changed", "tag"));
       picked = row;
@@ -375,13 +380,19 @@ function drawZoom(m) {
   document.getElementById("inside").hidden = m.running;
   const showGate = document.getElementById("show-gate");
   showGate.replaceChildren();
+  // The "just changed" label belongs to the picture that offered the button: any later
+  // move that did not change that same gate takes it away, so it can never go stale.
+  const g = m.last_gate;
+  if (!g || !pickedGate || g.id !== pickedGate.id || g.path !== pickedGate.path) pickedGate = null;
   if (m.running) return;
-  if (m.last_gate) {
-    const g = m.last_gate;
+  if (g) {
     const b = el("button", "show this gate (gate " + g.id + ", now " + g.value + ", in " + g.path + ")", "quiet");
     b.type = "button";
-    b.onclick = () => { pickedGate = g.id; zoomTo(g.path); };
+    b.onclick = () => { pickedGate = { id: g.id, path: g.path }; zoomTo(g.path); };
     showGate.append(b);
+  } else if (m.note && m.note.endsWith(NO_GATE)) {
+    // A gate step that ended on a clock wire (or an instruction's end): say why there is no button.
+    showGate.append(el("p", m.note, "muted"));
   }
   zoomTo(path);
 }
@@ -644,6 +655,7 @@ function setControls() {
   document.querySelectorAll("button.step").forEach((b) => { b.disabled = busy || running; });
   document.getElementById("play").disabled = busy || running;
   document.getElementById("pause").disabled = busy || !running;
+  document.getElementById("count").disabled = busy || running;
   ["load-example", "load-pebble", "load"].forEach((id) => { document.getElementById(id).disabled = busy; });
 }
 
@@ -674,6 +686,7 @@ async function send(url, body) {
       let message = "The Cockpit refused that (" + response.status + ").";
       try { message = JSON.parse(text).message || message; } catch (e) { /* keep default */ }
       showError(message);
+      refresh();  // e.g. a 409 while the stream had dropped: catch up with what is really happening
       return;
     }
     showError("");

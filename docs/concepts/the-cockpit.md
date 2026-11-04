@@ -28,14 +28,15 @@ you count the instructions in between.
 
 ### One screen, four bands
 
-The page is laid out in four bands, top to bottom. This is **layout A**:
+Under the row of controls, the page is laid out in four bands, top to bottom. This is
+**layout A**:
 
 ```text
  [Play] [Pause] speed [100 a second]   [1 gate] [100 gates] [1 cycle] [1 instruction]
- [Line] [Line into]   [Rewind]   [Run] [10]
+ [Line] [Line into]   [Rewind]   [10] [Run]
 +--------------------------------------+---------------------------------------------+
 | PEBBLE                               | MACHINE CODE                                |
-|    17                                |     addr  word    line  from the source     |
+|    17  }                             |     addr  word    line  from the source     |
 | >  18  print("Hello from Pebble!")   | >   0     0xC200  18    getsp r1            |
 |    19  let total = 0                 | ░   1     0x24B8  18    set r2, __end       |
 |    20  for i in range(1, 5) {        | ░   2     0x3401  18                        |
@@ -49,8 +50,8 @@ The page is laid out in four bands, top to bottom. This is **layout A**:
 |   what this part is, in one sentence, and the page that explains it                |
 |   parts inside: [control] [operand] [adder] ...   gates here: each NAND and wires  |
 +-------------------------------------------------------------------------------------+
-| LOAD   [tour v] [Load example]      or your own: [ text box ] [Load Pebble]         |
-|                                                               [Load assembly]       |
+| LOAD   [A tour of everything Pebble can do on PyCPU v] [Load example]               |
+|        or your own: [ text box ]   [Load Pebble] [Load assembly]                    |
 +-------------------------------------------------------------------------------------+
 ```
 
@@ -58,17 +59,19 @@ The page is laid out in four bands, top to bottom. This is **layout A**:
   is marked with `>`.
 - **Top right, machine code.** Every word of the program, read from `GET /api/listing`:
   its address, the word as a number, the Pebble line that made it, and the line of
-  assembly it came from (shown once, on the first word that line made). The current word is marked with `>`, and every word of the running
-  Pebble line is shaded (`░` in the drawing), so you can see the whole line's machine
-  code at once.
+  assembly it came from (shown once, on the first word that line made). The current
+  word is marked with `>`, and every word of the running Pebble line is shaded (`░` in
+  the drawing), so you can see the whole line's machine code at once. The tour's first
+  three words, 0xC200, 0x24B8 and 0x3401, all belong to line 18; the second and third
+  are the two halves of one `set`.
 - **Middle, the dials.** The registers and flags, the top of the stack, the variables
   of the code that is running, and the output. Whatever the last move changed is
   highlighted and carries the word "changed", so it can be read aloud too. Variables the
   compiler made for itself (see Variables below) are shown in dim text, and holding the
   pointer over one explains it.
-- **Bottom, the zoom panel.** Where you are in the circuit, a sentence saying what that
+- **Below them, the zoom panel.** Where you are in the circuit, a sentence saying what that
   part is, the smaller parts inside it, and the gates directly in it.
-- **Last, Load.** The examples, and a box for your own program.
+- **Last, Load.** The examples, listed by their titles, and a box for your own program.
 
 The controls, from left to right:
 
@@ -93,8 +96,12 @@ Three kinds of click take you into the circuit:
   does its main work, such as `cpu.alu` for an add.
 - **Click a Pebble line** and every word of machine code it made is outlined, and the
   machine code pane scrolls to the first of them. Click it again to clear it.
-- **After a gate step**, a **show this gate** button appears. It opens the zoom panel on
-  the part that holds the gate that just changed, and highlights that gate.
+- **After a gate step that ended on a gate**, a **show this gate** button appears. It
+  opens the zoom panel on the part that holds the gate that just changed, and highlights
+  that gate until the next move. A clock beat is made of clock-wire moves as well as
+  gates, so a gate step can end on a clock wire instead (the very first **1 gate** of a
+  program does). Then there is no gate to show, and the page says so:
+  "That step moved the write clock wire, not a gate, so there is no gate to show."
 
 While the computer is playing the step buttons are switched off, and the zoom panel
 says "Pause to look inside the gates": the gates are not running then, so there is
@@ -332,8 +339,8 @@ run(examples())
 # its first instruction: getsp r1
 ```
 
-The tour's first 17 lines define two functions, `fact` and `describe`, and nothing runs
-them until they are called, so the first line that runs is line 18. Its first
+After its title, lines 2 to 17 of the tour define two functions, `fact` and `describe`,
+and nothing runs them until they are called, so the first line that runs is line 18. Its first
 instruction is `getsp r1` again: the start of main's frame.
 
 To open the real thing, run this in a terminal, then visit the address it prints:
@@ -793,8 +800,9 @@ After 100 gate steps the last gate to think was number 10,016 (a number that bel
 6-bit machine and is different on a machine of another size), a part of the stack
 pointer's own wiring, and it settled on 0. Then an instruction step ran many gates at
 once, so there is no single last one to name and the answer goes back to `null`. The
-picture also carries a `note`, one sentence about the last move, which is `null` for
-now; later pages use it to say why a line step stopped.
+picture also carries a `note`, one sentence about the last move, which is `null` here.
+A gate step that ends on a clock wire or an instruction's end, not a gate, uses it to
+say there is no gate to show; later pages use it to say why a line step stopped.
 
 ### Variables
 
