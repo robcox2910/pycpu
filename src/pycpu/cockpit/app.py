@@ -19,7 +19,7 @@ from importlib import resources
 from typing import Literal
 
 from pebble import PebbleError
-from pynet.loop import Task, sleep, spawn
+from pynet.loop import Task, current_task, sleep, spawn
 from pyweb.app import App
 from pyweb.messages import HTTPError, HttpRequest, HttpResponse, JsonValue, html, json
 from pyweb.sse import EventHub, EventStream, ServerEvent
@@ -234,14 +234,19 @@ class _Live:
     async def _loop(self, slicer: _Slicer) -> None:
         """Run one slice a tick and publish it, until paused, loaded over, or halted."""
         cockpit = self.cockpit
-        while cockpit.playing:
-            going = cockpit.play_tick(slicer.next())
-            if not going:
-                cockpit.stop_playing()  # loads the gate engine, at the halt
-            self.moved()
-            if not going:
-                return
-            await sleep(self.tick_seconds)
+        try:
+            while cockpit.playing:
+                going = cockpit.play_tick(slicer.next())
+                if not going:
+                    cockpit.stop_playing()  # loads the gate engine, at the halt
+                self.moved()  # the one event for this tick; after a halt, the last
+                if not going:
+                    return
+                await sleep(self.tick_seconds)
+        finally:
+            # Forget this loop once it ends, unless a newer play has already replaced it.
+            if self.player is current_task():
+                self.player = None
 
 
 def create_cockpit(

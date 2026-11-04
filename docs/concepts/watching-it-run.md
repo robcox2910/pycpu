@@ -30,7 +30,7 @@ instruction, inside the gate engine, so you can zoom into any wire and gate agai
 | Switching your radio on | `GET /api/events`, an `EventStream` |
 | The studio that talks to every radio at once | An `EventHub`, which the Cockpit publishes to |
 | The replay camera | Pause: `POST /api/pause`, which calls `Cockpit.stop_playing` and loads the gate engine |
-| "No replays while the ball is in play" | While playing, the zoom panel shows the last *paused* view, never a live one |
+| "No replays while the ball is in play" | While playing, `/api/view` gives the last *paused* view of the gates, never a live one |
 
 `ServerEvent`, `EventStream` and `EventHub` come from PyWeb, the web server in this
 series; its page [Server-Sent Events](https://robcox2910.github.io/pyweb/concepts/server-sent-events/)
@@ -110,8 +110,9 @@ Cockpit for good. So play runs in small **slices**, one a tick:
   |   owed = owed + speed x tick      (50 x 0.01 = 0.5 instructions)         |
   |   run the whole part of owed on the fast engine:  play_tick(n)           |
   |   keep the fraction for next time                                        |
-  |   publish the picture as a "machine" event  ---->  every open page       |
-  |   halted?  -> stop_playing(), publish once more (running false), stop    |
+  |   halted?  -> stop_playing() first: loads the gate engine, running false |
+  |   publish the picture as one "machine" event  ---->  every open page     |
+  |   halted?  -> stop (that event was the last one)                         |
   |   otherwise: sleep one tick, and go round again while still playing      |
   +--------------------------------------------------------------------------+
         |
@@ -164,16 +165,16 @@ picture as a `machine` event. So two tabs open on the same Cockpit both see ever
 change, whichever tab pressed the button. A tab that closes simply stops listening: the
 hub forgets it, and play carries on to its end or to Pause for everyone else.
 
-### Why the zoom panel waits for Pause
+### Why looking inside waits for Pause
 
 While playing, the **gate engine is not running at all**: the fast engine is doing the
 work. The wires in the gate engine still hold the values from the last time it was
 paused. Showing those as if they were live would be faking it, and this project never
 fakes the gate view. So while playing, the picture's `variables` and `last_gate` are
-`null`, `at_boundary` is always true (the fast engine only stops between
-instructions), and the zoom panel says the machine must be paused to look inside. If
-the page asks `/api/view` anyway, it gets the gate engine **as it was last paused**,
-never something made up. Press Pause, and every wire is real again.
+`null`, and `at_boundary` is always true (the fast engine only stops between
+instructions). If anyone asks `/api/view` while playing, the answer is the gate engine
+**as it was last paused**, never something made up. Press Pause, and every wire is real
+again.
 
 ## Why Does This Matter?
 
