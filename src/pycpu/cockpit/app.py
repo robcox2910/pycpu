@@ -4,9 +4,10 @@ Think of the cockpit's radio to the ground crew: each message is read, passed to
 pilot, and the answer read back. Visitors can freeze the flight, nudge it forward
 (`/api/step`: one gate, a beat, an instruction or a whole Pebble line), wind it back
 (`/api/rewind`), let it play (`/api/run`), load a new program (`/api/program`, or
-`/api/pebble` for one that comes with its lyric sheet), read its dials (`/api/machine`) and ask what any part is carrying (`/api/view`).
-These routes only parse the request, call the session and answer; every rule lives
-in `session.py` and every dial in `picture.py`.
+`/api/pebble` for one that comes with its lyric sheet), read its dials
+(`/api/machine`) and ask what any part is carrying (`/api/view`). These routes only
+parse the request, call the session and answer; every rule lives in `session.py` and
+every dial in `picture.py`.
 """
 
 from collections.abc import Generator, Mapping
@@ -98,19 +99,30 @@ type LineSize = Literal["line", "line_into"]
 LINE_SIZES: dict[LineSize, bool] = {"line": False, "line_into": True}
 
 
+def _size(value: object) -> StepSize | LineSize | None:
+    """Return `value` as a step size or a line size, or None if it is neither."""
+    match value:
+        case "line":
+            return "line"
+        case "line_into":
+            return "line_into"
+        case str() if value in tuple(StepSize):
+            return StepSize(value)
+        case _:
+            return None
+
+
 def _step_request(request: HttpRequest) -> tuple[StepSize | LineSize, int]:
     """Read a `POST /api/step` body as a step size (or a line size) and a count, or raise a 400."""
     body = _object(request, "a size")
-    size = body.get("size")
-    if size not in tuple(StepSize) and size not in LINE_SIZES:
+    size = _size(body.get("size"))
+    if size is None:
         sizes = ", ".join(f'"{s}"' for s in (*StepSize, *LINE_SIZES))
         raise HTTPError(BAD_REQUEST, f"size must be one of {sizes}")
     count = _whole_number(body, "count", MAX_GATE_STEPS, 1)
-    if size in LINE_SIZES:
-        if count != 1:
-            raise HTTPError(BAD_REQUEST, "count is only for gate steps")
-        return size, count
-    return StepSize(str(size)), count
+    if not isinstance(size, StepSize) and count != 1:
+        raise HTTPError(BAD_REQUEST, "count is only for gate steps")
+    return size, count
 
 
 def _step(cockpit: Cockpit, size: StepSize | LineSize, count: int) -> None:
@@ -171,7 +183,7 @@ def create_cockpit(address_bits: int = RAM_ADDRESS_BITS, start_example: str | No
         return answer()
 
     @app.get("/api/listing")
-    def program_listing(_request: HttpRequest) -> HttpResponse:  # pyright: ignore[reportUnusedFunction]
+    def rows(_request: HttpRequest) -> HttpResponse:  # pyright: ignore[reportUnusedFunction]
         """List every word of the loaded program, with its source line and labels."""
         return json(listing(cockpit))  # pyright: ignore[reportArgumentType]
 

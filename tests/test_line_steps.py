@@ -38,6 +38,8 @@ while n > 0 {
 """
 COUNTDOWN_TRACE = [1, 2, 3, 4, 2, 3, 4, 2]
 SECOND_LINE = 2
+FRAME_INSTRUCTIONS = 10
+LINE_ONE_INSTRUCTIONS = 4
 LINE_AFTER_WHILE = 3
 DOUBLE = "fn double(n) {\n    return n * 2\n}\nprint(double(3))\n"
 DOUBLE_BODY_LINE = 2
@@ -139,7 +141,7 @@ class TestStepOverLines:
         assert cockpit.computer.state().output == tuple(b"2\n1\n")
 
     def test_every_stop_is_paused_on_a_ready_located_word(self) -> None:
-        """Each stop is at an instruction boundary in the gates, on a word with a frame and a line."""
+        """Each stop is at a boundary in the gates, on a word with a ready frame and a line."""
         cockpit = _pebble(COUNTDOWN)
         translated = cockpit.translated
         assert translated is not None
@@ -156,6 +158,22 @@ class TestStepOverLines:
         cockpit = _pebble(COUNTDOWN)
         step = cockpit.step_line(into=False)
         assert cockpit.note == f"Ran {step.instructions} instructions to reach line 2."
+
+    def test_the_first_step_is_ten_frame_instructions_then_four_of_line_one(self) -> None:
+        """The countdown's first 14 instructions are 10 making main's frame and 4 storing `n`."""
+        translated = translate(COUNTDOWN)
+        machine = FastMachine(WORDS)
+        machine.load_program(translated.program.words)
+        ran = 0
+        while translated.frames[machine.pc] is None:
+            machine.step()
+            ran += 1
+        assert ran == FRAME_INSTRUCTIONS
+        while translated.line_at(machine.pc) != SECOND_LINE:
+            machine.step()
+            ran += 1
+        assert ran == FRAME_INSTRUCTIONS + LINE_ONE_INSTRUCTIONS
+        assert "Ten instructions make the frame, and four more put 2 into `n`" in _words(PAGE)
 
     def test_the_first_step_after_a_load_reaches_the_second_line(self) -> None:
         """Just after a load main's frame is not made yet, and one step still reaches line 2."""

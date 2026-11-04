@@ -106,7 +106,7 @@ class Cockpit:
         self.playing = False
 
     def _begin(self, *, load: bool = False) -> None:
-        """Start a move: refuse it if playing (loads excepted), then set `before` and clear notes."""
+        """Start a move: refuse it if playing (loads excepted), set `before` and clear notes."""
         if self.playing and not load:
             raise CockpitBusy(BUSY_MESSAGE)
         self.before = self.computer.state()
