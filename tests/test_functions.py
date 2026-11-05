@@ -157,10 +157,7 @@ print(a(-7))"""
         """Its maybe-a-number answer is fine to throw away."""
         source = "fn f(a) {\n    if a > 0 {\n        return 1\n    }\n}\nf(1)\nf(0)\nprint(2)"
         assert run_pebble(source).output == "2\n"
-        # Pebble v0.4.1: the VM crashes with IndexError when `f(0)` runs past the end of
-        # `f`; with `f(1)` alone it agrees. Once that is fixed it may return null instead.
-        vm_crashes_or_runs_on(source, IndexError)
-        run_and_compare(source.replace("f(0)\n", ""))
+        run_and_compare(source)
 
     def test_a_function_with_no_parameters_needs_no_tidying(self) -> None:
         """With no arguments to drop, the call is just `call` and `push r1`."""
@@ -248,9 +245,7 @@ class TestReturnKinds:
         assert self.kinds(source) == {"h": frozenset({Kind.NULL})}
         run = run_pebble(source)
         assert (run.output, run.fault) == ("", None)
-        # Pebble v0.4.1: the VM crashes with IndexError when `h(0)` runs past the end of
-        # `h`. Once that is fixed it may return null instead.
-        vm_crashes_or_runs_on(source, IndexError)
+        assert pebble.run_source(source) == ""
 
     def test_a_function_that_never_returns_at_all_gives_nothing(self) -> None:
         """Endless recursion never comes back, so its answer is never really used."""

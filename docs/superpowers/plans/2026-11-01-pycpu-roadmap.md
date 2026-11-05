@@ -185,9 +185,8 @@ What Plan 3 learned, measured on the same Intel Core i7-9750H laptop (macOS 26.5
 - **Pebble VM bugs found** (both in the VM, not PyCPU):
   - A function that falls off its end after a `return` inside an `if` crashes the VM with
     `IndexError` (PyCPU returns null, as Pebble's own functions-without-return do). Fixed
-    upstream in pebble-lang PR #84 (merge pending, to ship as v0.4.1, unreleased). Once it
-    ships: raise PyCPU's floor to `fromscratch-pebble>=0.4.1`, and remove the
-    `# Pebble v0.4.1:` workarounds in the tests (grep for that marker).
+    upstream in pebble-lang PR #84 and released in v0.4.1 (2026-11-04). PyCPU's floor is now
+    `fromscratch-pebble>=0.4.1` and the workarounds are gone (done in Plan 5, Task 1).
   - Calling a variable as a function (`let x = 1` then `x()`) crashes the Pebble v0.4.0 VM
     with `KeyError`. Not yet reported upstream. PyCPU refuses it as "functions used as values".
 - **Carried from the Plan 3 ledger (minors that matter later):**
@@ -210,7 +209,10 @@ What Plan 3 learned, measured on the same Intel Core i7-9750H laptop (macOS 26.5
   - Long source lines in `printing-a-number.md` and `from-pebble-to-machine-code.md` (render fine).
   - The engine speed limits now live once, in `pycpu.proof.ENGINE_LIMITS` (done in Plan 3).
 
-## Notes for Plan 5
+## Notes for Plan 6
+
+PyStack and the release are now Plan 6. Plan 5 is the Cockpit for learners
+(`docs/superpowers/specs/2026-11-04-pycpu-cockpit-for-learners-design.md`).
 
 What Plan 4 left, and what it learned. Measured on the same Intel Core i7-9750H laptop
 (macOS 26.5, Python 3.14.3) on 2026-11-04, with a throwaway script (not in the repo), two
@@ -226,7 +228,7 @@ fresh runs.
 | Both engines pass lockstep equivalence | Done | `tests/test_lockstep.py` (random states, assembled programs, self-modifying code) |
 | Conformance against the Pebble VM passes | Done | `tests/test_conformance.py` (`test_corpus_matches_the_pebble_vm` over `tests/pebble_programs/`, plus `test_random_programs_match_the_pebble_vm`); the Cockpit examples in `tests/test_examples_programs.py` |
 | Every layer has concept docs | Done | Every page under `docs/concepts/`, from gates to the tour, guarded by `tests/test_docs.py` (sections, the output of every block with an `# Output:` marker, `KEY_IDEAS`, nav, What's Next) |
-| PyStack launches it and `import "cpu"` works | **Left for Plan 5** | No `pycpu` plugin in `pystack/src/pystack/plugins/` yet |
+| PyStack launches it and `import "cpu"` works | **Left for Plan 6** | No `pycpu` plugin in `pystack/src/pystack/plugins/` yet |
 
 Only PyStack's launcher (a shell command that opens the Cockpit) and the `import "cpu"`
 Pebble module are left, with the release steps in the table at the top.
@@ -319,5 +321,6 @@ plans: copy it into each one.
   how a function call really works; multiply and divide with only adding and shifting;
   printing a number; what happens when things go wrong; why 16-bit numbers wrap.
 - **Plan 4:** a guided tour of the Cockpit, following one Pebble line all the way to a gate.
-- **Plan 5:** PyCPU's place in PyStack, and a closing "you built a computer" page tying the
+- **Plan 5:** the Cockpit for learners (see its design spec).
+- **Plan 6:** PyCPU's place in PyStack, the release, and a closing "you built a computer" page tying the
   whole climb together.

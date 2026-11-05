@@ -497,23 +497,25 @@ class TestConditionsAndLoops:
         """`for i in range(a, b)` counts from a up to b - 1, as on the VM."""
         run_and_compare(f"for i in range({arguments}) {{\n    print(i)\n}}")
 
-    def test_a_function_whose_if_jumps_past_its_end_is_fine(self) -> None:
-        """Pebble leaves out a closing `return null` after a `return`; a jump there is fine."""
+    def test_a_function_whose_if_jumps_to_its_closing_return_null_is_fine(self) -> None:
+        """Pebble 0.4.1 ends such a function with `return null`, and the jump lands on it."""
         source = "fn f(a) {\n    if a {\n        return 1\n    }\n}\nprint(2)"
         compiled = pebble.compile_source(source).compiled
         body = compiled.functions["f"].instructions
-        assert any(i.operand == len(body) for i in body if i.opcode == pebble.OpCode.JUMP_IF_FALSE)
+        jumps = [i.operand for i in body if i.opcode == pebble.OpCode.JUMP_IF_FALSE]
+        assert jumps == [len(body) - 2]
+        assert body[-1].opcode == pebble.OpCode.RETURN
         assert run_and_compare(source).output == "2\n"
 
-    def test_the_end_of_a_function_gets_a_label_and_returns_null(self) -> None:
-        """The jump past the end lands on a label whose cards give back null (0)."""
+    def test_the_closing_return_null_of_a_function_gets_a_label_and_gives_null(self) -> None:
+        """The jump lands on a label whose cards give back null (0)."""
         source = "fn f() {\n    let a = 1\n    if a {\n        return 1\n    }\n}"
         checked = check_program(pebble.compile_source(source).compiled).functions["f"]
         # Generate f's code as if it were main, to see the cards it would get.
         text = generate(CheckedProgram(checked, {})).text
-        end = len(checked.code.instructions)
-        cards = text.split(f"__main_{end}:\n")[1].splitlines()[:5]
-        assert [card.split(";")[0].strip() for card in cards[1:]] == [
+        end = len(checked.code.instructions) - 2
+        cards = text.split(f"__main_{end}:\n")[1].splitlines()[:6]
+        assert [card.split(";")[0].strip() for card in cards if "; line" not in card] == [
             "push r0",
             "pop  r1",
             "setsp r7",

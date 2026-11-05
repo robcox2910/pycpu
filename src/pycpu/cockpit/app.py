@@ -254,6 +254,12 @@ class _Live:
                 self.player = None
 
 
+def _example_source(name: str) -> str:
+    """Read just the one example file called `name`."""
+    folder = resources.files("pycpu.cockpit").joinpath("examples")
+    return folder.joinpath(f"{name}.pebble").read_text(encoding="utf-8")
+
+
 def example_programs() -> list[dict[str, str]]:
     """Read the example Pebble programs, in the order the page lists them.
 
@@ -265,10 +271,9 @@ def example_programs() -> list[dict[str, str]]:
         `.pebble`, the words of its first-line comment, and the whole program.
 
     """
-    folder = resources.files("pycpu.cockpit").joinpath("examples")
     examples: list[dict[str, str]] = []
     for name in EXAMPLE_NAMES:
-        source = folder.joinpath(f"{name}.pebble").read_text(encoding="utf-8")
+        source = _example_source(name)
         title = source.splitlines()[0].removeprefix("#").strip()
         examples.append({"name": name, "title": title, "source": source})
     return examples
@@ -327,7 +332,7 @@ def _start_with(cockpit: Cockpit, name: str) -> None:
     if name not in EXAMPLE_NAMES:
         msg = f"no example called {name}; the examples are {', '.join(EXAMPLE_NAMES)}"
         raise ValueError(msg)
-    source = next(e["source"] for e in example_programs() if e["name"] == name)
+    source = _example_source(name)
     try:
         cockpit.start_with_pebble(source)
     except CockpitRefusal as error:
@@ -351,7 +356,9 @@ def _reading_routes(app: App, live: _Live) -> None:
         return live.answer()
 
     @app.get("/api/listing")
-    def rows(_request: HttpRequest) -> HttpResponse:  # pyright: ignore[reportUnusedFunction]
+    def program_listing(  # pyright: ignore[reportUnusedFunction]
+        _request: HttpRequest,
+    ) -> HttpResponse:
         """List every word of the loaded program, with its source line and labels."""
         return json(listing(cockpit))  # pyright: ignore[reportArgumentType]
 
