@@ -104,6 +104,14 @@ RAN_PHRASE = "ran {count}"
 FINISHED_PHRASE = "finished the instruction you were in"
 FINISHED_THEN_PHRASE = "finished the instruction you were in, then ran {more:,} more"
 CHANGED_TEMPLATE = " {name} changed from {old} to {new}."
+# A line step that ends in another frame (a call or a return) says where it went,
+# never "changed from": the old number would belong to some other frame's box.
+INTO_TEMPLATE = " and went into {function}{where}."
+INTO_AGAIN_TEMPLATE = " and went into a new copy of {function}{where}."
+BACK_TEMPLATE = " and came back to {function}{where}."
+BACK_AGAIN_TEMPLATE = " and came back to the copy of {function} that called it{where}."
+MAIN_WORDS = "the main program"
+WHERE_TEMPLATE = ", where {names}"
 STOPPED_ENDING = ", and then the program stopped."
 SCREEN_SHOWED_TEMPLATE = ' The screen showed "{text}".'
 GATE_STEPS_TEMPLATE = "Took {count:,} gate steps. {last}"
@@ -419,6 +427,60 @@ def _frame_names(
     ]
 
 
+def _frame(translated: TranslatedProgram, state: MachineState) -> tuple[str | None, int] | None:
+    """Return the function and frame pointer of `state`'s ready frame, or None if it has none."""
+    if not 0 <= state.pc < len(translated.frames):
+        return None
+    layout = translated.frames[state.pc]
+    return None if layout is None else (layout.function, state.registers[FRAME_POINTER])
+
+
+def _function_of_line(translated: TranslatedProgram, pc: int) -> tuple[str | None] | None:
+    """Return (the function) whose Pebble line holds the word at `pc`, or None if unknown.
+
+    This is for a word with no ready frame, such as a prologue that is still making its
+    frame: its line belongs to one function, and a ready word on that line says which.
+    A runtime routine's word has no line, so its function is unknown.
+    """
+    line = translated.line_at(pc)
+    if line is None:
+        return None
+    for address, layout in enumerate(translated.frames):
+        if layout is not None and translated.line_at(address) == line:
+            return (layout.function,)
+    return None
+
+
+def _and_list(items: list[str]) -> str:
+    """Join words the way a person lists them: "a", "a and b", "a, b and c"."""
+    return items[0] if len(items) == 1 else f"{', '.join(items[:-1])} and {items[-1]}"
+
+
+def _went(
+    translated: TranslatedProgram,
+    before: tuple[str | None, int],
+    now: tuple[str | None, int],
+    start: MachineState,
+    after: MachineState,
+) -> str:
+    """Say where a line step that changed frames went, and the names it finds there.
+
+    The stack grows down, so a frame below the stack as it was at `start` is a new
+    one (a call: into), and a frame above it belongs to a caller (a return: back).
+    Each name is read from `after` alone, in the new frame.
+    """
+    names = _frame_names(translated, after) or []
+    listed = [f"{name} is {_signed(after.memory[address])}" for name, address in names]
+    where = WHERE_TEMPLATE.format(names=_and_list(listed)) if listed else ""
+    function = MAIN_WORDS if now[0] is None else now[0]
+    same = now[0] == before[0]
+    if now[1] >= start.sp:
+        template = BACK_AGAIN_TEMPLATE if same and now[0] is not None else BACK_TEMPLATE
+    else:
+        template = INTO_AGAIN_TEMPLATE if same and now[0] is not None else INTO_TEMPLATE
+    return template.format(function=function, where=where)
+
+
 def describe_line(
     translated: TranslatedProgram,
     start: MachineState,
@@ -430,7 +492,10 @@ def describe_line(
 
     Each visible variable is compared between `start`'s memory and `after`'s. The
     frame is `after`'s when it has one (so a line that makes a variable, such as the
-    first, still sees it), else `start`'s.
+    first, still sees it), else `start`'s. When both have a ready frame and they are
+    different frames (a call or a return happened), nothing is compared: the sentence
+    says where the step went instead, such as "Line 9 ran 12 instructions and went
+    into fact, where n is 7.".
 
     Args:
         translated: The Pebble program, with its source map and frames.
@@ -447,17 +512,29 @@ def describe_line(
         sentence = ROUTINE_TEMPLATE.format(ran=words[0].upper() + words[1:])
     else:
         sentence = LINE_TEMPLATE.format(line=line, ran=words)
+    before, now = _frame(translated, start), _frame(translated, after)
+    if before is None and now is not None:
+        # The start was still making its frame: only a different function is a new frame.
+        known = _function_of_line(translated, start.pc)
+        if known is not None and known[0] != now[0]:
+            before = (known[0], start.sp)
     if after.halted:
         sentence = sentence.removesuffix(".") + STOPPED_ENDING
+    elif before is not None and now is not None and before != now:
+        sentence = sentence.removesuffix(".") + _went(translated, before, now, start, after)
+        return sentence + _screen_showed(start, after)
     names = _frame_names(translated, after) or _frame_names(translated, start) or []
     for name, address in names:
         old, new = _signed(start.memory[address]), _signed(after.memory[address])
         if old != new:
             sentence += CHANGED_TEMPLATE.format(name=name, old=old, new=new)
+    return sentence + _screen_showed(start, after)
+
+
+def _screen_showed(start: MachineState, after: MachineState) -> str:
+    """Say what the screen showed during the step, or nothing if it showed nothing new."""
     shown = "".join(chr(w & BYTE_MASK) for w in after.output[len(start.output) :]).strip()
-    if shown:
-        sentence += SCREEN_SHOWED_TEMPLATE.format(text=" ".join(shown.split()))
-    return sentence
+    return SCREEN_SHOWED_TEMPLATE.format(text=" ".join(shown.split())) if shown else ""
 
 
 def describe_move(

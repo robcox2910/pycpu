@@ -596,3 +596,66 @@ class TestHelpers:
         state = Cockpit(BITS).computer.state()
         micro = MicroStep("gate", 7, "", 1, Phase.FETCH)
         assert describe_move(Depth.GATE, state, state, micro, None, 0) == "Gate 7 worked out a 1."
+
+
+FACTORIAL = next(e["source"] for e in example_programs() if e["name"] == "factorial")
+TWO_FUNCTION = (
+    "fn add(a, b) {\n    let s = a + b\n    return s\n}\nlet x = 5\nlet y = add(x, 2)\nprint(y)\n"
+)
+
+
+def _line_sentences(source: str, *, into: bool, presses: int) -> list[str | None]:
+    """Load `source` and press Step (into or over) at line depth, keeping each sentence."""
+    cockpit = Cockpit(BITS)
+    cockpit.load_pebble(source)
+    said: list[str | None] = []
+    for _ in range(presses):
+        cockpit.step_line(into=into)
+        said.append(cockpit.happened)
+    return said
+
+
+BACK = "and came back to the copy of fact that called it, "
+
+
+class TestLinesThatChangeFrame:
+    """A line step that ends in another frame says where it went, never "changed from"."""
+
+    def test_stepping_into_fact_and_into_new_copies(self) -> None:
+        """Into a call from the main program, then into a new copy of the same function."""
+        said = _line_sentences(FACTORIAL, into=True, presses=3)
+        assert said == [
+            "Line 8 ran 21 instructions and went into fact, where n is 5.",
+            "Line 3 ran 15 instructions.",
+            "Line 6 ran 20 instructions and went into a new copy of fact, where n is 4.",
+        ]
+
+    def test_coming_back_out_to_each_caller_and_to_main(self) -> None:
+        """Out of a copy of fact to the copy that called it, and at last to the main program."""
+        said = _line_sentences(FACTORIAL, into=True, presses=15)[10:]
+        assert said == [
+            f"Line 4 ran 6 instructions {BACK}where n is 2.",
+            f"Line 6 ran 26 instructions {BACK}where n is 3.",
+            f"Line 6 ran 33 instructions {BACK}where n is 4.",
+            f"Line 6 ran 41 instructions {BACK}where n is 5.",
+            "Line 6 ran 55 instructions and came back to the main program.",
+        ]
+
+    def test_into_and_out_of_another_function_lists_its_names(self) -> None:
+        """A call names every variable it finds there; the way back names the caller's."""
+        said = _line_sentences(TWO_FUNCTION, into=True, presses=5)
+        assert said == [
+            "Line 5 ran 15 instructions. x changed from 0 to 5.",
+            "Line 6 ran 15 instructions and went into add, where a is 5, b is 2 and s is 0.",
+            "Line 2 ran 10 instructions. s changed from 0 to 7.",
+            "Line 3 ran 6 instructions and came back to the main program, where x is 5 and y is 0.",
+            "Line 6 ran 6 instructions. y changed from 0 to 7.",
+        ]
+
+    def test_stepping_over_a_call_stays_in_the_same_frame(self) -> None:
+        """A step over runs the whole call and keeps the plain "changed from" sentence."""
+        said = _line_sentences(TWO_FUNCTION, into=False, presses=2)
+        assert said == [
+            "Line 5 ran 15 instructions. x changed from 0 to 5.",
+            "Line 6 ran 37 instructions. y changed from 0 to 7.",
+        ]

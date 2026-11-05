@@ -276,7 +276,7 @@ HAPPENED: dict[str, list[str | None]] = {
         "Ran 21 instructions to reach line 3.",
         "Ran 35 instructions to reach line 3.",
         "Ran 118 instructions to reach line 4.",
-        "Line 4 ran 6 instructions.",
+        "Line 4 ran 6 instructions and came back to the copy of fact that called it, where n is 2.",
         "Ran 659 instructions to reach line 9.",
     ],
     "why-the-clock-ticks": [
