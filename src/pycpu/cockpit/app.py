@@ -34,6 +34,7 @@ from pycpu.cockpit.session import (
     Cockpit,
     CockpitBusy,
     CockpitRefusal,
+    Depth,
 )
 from pycpu.computer import StepSize
 from pycpu.memory import RAM_ADDRESS_BITS
@@ -130,9 +131,21 @@ def _size(value: object) -> StepSize | LineSize | None:
             return None
 
 
-def _step_request(request: HttpRequest) -> tuple[StepSize | LineSize, int]:
-    """Read a `POST /api/step` body as a step size (or a line size) and a count, or raise a 400."""
+def _step_request(request: HttpRequest) -> tuple[StepSize | LineSize | Depth, int]:
+    """Read a `POST /api/step` body as a depth, or a step size (or line size) and a count.
+
+    A body has `depth` or `size`, never both; a `depth` takes no count.
+    """
     body = _object(request, "a size")
+    if "depth" in body:
+        if "size" in body:
+            raise HTTPError(BAD_REQUEST, "give a depth or a size, not both")
+        depths = ", ".join(f'"{d}"' for d in Depth)
+        if body["depth"] not in tuple(Depth):
+            raise HTTPError(BAD_REQUEST, f"depth must be one of {depths}")
+        if body.get("count", 1) != 1:
+            raise HTTPError(BAD_REQUEST, "count is only for gate steps")
+        return Depth(body["depth"]), 1
     size = _size(body.get("size"))
     if size is None:
         sizes = ", ".join(f'"{s}"' for s in (*StepSize, *LINE_SIZES))
@@ -143,9 +156,11 @@ def _step_request(request: HttpRequest) -> tuple[StepSize | LineSize, int]:
     return size, count
 
 
-def _step(cockpit: Cockpit, size: StepSize | LineSize, count: int) -> None:
-    """Make one step request's move: a gate, beat or instruction step, or a line step."""
-    if isinstance(size, StepSize):
+def _step(cockpit: Cockpit, size: StepSize | LineSize | Depth, count: int) -> None:
+    """Make one step request's move: a depth's step, a gate, beat or instruction, or a line."""
+    if isinstance(size, Depth):
+        cockpit.step_at(size)
+    elif isinstance(size, StepSize):
         cockpit.step(size, count)
     else:
         cockpit.step_line(into=LINE_SIZES[size])

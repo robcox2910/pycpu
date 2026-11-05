@@ -226,7 +226,8 @@ in simulators, before a chip is ever made.
 
 ## What's Next
 
-That is the whole climb, from one NAND gate to a Pebble program you can pause and look
+The Cockpit's one Step button follows how closely you look: read [The Magnifying Glass](the-magnifying-glass.md)
+for the four depths. This page was the whole climb, from one NAND gate to a Pebble program you can pause and look
 inside. Go back to [What Is a Computer, Really?](../index.md) to see the whole ladder
 again, or open the Cockpit yourself with `uv run python -m pycpu`. It opens with the
 `tour` example loaded, the program that uses every piece of Pebble PyCPU can run

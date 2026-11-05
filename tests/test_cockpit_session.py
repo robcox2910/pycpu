@@ -132,16 +132,15 @@ class TestBusyAndLoads:
         cockpit.load_pebble(COUNTDOWN)
         assert cockpit.translated is not None
 
-    def test_loads_set_before_and_clear_notes(self) -> None:
-        """A load records the state it replaced and clears the note and last gate."""
+    def test_loads_mark_nothing_changed_and_clear_notes(self) -> None:
+        """After a load `before` is the loaded state; the note and last gate are cleared."""
         cockpit = Cockpit(PEBBLE_BITS)
         for load in (cockpit.load_assembly, cockpit.load_pebble):
             source = "halt" if load == cockpit.load_assembly else COUNTDOWN
             cockpit.step(StepSize.GATE)
             cockpit.note = "old"
-            old = cockpit.computer.state()
             load(source)
-            assert cockpit.before == old
+            assert cockpit.before == cockpit.computer.state()
             assert cockpit.note is None
             assert cockpit.last_gate is None
 

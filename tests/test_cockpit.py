@@ -845,8 +845,8 @@ class TestChangedMarks:
         session.rewind()
         assert machine_picture(session)["changed"] == NO_CHANGE
 
-    def test_loading_compares_with_the_old_machine_and_clears_the_notes(self) -> None:
-        """A load part-way through an instruction forgets the gate step and the note."""
+    def test_loading_marks_nothing_changed_and_clears_the_notes(self) -> None:
+        """A load part-way through an instruction forgets the gate step and note, and marks nothing."""
         session = _paused("li r1, 5\nhalt\n")
         session.step(StepSize.INSTRUCTION)
         session.step(StepSize.GATE, SOME_GATE_STEPS)
@@ -856,7 +856,7 @@ class TestChangedMarks:
         assert picture["last_gate"] is None
         assert picture["note"] is None
         changed = cast("dict[str, Any]", picture["changed"])
-        assert changed["registers"] == [1]  # the old machine had r1 = 5, the new one has 0
+        assert changed["registers"] == []  # a load marks nothing changed
         listing_rows = cast("list[dict[str, Any]]", listing(session)["rows"])
         assert [row["text"] for row in listing_rows] == ["li r2, 9", "halt"]
 

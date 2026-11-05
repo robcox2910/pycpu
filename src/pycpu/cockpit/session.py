@@ -10,6 +10,7 @@ and the picture module only reads.
 """
 
 from dataclasses import dataclass
+from enum import StrEnum
 
 from pycpu.assembler import AssemblyError, assemble
 from pycpu.computer import Computer, StepSize
@@ -47,6 +48,10 @@ NOT_PLAYING_MESSAGE = "the computer is not playing: press play first"
 MAIN_CLOCK = "clk"  # the CPU's main clock wire, named plainly in notes
 NO_GATE_ENDING = "so there is no gate to show."  # the page looks for these words
 LIMIT_REASON = "the line may be stuck in a loop, or a call it makes is very long"
+NO_LINES_NOTE = (
+    "This program is machine code, so it has no Pebble lines to step. "
+    "Look closer to step an instruction."
+)
 END_NOTE = f"That step finished the instruction, not a gate, {NO_GATE_ENDING}"
 
 
@@ -65,6 +70,23 @@ class CockpitRefusal(Exception):  # noqa: N818
 
 class CockpitBusy(CockpitRefusal):
     """Say that the computer is playing, so only pause or a load is allowed."""
+
+
+class Depth(StrEnum):
+    """How closely the glass looks, and so how big one press of Step is.
+
+    Attributes:
+        LINE: One line of Pebble.
+        INSTRUCTION: One machine instruction.
+        PART: One clock beat of the CPU part that does the instruction's work.
+        GATE: One NAND gate.
+
+    """
+
+    LINE = "line"
+    INSTRUCTION = "instruction"
+    PART = "part"
+    GATE = "gate"
 
 
 @dataclass(frozen=True)
@@ -138,11 +160,11 @@ class Cockpit:
         self.last_gate = None
 
     def start_with_pebble(self, source: str) -> None:
-        """Load a Pebble program as the Cockpit's starting program, with nothing marked changed.
+        """Load a Pebble program as the Cockpit's starting program.
 
         This is for a Cockpit that has just been built: the program is loaded as
-        `load_pebble` would, and then the state before it is forgotten, because a
-        visitor never saw the demo program it replaced.
+        `load_pebble` would (which marks nothing changed), and `before` is set again to
+        be sure, because a visitor never saw the demo program it replaced.
 
         Raises:
             CockpitRefusal: If the program does not fit this Cockpit's memory.
@@ -211,9 +233,9 @@ class Cockpit:
         except AssemblyError as error:
             raise CockpitRefusal(str(error)) from None
         self.stop_playing()
-        self._begin()
         self.computer.load_program(assembled)
         self.computer.pause()
+        self._mark()  # a load marks nothing changed: `before` is the loaded state
         self.translated = None
         self.assembly = source
         self.program = assembled
@@ -249,9 +271,9 @@ class Cockpit:
             )
             raise CockpitRefusal(msg)
         self.stop_playing()
-        self._begin()
         self.computer.load_program(translated.program)
         self.computer.pause()
+        self._mark()  # a load marks nothing changed: `before` is the loaded state
         self.translated = translated
         self.assembly = translated.assembly
         self.program = translated.program
@@ -285,6 +307,36 @@ class Cockpit:
         last = self.last_gate
         if size == StepSize.GATE and last is not None and last.kind != "gate":
             self.note = _no_gate_note(last)
+
+    def step_at(self, depth: Depth) -> None:
+        """Press Step at `depth`: one line, one instruction, one beat or one gate.
+
+        Each depth is one of the older moves: `step_line(into=False)` for a line,
+        `step` with `StepSize.INSTRUCTION`, `CYCLE` or `GATE` for the others. A depth
+        that cannot move does not raise: the machine stays as it is and `note` says
+        why, in plain words. That is a halted machine at any depth
+        (`FINISHED_NOTE`), or a line step on assembly (`NO_LINES_NOTE`). A step
+        started part-way through a smaller one finishes that one first.
+
+        Raises:
+            CockpitBusy: While playing.
+
+        """
+        self._begin()
+        if self.computer.state().halted:
+            self.note = FINISHED_NOTE
+            return
+        match depth:
+            case Depth.LINE if self.translated is None:
+                self.note = NO_LINES_NOTE
+            case Depth.LINE:
+                self.step_line(into=False)
+            case Depth.INSTRUCTION:
+                self.step(StepSize.INSTRUCTION)
+            case Depth.PART:
+                self.step(StepSize.CYCLE)
+            case Depth.GATE:
+                self.step(StepSize.GATE)
 
     def rewind(self) -> None:
         """Go back to the start of the current instruction."""

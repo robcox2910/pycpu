@@ -70,6 +70,7 @@ KEY_IDEAS: dict[str, list[str]] = {
     "concepts/stepping-a-pebble-line.md": ["line", "step over", "step into"],
     "concepts/watching-it-run.md": ["live", "event", "pause"],
     "concepts/a-tour-of-the-cockpit.md": ["tour", "pebble line", "gate"],
+    "concepts/the-magnifying-glass.md": ["depth", "magnifying glass", "step"],
 }
 
 

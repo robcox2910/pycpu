@@ -40,6 +40,17 @@ _PART_FOR_OPCODE = {
     Opcode.HALT: "cpu.halt",
 }
 
+# What the page calls each part in its Step button, for every part above and the whole CPU.
+PART_NAMES = {
+    "cpu.alu": "ALU",
+    "cpu.write_back": "write-back",
+    "cpu.address_mux": "memory address",
+    "cpu.next_pc": "next-instruction",
+    "cpu.next_sp": "stack pointer",
+    "cpu.halt": "halt",
+    "cpu": "CPU",
+}
+
 
 def _cell(state: MachineState, address: int) -> dict[str, object]:
     """Describe one word of memory as its address, its number and its assembly text."""
@@ -265,7 +276,7 @@ def machine_picture(cockpit: Cockpit) -> dict[str, object]:
     a program's own `halt 1` to `halt 3` shares those codes. `pebble` is the
     `pebble_picture` when the program came from Pebble, and None for assembly.
     `variables` is the `variables_picture` of the current instruction (None while
-    playing). `program` is the session's load count, so the page can tell whether its
+    playing). `steps` is the label of each Step depth, the part's name taken from `PART_NAMES`. `program` is the session's load count, so the page can tell whether its
     listing is of the program on the machine.
 
     Args:
@@ -295,6 +306,7 @@ def machine_picture(cockpit: Cockpit) -> dict[str, object]:
     pebble = None
     if translated is not None:
         pebble = pebble_picture(computer, translated, state=state, start_pc=start_pc)
+    instruction_part = "cpu" if word is None else part_for_instruction(word)
     return {
         "paused": computer.paused,
         "running": playing,
@@ -322,6 +334,12 @@ def machine_picture(cockpit: Cockpit) -> dict[str, object]:
             "pc": "cpu.pc",
             "sp": "cpu.sp",
             "flags": "cpu.flags",
-            "instruction": "cpu" if word is None else part_for_instruction(word),
+            "instruction": instruction_part,
+        },
+        "steps": {
+            "line": "Step one line \u25b8",
+            "instruction": "Step one instruction \u25b8",
+            "part": f"Step one {PART_NAMES[instruction_part]} beat \u25b8",
+            "gate": "Step one gate \u25b8",
         },
     }
