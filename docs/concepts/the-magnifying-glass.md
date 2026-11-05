@@ -187,7 +187,6 @@ and "step one instruction" are the same idea at different depths.
 
 ## What's Next
 
-To see the whole climb in one go, go back to
-[A Tour of the Cockpit](a-tour-of-the-cockpit.md), which follows one line from Pebble
-down to a single gate. A later page, What Just Happened, will explain the sentence the
-page shows after each step.
+Every Step, at every depth, ends with one plain sentence saying what the machine just
+did. Read [What Just Happened](what-just-happened.md) to see how that sentence is
+written from the real numbers.

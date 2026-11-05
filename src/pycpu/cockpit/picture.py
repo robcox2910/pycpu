@@ -277,8 +277,9 @@ def machine_picture(cockpit: Cockpit) -> dict[str, object]:
     `pebble_picture` when the program came from Pebble, and None for assembly.
     `variables` is the `variables_picture` of the current instruction (None while
     playing). `steps` is the label of each Step depth, with the part's name taken from
-    `PART_NAMES`. `program` is the session's load count, so the page can tell whether
-    its listing is of the program on the machine.
+    `PART_NAMES`. `happened` is the "What just happened" sentence for the last move
+    (None before any move and after a load). `program` is the session's load count, so
+    the page can tell whether its listing is of the program on the machine.
 
     Args:
         cockpit: The session to describe.
@@ -329,6 +330,7 @@ def machine_picture(cockpit: Cockpit) -> dict[str, object]:
         "variables": None if playing else variables_picture(translated, start, state),
         "last_gate": None if playing else _last_gate(cockpit),
         "note": cockpit.note,
+        "happened": cockpit.happened,
         "program": cockpit.loads,
         "parts": {
             "registers": [f"cpu.registers.r{i}" for i in range(len(state.registers))],

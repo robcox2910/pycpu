@@ -10,14 +10,52 @@ and the picture module only reads.
 """
 
 from dataclasses import dataclass
-from enum import StrEnum
 
 from pycpu.assembler import AssemblyError, assemble
+from pycpu.cockpit.explain import (
+    END_NOTE,
+    FINISHED_NOTE,
+    MAIN_CLOCK,
+    NO_GATE_ENDING,
+    Depth,
+    count_instructions,
+    describe_gate_steps,
+    describe_move,
+    describe_rewind,
+    describe_run,
+    no_gate_note,
+)
 from pycpu.computer import Computer, StepSize
 from pycpu.cpu import MicroStep
 from pycpu.memory import RAM_ADDRESS_BITS
 from pycpu.state import MachineState
 from pycpu.translator import FRAME_POINTER, TranslatedProgram, translate
+
+# Depth and the notes live in explain.py, which writes every sentence; they are listed
+# here too so the moves' old imports (`from pycpu.cockpit.session import Depth`) still work.
+__all__ = [
+    "BUSY_MESSAGE",
+    "DEMO_PROGRAM",
+    "END_NOTE",
+    "FINISHED_NOTE",
+    "LIMIT_REASON",
+    "MAIN_CLOCK",
+    "MAX_GATE_STEPS",
+    "MAX_LINE_INSTRUCTIONS",
+    "MAX_PEBBLE_CHARACTERS",
+    "MAX_RUN",
+    "MAX_SPEED",
+    "NOT_PEBBLE_MESSAGE",
+    "NOT_PLAYING_MESSAGE",
+    "NO_GATE_ENDING",
+    "NO_LINES_NOTE",
+    "TICK_SECONDS",
+    "Cockpit",
+    "CockpitBusy",
+    "CockpitRefusal",
+    "Depth",
+    "LineStep",
+]
 
 MAX_RUN = 10_000  # the most instructions one press of Run may ask for
 MAX_GATE_STEPS = 100_000  # the most gate steps one request may ask for
@@ -42,26 +80,13 @@ show:
 """
 
 BUSY_MESSAGE = "the computer is running: press pause first"
-FINISHED_NOTE = "The program has finished, so there is no next line."
 NOT_PEBBLE_MESSAGE = "line steps need a Pebble program: this one is assembly"
 NOT_PLAYING_MESSAGE = "the computer is not playing: press play first"
-MAIN_CLOCK = "clk"  # the CPU's main clock wire, named plainly in notes
-NO_GATE_ENDING = "so there is no gate to show."  # the page looks for these words
 LIMIT_REASON = "the line may be stuck in a loop, or a call it makes is very long"
 NO_LINES_NOTE = (
     "This program is machine code, so it has no Pebble lines to step. "
     "Look closer to step an instruction."
 )
-END_NOTE = f"That step finished the instruction, not a gate, {NO_GATE_ENDING}"
-
-
-def _no_gate_note(micro: MicroStep) -> str:
-    """Say why a gate step whose last movement was not a gate has no gate to show."""
-    if micro.kind == "edge":
-        # The main clock is simply "the clock"; "the clk clock wire" would say it twice.
-        wire = "the clock wire" if micro.wire == MAIN_CLOCK else f"the {micro.wire} clock wire"
-        return f"That step moved {wire}, not a gate, {NO_GATE_ENDING}"
-    return END_NOTE
 
 
 class CockpitRefusal(Exception):  # noqa: N818
@@ -70,23 +95,6 @@ class CockpitRefusal(Exception):  # noqa: N818
 
 class CockpitBusy(CockpitRefusal):
     """Say that the computer is playing, so only pause or a load is allowed."""
-
-
-class Depth(StrEnum):
-    """How closely the glass looks, and so how big one press of Step is.
-
-    Attributes:
-        LINE: One line of Pebble.
-        INSTRUCTION: One machine instruction.
-        PART: One clock beat of the CPU part that does the instruction's work.
-        GATE: One NAND gate.
-
-    """
-
-    LINE = "line"
-    INSTRUCTION = "instruction"
-    PART = "part"
-    GATE = "gate"
 
 
 @dataclass(frozen=True)
@@ -103,11 +111,6 @@ class LineStep:
 
     instructions: int
     stopped: str
-
-
-def _instructions(count: int) -> str:
-    """Say `count` instructions in words, with "instruction" singular for 1."""
-    return "1 instruction" if count == 1 else f"{count:,} instructions"
 
 
 def _check_whole(name: str, value: int, largest: int) -> None:
@@ -128,6 +131,9 @@ class Cockpit:
         before: The state just before the last move, for marking what changed.
         last_gate: The micro step of the last gate step, else None.
         note: One sentence about the last move, else None.
+        happened: The "What just happened" sentence for the last move, written from
+            the real change by `explain.py`. None before any move, after a load, while
+            playing, and after a step that could not move (`note` says why).
         playing: Whether the computer is running on its own.
         loads: How many programs have been loaded, 0 for the demo it starts with. Every
             load adds one, so the page can tell which program a listing belongs to.
@@ -144,6 +150,7 @@ class Cockpit:
         self.before: MachineState = self.computer.state()
         self.last_gate: MicroStep | None = None
         self.note: str | None = None
+        self.happened: str | None = None
         self.playing = False
         self.loads = 0
 
@@ -154,9 +161,10 @@ class Cockpit:
         self._mark()
 
     def _mark(self) -> None:
-        """Remember the state before a move, and clear the last move's note and gate step."""
+        """Remember the state before a move, and clear the last move's sentences and gate step."""
         self.before = self.computer.state()
         self.note = None
+        self.happened = None
         self.last_gate = None
 
     def start_with_pebble(self, source: str) -> None:
@@ -295,17 +303,56 @@ class Cockpit:
             msg = "count is only for gate steps"
             raise CockpitRefusal(msg)
         self._begin()
+        start = self.computer.instruction_start
+        taken = finished = 0
         for _ in range(count):
             micro = self.computer.step(size)
             self.last_gate = micro
+            taken += 1
             # Only an instruction's end can leave the machine halted, so look only there.
-            if micro is not None and micro.kind == "end" and self.computer.state().halted:
-                break
+            if micro is not None and micro.kind == "end":
+                finished += 1
+                if self.computer.state().halted:
+                    break
         # A clock beat is made of clock-wire moves as well as gates, so a gate step can end
         # on one; say so, rather than leave the page with nothing to show and no reason.
         last = self.last_gate
         if size == StepSize.GATE and last is not None and last.kind != "gate":
-            self.note = _no_gate_note(last)
+            self.note = no_gate_note(last)
+        if not self.before.halted:
+            self._describe_step(size, start, finished, taken)
+
+    def _describe_step(
+        self, size: StepSize, start: MachineState, finished: int, taken: int
+    ) -> None:
+        """Write `happened` for a gate, beat or instruction step that has just moved.
+
+        Args:
+            size: The step size that was taken.
+            start: `instruction_start` before the step, so the sentence covers the
+                whole instruction even when the step began part-way through it.
+            finished: How many instructions the gate steps finished.
+            taken: How many gate steps were taken.
+
+        """
+        after = self.computer.state()
+        match size:
+            case StepSize.GATE:
+                last = self.last_gate
+                path = None
+                if last is not None and last.kind == "gate":
+                    path = self.computer.gate.simulator.circuit.scope_of(last.gate)
+                sentence = describe_move(
+                    Depth.GATE, start, after, last, self.translated, finished, gate_path=path
+                )
+                self.happened = sentence if taken == 1 else describe_gate_steps(taken, sentence)
+            case StepSize.CYCLE:
+                ran = int(self.computer.gate.at_boundary)  # a beat that ends an instruction
+                self.happened = describe_move(Depth.PART, start, after, None, self.translated, ran)
+            case StepSize.INSTRUCTION:
+                self.happened = describe_move(
+                    Depth.INSTRUCTION, start, after, None, self.translated, 1
+                )
 
     def step_at(self, depth: Depth) -> None:
         """Press Step at `depth`: one line, one instruction, one beat or one gate.
@@ -340,7 +387,9 @@ class Cockpit:
     def rewind(self) -> None:
         """Go back to the start of the current instruction."""
         self._begin()
+        moved = not self.computer.gate.at_boundary
         self.computer.rewind()
+        self.happened = describe_rewind(moved=moved)
 
     def run(self, instructions: int) -> int:
         """Resume, run up to `instructions` instructions on the fast engine, and pause again.
@@ -355,11 +404,15 @@ class Cockpit:
         """
         _check_whole("instructions", instructions, MAX_RUN)
         self._begin()
+        # `resume` finishes a part-done instruction in the gates; it ran too, so say so.
+        finishing = int(not self.computer.gate.at_boundary)
         self.computer.resume()
         try:
-            return self.computer.run(instructions)
+            ran = self.computer.run(instructions)
         finally:
             self.computer.pause()
+        self.happened = describe_run(ran + finishing, self.computer.state())
+        return ran
 
     def step_line(self, *, into: bool) -> LineStep:
         """Run to the next Pebble line on the fast engine, then pause there in the gates.
@@ -404,6 +457,7 @@ class Cockpit:
         frames = translated.frames
         start_line, start_fp = translated.line_at(start.pc), start.registers[FRAME_POINTER]
         settled = start.pc < len(frames) and frames[start.pc] is not None
+        finishing = int(not self.computer.gate.at_boundary)  # `resume` finishes it in the gates
         self.computer.resume()
         fast = self.computer.fast
         ran, stopped, line = 0, "limit", None
@@ -428,16 +482,19 @@ class Cockpit:
         finally:
             self.computer.pause()
         self.note = _line_note(ran, stopped, line)
+        self.happened = describe_move(
+            Depth.LINE, start, self.computer.state(), None, translated, ran + finishing
+        )
         return LineStep(ran, stopped)
 
 
 def _line_note(ran: int, stopped: str, line: int | None) -> str:
     """Say in one sentence why a line step that moved stopped where it did."""
     if stopped == "line":
-        return f"Ran {_instructions(ran)} to reach line {line}."
+        return f"Ran {count_instructions(ran)} to reach line {line}."
     if stopped == "halted":
-        return f"Ran {_instructions(ran)}, and then the program stopped."
+        return f"Ran {count_instructions(ran)}, and then the program stopped."
     return (
-        f"Ran {_instructions(ran)} without reaching another line, so the step gave up "
+        f"Ran {count_instructions(ran)} without reaching another line, so the step gave up "
         f"there; {LIMIT_REASON}."
     )

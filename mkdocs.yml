@@ -82,5 +82,6 @@ nav:
       - Watching It Run: concepts/watching-it-run.md
       - A Tour of the Cockpit: concepts/a-tour-of-the-cockpit.md
       - The Magnifying Glass: concepts/the-magnifying-glass.md
+      - What Just Happened: concepts/what-just-happened.md
   - Reference:
       - Instruction Set: reference/instruction-set.md

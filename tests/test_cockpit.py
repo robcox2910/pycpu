@@ -282,7 +282,10 @@ class TestStepping:
         one_by_one, at_once = Cockpit(), Cockpit()
         for _ in range(HUNDRED):
             one_by_one.step("gate")
-        assert at_once.step("gate", HUNDRED) == one_by_one.machine()
+        machine, single = at_once.step("gate", HUNDRED), one_by_one.machine()
+        # Only the sentence differs: the shortcut says how many gate steps it took.
+        assert machine["happened"] == f"Took {HUNDRED} gate steps. {single['happened']}"
+        assert {**machine, "happened": None} == {**single, "happened": None}
         assert at_once.wires("cpu") == one_by_one.wires("cpu")
 
     def test_gate_steps_stop_when_the_machine_halts(self) -> None:
@@ -781,8 +784,12 @@ ONE_OF_EACH = {
 
 
 def _without_changed(picture: dict[str, Any]) -> dict[str, Any]:
-    """Return a picture minus its `changed` marks, which depend on the move just made."""
-    return {key: value for key, value in picture.items() if key != "changed"}
+    """Return a picture minus its `changed` marks and `happened` sentence.
+
+    Both describe the move just made, not the machine, so two equal machines reached
+    by different moves differ only there.
+    """
+    return {key: value for key, value in picture.items() if key not in {"changed", "happened"}}
 
 
 def _paused(source: str, bits: int = SMALL) -> Session:
