@@ -28,13 +28,15 @@ SLOW_SPEED = 1
 REGISTERS = 8
 FN_COUNT = 8
 SOME_BEATS = 12
-# The CPU's size measured before any tap was recorded (6 address bits). Taps only name
-# wires the CPU already has, so these numbers must never move because of them.
+# The CPU's size before any tap was recorded: measured on base commit cb4670a with
+# `GateMachine(6).circuit.gate_count` and `.wire_count`. Taps only name wires the CPU
+# already has, so these numbers must never move because of them.
 GATES_AT_6_BITS = 15525
 WIRES_AT_6_BITS = 15529
 PINNED_BITS = 6
 ALU_INPUTS = ("a", "b")
 ALU_OUTPUTS = ("result", "flags")
+HALT_CODE = 5
 COUNTDOWN = "let n = 2\nwhile n > 0 {\n    n = n - 1\n}\n"
 
 
@@ -128,6 +130,29 @@ class TestAluTapsAreTheRealAnswer:
         assert seen["result"] == after.registers[rd]
         flags = Flags(*((seen["flags"] >> bit) & 1 for bit in range(len(Flags._fields))))
         assert flags == after.flags
+
+
+class TestHaltTaps:
+    """The halt part's outputs are what it sends this beat, before any register takes it."""
+
+    def test_on_the_halt_beat_the_halt_is_being_sent(self) -> None:
+        """After fetching a `halt`, the part sends halt_now 1 and the program's code."""
+        machine = _machine()
+        machine.load_state(program_state([encode(Opcode.HALT, imm=HALT_CODE)], machine.words))
+        machine.step_cycle()
+        sim, taps = machine.simulator, machine.taps["cpu.halt"]
+        seen = {name: _read_bits(sim, bus) for name, bus in taps.items()}
+        assert machine.state().halted is False  # the register has not taken it in yet
+        assert seen == {
+            "bad_address": 0,
+            "halt_instruction": 1,
+            "imm8": HALT_CODE,
+            "halt_now": 1,
+            "code": HALT_CODE,
+        }
+        machine.step_cycle()
+        assert machine.state().halted is True
+        assert machine.state().halt_code == HALT_CODE
 
 
 class TestPartPicture:

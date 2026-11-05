@@ -344,7 +344,8 @@ class GateMachine:
             uses_memory = or_many(c, [and_(c, w.memory_op, not_(c, port_store)), w.pushes, w.pops])
             needs_ram = or_(c, w.fetch, uses_memory)
             bad = and_(c, w.outside, needs_ram)
-            stop = or_(c, bad, and_(c, w.execute, w.line[Opcode.HALT]))
+            halt_instruction = and_(c, w.execute, w.line[Opcode.HALT])
+            stop = or_(c, bad, halt_instruction)
             w.go = and_(c, w.running, not_(c, stop))  # nothing else may load after a stop
             w.act = and_(c, w.go, w.execute)
             halt_load = and_(c, w.running, stop)
@@ -352,10 +353,12 @@ class GateMachine:
             fault_code = _constant(c, Fault.BAD_ADDRESS, HALT_CODE_BITS)
             code = mux_bus(c, bad, w.imm8, fault_code)
             self._feed(c, "halt_code", halt_load, code)
+        # The outputs are what the halt logic sends this beat, not what the `halted` and
+        # `halt_code` registers hold: those only take it in when the clock rises.
         self._tap(
             "cpu.halt",
-            {"stop": (halt_load,), "code": code},
-            {"halted": self._halted.q, "halt_code": self._halt_code.q},
+            {"bad_address": (bad,), "halt_instruction": (halt_instruction,), "imm8": w.imm8},
+            {"halt_now": (halt_load,), "code": code},
         )
 
     def _build_next_pc(self, c: Circuit, w: _Wires) -> None:
@@ -429,7 +432,14 @@ class GateMachine:
         rd = _field(self._ir.q, RD_SHIFT, FIELD_BITS)
         self._tap(
             "cpu.write_back",
-            {"alu": w.out.result, "memory": self._ram.out, "rd": rd},
+            {
+                "alu": w.out.result,
+                "memory": self._ram.out,
+                "imm8": w.imm8,
+                "register_a": w.bank.a,
+                "sp": self._sp.q,
+                "destination": rd,
+            },
             {"value": value, "write": (write,)},
         )
         self._tap(

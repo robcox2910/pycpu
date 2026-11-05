@@ -185,6 +185,9 @@ the part and what comes **out**, like holding a meter to the cables of a machine
 factory. The meter clips onto cables that are already there. It never adds a cable and
 never changes what flows down one.
 
+Each cable here is a **bus**: a row of wires that carry one number together, lowest bit
+first (see [Bits and Binary](bits-and-binary.md)).
+
 | At the factory | In the Cockpit |
 |----------------|----------------|
 | A cable going into the machine | An input bus, such as the ALU's `a` and `b` |
@@ -234,7 +237,8 @@ run(look_at_the_alu())
 
 The ALU is being asked to work out `2 - 1`, and its `result` wires already say 1. When
 the execute beat runs, that 1 is what goes into `r1`. `flags` is the ALU's four lamps
-read as one number: the zero lamp counts 1, negative 2, carry 4 and overflow 8. Only
+read as one number: the zero lamp counts 1, negative 2, carry 4 and overflow 8. Each lamp
+is worth double the one before, like the bits of any number, so 4 is the third bit. Only
 the carry lamp is lit, so it reads 4. (A subtraction that does not need to borrow
 lights carry, see [The ALU](the-alu.md).)
 
