@@ -1,0 +1,39 @@
+title = "A line of Pebble is many tiny instructions"
+example = "countdown"
+see_also = "stepping-a-pebble-line"
+
+[[steps]]
+say = "This is the countdown program, and the marked line is the one that runs next."
+do = "start"
+look = "line"
+show = "pebble.line"
+
+[[steps]]
+say = "We ran the program to line 5, n = n - 1, which takes 1 away from n."
+do = "run to line 5"
+look = "line"
+show = "pebble.line"
+
+[[steps]]
+say = "Look closer: the CPU runs a line as tiny instructions, and this first one only copied n, which is 5, into r1."
+do = "step instruction"
+look = "instruction"
+show = "instruction"
+
+[[steps]]
+say = "The next tiny instruction put that 5 on the stack, a pile where the CPU keeps numbers for later."
+do = "step instruction"
+look = "instruction"
+show = "stack"
+
+[[steps]]
+say = "Stepping the rest of the line ran 8 more tiny instructions, so n = n - 1 is 10 instructions in all, and n is now 4."
+do = "step line"
+look = "line"
+show = "variables"
+
+[try]
+task = "Press Step until n is 0."
+look = "line"
+check = "variable n == 0"
+solution = ["step line", "step line", "step line", "step line", "step line", "step line", "step line", "step line", "step line", "step line", "step line", "step line"]

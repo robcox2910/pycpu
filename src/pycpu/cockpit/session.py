@@ -23,7 +23,20 @@ from pycpu.cockpit.explain import (
     describe_move,
     describe_rewind,
     describe_run,
+    describe_run_to_line,
     no_gate_note,
+)
+from pycpu.cockpit.walks import (
+    Action,
+    RunInstructions,
+    RunToLine,
+    Start,
+    StepAt,
+    StepGateUntil,
+    Walk,
+    WalkError,
+    passes,
+    walk_named,
 )
 from pycpu.computer import Computer, StepSize
 from pycpu.cpu import MicroStep
@@ -55,6 +68,8 @@ __all__ = [
     "CockpitRefusal",
     "Depth",
     "LineStep",
+    "NoSuchWalk",
+    "WalkProgress",
 ]
 
 MAX_RUN = 10_000  # the most instructions one press of Run may ask for
@@ -97,6 +112,31 @@ class CockpitBusy(CockpitRefusal):
     """Say that the computer is playing, so only pause or a load is allowed."""
 
 
+class NoSuchWalk(CockpitRefusal):
+    """Say that there is no walk with the name asked for (the web app answers 404)."""
+
+
+@dataclass
+class WalkProgress:
+    """Where the learner is in the walk they are on.
+
+    Attributes:
+        name: The walk's name, such as `"many-instructions"`.
+        step: The step the machine was replayed to; the walk's step count means
+            the "Now you try" stage.
+        off_script: True once the learner made a move of their own during the
+            walk's steps, or loaded a program, so the page offers "Back to the walk".
+        done: True once the "Now you try" check has passed. It is latched: it stays
+            true however far the learner steps on afterwards.
+
+    """
+
+    name: str
+    step: int
+    off_script: bool = False
+    done: bool = False
+
+
 @dataclass(frozen=True)
 class LineStep:
     """What one Pebble line step did: how far it ran and why it stopped.
@@ -137,6 +177,7 @@ class Cockpit:
         playing: Whether the computer is running on its own.
         loads: How many programs have been loaded, 0 for the demo it starts with. Every
             load adds one, so the page can tell which program a listing belongs to.
+        walk: The guided walk the learner is on, or None.
 
     """
 
@@ -153,12 +194,43 @@ class Cockpit:
         self.happened: str | None = None
         self.playing = False
         self.loads = 0
+        self.walk: WalkProgress | None = None
+        self._replaying = False  # True while `go_to_walk` makes the walk's own moves
 
     def _begin(self) -> None:
         """Start a move: refuse it while playing, then set `before` and clear the notes."""
         if self.playing:
             raise CockpitBusy(BUSY_MESSAGE)
+        self._off_script(load=False)
         self._mark()
+
+    def _off_script(self, *, load: bool) -> None:
+        """Mark the walk off script when the learner moves by themselves during its steps.
+
+        At the "Now you try" stage the learner's own moves are the task, so only a load
+        takes them off script there. The walk's own replayed moves never do.
+        """
+        walk = self.walk
+        if walk is None or self._replaying:
+            return
+        current = walk_named(walk.name)
+        if load or current is None or walk.step < len(current.steps):
+            walk.off_script = True
+
+    def _judge(self) -> None:
+        """After a move at the "Now you try" stage, test the walk's check; once true, keep it.
+
+        Nothing is judged while the walk replays itself, or once the learner is off
+        script (their own program could pass a check by chance).
+        """
+        walk = self.walk
+        if walk is None or self._replaying or walk.off_script or walk.done:
+            return
+        current = walk_named(walk.name)
+        if current is None or walk.step < len(current.steps):
+            return
+        start = self.computer.instruction_start
+        walk.done = passes(current.trial.check, self.computer.state(), start, self.translated)
 
     def _mark(self) -> None:
         """Remember the state before a move, and clear the last move's sentences and gate step."""
@@ -215,6 +287,7 @@ class Cockpit:
             raise CockpitRefusal(NOT_PLAYING_MESSAGE)
         self._mark()
         self.computer.run(instructions)
+        self._judge()
         return not self.computer.state().halted
 
     def stop_playing(self) -> None:
@@ -240,6 +313,7 @@ class Cockpit:
         except AssemblyError as error:
             raise CockpitRefusal(str(error)) from None
         self.stop_playing()
+        self._off_script(load=True)
         self.computer.load_program(assembled)
         self.computer.pause()
         self._mark()  # a load marks nothing changed: `before` is the loaded state
@@ -278,6 +352,7 @@ class Cockpit:
             )
             raise CockpitRefusal(msg)
         self.stop_playing()
+        self._off_script(load=True)
         self.computer.load_program(translated.program)
         self.computer.pause()
         self._mark()  # a load marks nothing changed: `before` is the loaded state
@@ -303,8 +378,39 @@ class Cockpit:
             msg = "count is only for gate steps"
             raise CockpitRefusal(msg)
         self._begin()
+        self._steps(size, count, None)
+
+    def step_gate_until(self, prefix: str) -> bool:
+        """Take gate steps until a gate inside the part `prefix` works, like a walk does.
+
+        A gate counts when its scope path is `prefix` or starts with `prefix` and a
+        dot, so `"cpu.alu"` means any gate in the ALU. The steps stop early if the
+        machine halts, and give up after `MAX_GATE_STEPS`.
+
+        Returns:
+            True if a gate inside `prefix` worked, False if the steps stopped first.
+
+        Raises:
+            CockpitBusy: While playing.
+
+        """
+        self._begin()
+        if self.before.halted:
+            self.note = FINISHED_NOTE
+            return False
+        return self._steps(StepSize.GATE, MAX_GATE_STEPS, prefix)
+
+    def _steps(self, size: StepSize, count: int, until: str | None) -> bool:
+        """Take up to `count` steps of `size`, stopping at a halt or at a gate inside `until`.
+
+        Returns:
+            True if a gate step stopped at a gate inside `until`.
+
+        """
         start = self.computer.instruction_start
+        circuit = self.computer.gate.simulator.circuit
         taken = finished = 0
+        found = False
         for _ in range(count):
             micro = self.computer.step(size)
             self.last_gate = micro
@@ -314,6 +420,11 @@ class Cockpit:
                 finished += 1
                 if self.computer.state().halted:
                     break
+            elif until is not None and micro is not None and micro.kind == "gate":
+                path = circuit.scope_of(micro.gate)
+                if path == until or path.startswith(f"{until}."):
+                    found = True
+                    break
         # A clock beat is made of clock-wire moves as well as gates, so a gate step can end
         # on one; say so, rather than leave the page with nothing to show and no reason.
         last = self.last_gate
@@ -321,6 +432,8 @@ class Cockpit:
             self.note = no_gate_note(last)
         if not self.before.halted:
             self._describe_step(size, start, finished, taken)
+        self._judge()
+        return found
 
     def _describe_step(
         self, size: StepSize, start: MachineState, finished: int, taken: int
@@ -384,12 +497,91 @@ class Cockpit:
             case Depth.GATE:
                 self.step(StepSize.GATE)
 
+    def go_to_walk(self, name: str, step: int) -> None:
+        """Open the walk called `name` at `step`, by replaying it on the real machine.
+
+        Play stops first. The walk's program is loaded (its first step is always
+        `start`), and then every step's move up to and including `steps[step]` is
+        made again, for real, from that start. Replaying from the start each time
+        makes it exact: Next, Back and "Back to the walk" all land on the same
+        moment, whatever the learner did in between. `step == len(steps)` opens the
+        "Now you try" stage, with the check judged straight away (a fresh try never
+        starts done).
+
+        Raises:
+            NoSuchWalk: If there is no walk called `name`.
+            CockpitRefusal: If `step` is not from 0 to the walk's number of steps.
+            WalkError: If a move of the walk does not reach where it should (a test
+                failure for the walk file, never something a learner can cause).
+
+        """
+        walk = walk_named(name)
+        if walk is None:
+            msg = f"There is no walk called {name}."
+            raise NoSuchWalk(msg)
+        count = len(walk.steps)
+        if not 0 <= step <= count:
+            msg = f"step must be a whole number from 0 to {count}"
+            raise CockpitRefusal(msg)
+        self.stop_playing()
+        self.walk = WalkProgress(name, step)
+        self._replaying = True
+        try:
+            for walk_step in walk.steps[: step + 1]:
+                self._act(walk, walk_step.action)
+        except BaseException:
+            self.walk = None
+            raise
+        finally:
+            self._replaying = False
+        self._judge()
+
+    def act(self, action: Action) -> None:
+        """Make one walk action as a move of the learner's own, on the walk they are on.
+
+        This is how a test plays a walk's "Now you try" solution: each action is the
+        same move a button makes, so the check is judged after it as usual.
+
+        Raises:
+            CockpitRefusal: If no walk is open.
+            WalkError: If a fast-forward does not reach where it should.
+
+        """
+        walk = None if self.walk is None else walk_named(self.walk.name)
+        if walk is None:
+            msg = "there is no walk open to make a walk move on"
+            raise CockpitRefusal(msg)
+        self._act(walk, action)
+
+    def leave_walk(self) -> None:
+        """Leave the walk: the machine stays where it is, with no walk on top of it."""
+        self.walk = None
+
+    def _act(self, walk: Walk, action: Action) -> None:
+        """Make one action of `walk` on the real machine; a fast-forward must arrive."""
+        match action:
+            case Start():
+                self.load_pebble(walk.source)
+            case StepAt(depth):
+                self.step_at(depth)
+            case RunInstructions(count):
+                self.run(count)
+            case RunToLine(line):
+                if self.run_to_line(line).stopped != "line":
+                    msg = f"{walk.name}: run to line {line} never reached line {line}"
+                    raise WalkError(msg)
+            case StepGateUntil(prefix):
+                if not self.step_gate_until(prefix):
+                    msg = f"{walk.name}: step gate until {prefix} never reached a gate in it"
+                    raise WalkError(msg)
+
     def rewind(self) -> None:
         """Go back to the start of the current instruction."""
         self._begin()
         moved = not self.computer.gate.at_boundary
         self.computer.rewind()
         self.happened = describe_rewind(moved=moved)
+        self._judge()
 
     def run(self, instructions: int) -> int:
         """Resume, run up to `instructions` instructions on the fast engine, and pause again.
@@ -412,6 +604,7 @@ class Cockpit:
         finally:
             self.computer.pause()
         self.happened = describe_run(ran, self.computer.state(), finishing)
+        self._judge()
         return ran
 
     def step_line(self, *, into: bool) -> LineStep:
@@ -446,21 +639,77 @@ class Cockpit:
             CockpitBusy: While playing.
 
         """
-        translated = self.translated
-        if translated is None:
-            raise CockpitRefusal(NOT_PEBBLE_MESSAGE)
-        self._begin()
+        translated = self._pebble_begin()
         if self.before.halted:
             self.note = FINISHED_NOTE
             return LineStep(0, "halted")
         start = self.computer.instruction_start
+        finishing = int(not self.computer.gate.at_boundary)  # `resume` finishes it in the gates
+        ran, stopped, line = self._run_lines(translated, into=into, target=None)
+        self.note = _line_note(ran, stopped, line)
+        self.happened = describe_move(
+            Depth.LINE, start, self.computer.state(), None, translated, ran, finishing=finishing
+        )
+        self._judge()
+        return LineStep(ran, stopped)
+
+    def run_to_line(self, line: int) -> LineStep:
+        """Run on the fast engine until Pebble line `line` is about to start, then pause.
+
+        This is a line step (into calls) that keeps going until the line it reaches
+        is `line`, so a walk can fast-forward to a moment with a real run. It stops
+        where a line step would, the first time that line is `line`; and, like a line
+        step, it stops if the program halts or after `MAX_LINE_INSTRUCTIONS`.
+
+        Returns:
+            How many instructions ran, and why it stopped (`"line"` once it is there).
+
+        Raises:
+            CockpitRefusal: If the program is assembly, which has no lines.
+            CockpitBusy: While playing.
+
+        """
+        translated = self._pebble_begin()
+        if self.before.halted:
+            self.note = FINISHED_NOTE
+            return LineStep(0, "halted")
+        finishing = int(not self.computer.gate.at_boundary)
+        ran, stopped, reached = self._run_lines(translated, into=True, target=line)
+        self.note = _line_note(ran, stopped, reached)
+        if stopped == "line":
+            self.happened = describe_run_to_line(ran, line, finishing)
+        else:
+            self.happened = describe_run(ran, self.computer.state(), finishing)
+        self._judge()
+        return LineStep(ran, stopped)
+
+    def _pebble_begin(self) -> TranslatedProgram:
+        """Start a line move: refuse it for assembly, or while playing, then mark the start."""
+        translated = self.translated
+        if translated is None:
+            raise CockpitRefusal(NOT_PEBBLE_MESSAGE)
+        self._begin()
+        return translated
+
+    def _run_lines(
+        self, translated: TranslatedProgram, *, into: bool, target: int | None
+    ) -> tuple[int, str, int | None]:
+        """Run on the fast engine to the next line (or to the line `target`), then pause.
+
+        See `step_line` for where a line step stops; with a `target` it also needs the
+        line it has reached to be `target`.
+
+        Returns:
+            How many instructions ran, why it stopped, and the line it stopped at.
+
+        """
+        start = self.computer.instruction_start
         frames = translated.frames
         start_line, start_fp = translated.line_at(start.pc), start.registers[FRAME_POINTER]
         settled = start.pc < len(frames) and frames[start.pc] is not None
-        finishing = int(not self.computer.gate.at_boundary)  # `resume` finishes it in the gates
         self.computer.resume()
         fast = self.computer.fast
-        ran, stopped, line = 0, "limit", None
+        ran, stopped, line, left = 0, "limit", None, False
         try:
             while True:
                 if fast.halted:
@@ -472,7 +721,17 @@ class Cockpit:
                 if ready and not settled:
                     start_fp, settled = fp, True  # the start's own frame, now made
                 moved = line != start_line or fp != start_fp
-                if ready and line is not None and moved and (into or fp >= start_fp):
+                # A run to a line counts as moved once it has been anywhere else, so a run
+                # to the line it starts on goes once round the loop instead of nowhere.
+                left = left or (ready and moved and target is not None)
+                wanted = target is None or line == target
+                if (
+                    ready
+                    and line is not None
+                    and (moved or left)
+                    and wanted
+                    and (into or fp >= start_fp)
+                ):
                     stopped = "line"
                     break
                 if ran == MAX_LINE_INSTRUCTIONS:
@@ -481,11 +740,7 @@ class Cockpit:
                 ran += 1
         finally:
             self.computer.pause()
-        self.note = _line_note(ran, stopped, line)
-        self.happened = describe_move(
-            Depth.LINE, start, self.computer.state(), None, translated, ran, finishing=finishing
-        )
-        return LineStep(ran, stopped)
+        return ran, stopped, line
 
 
 def _line_note(ran: int, stopped: str, line: int | None) -> str:

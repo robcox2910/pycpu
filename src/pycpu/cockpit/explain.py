@@ -108,6 +108,7 @@ STOPPED_ENDING = ", and then the program stopped."
 SCREEN_SHOWED_TEMPLATE = ' The screen showed "{text}".'
 GATE_STEPS_TEMPLATE = "Took {count:,} gate steps. {last}"
 RUN_TEMPLATE = "{ran}."
+RUN_TO_LINE_TEMPLATE = "{ran} to reach line {line}."
 NOTHING_RAN = "Nothing ran, because the program has already finished."
 REWOUND = "Went back to the start of this instruction."
 ALREADY_AT_START = "You were already at the start of this instruction, so nothing changed."
@@ -538,6 +539,23 @@ def describe_run(ran: int, after: MachineState, finishing: int = 0) -> str:
     words = _ran_words(ran, finishing)
     sentence = RUN_TEMPLATE.format(ran=words[0].upper() + words[1:])
     return sentence.removesuffix(".") + STOPPED_ENDING if after.halted else sentence
+
+
+def describe_run_to_line(ran: int, line: int, finishing: int = 0) -> str:
+    """Say how many instructions a walk's run to a line ran to reach that line.
+
+    A run that stopped short (the program halted, or it gave up) is said by
+    `describe_run` instead, because it never reached the line.
+
+    Args:
+        ran: How many instructions ran on the fast engine.
+        line: The Pebble line it reached.
+        finishing: 1 if it first finished, in the gates, an instruction that was
+            part-way through; else 0. It is said apart from `ran`.
+
+    """
+    words = _ran_words(ran, finishing)
+    return RUN_TO_LINE_TEMPLATE.format(ran=words[0].upper() + words[1:], line=line)
 
 
 def describe_rewind(*, moved: bool) -> str:

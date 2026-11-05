@@ -7,7 +7,9 @@ pilot, and the answer read back. Visitors can freeze the flight, nudge it forwar
 it (`/api/play`, `/api/pause`), load a new program (`/api/program`, or `/api/pebble`
 for one that comes with its lyric sheet), pick from the flight plans kept on board
 (`/api/examples`), read its dials (`/api/machine`) and ask what any part is carrying
-(`/api/view`), or meter a CPU part's real inputs and outputs (`/api/part`).
+(`/api/view`), or meter a CPU part's real inputs and outputs (`/api/part`). The
+guided tours are here too: `/api/walks` lists them, `/api/walk` opens one at a step,
+and `/api/walk/leave` puts the guide away.
 `/api/events` is the radio left switched on: after
 every move, and every slice of play, the new picture goes out to every open page. These
 routes only parse the request, call the session and answer; every rule lives in
@@ -36,7 +38,9 @@ from pycpu.cockpit.session import (
     CockpitBusy,
     CockpitRefusal,
     Depth,
+    NoSuchWalk,
 )
+from pycpu.cockpit.walks import example_source, load_walks
 from pycpu.computer import StepSize
 from pycpu.memory import RAM_ADDRESS_BITS
 from pycpu.translator import UnsupportedFeature
@@ -246,6 +250,12 @@ class _Live:
         self.player = spawn(self._loop(_Slicer(speed, self.tick_seconds)), name="cockpit play")
         return self.moved()
 
+    def walk(self, name: str, step: int) -> HttpResponse:
+        """Open a walk at `step` (stopping any play loop first), and publish the picture."""
+        self._cancel_player()
+        self.cockpit.go_to_walk(name, step)
+        return self.moved()
+
     def pause(self) -> HttpResponse:
         """Stop play at the next instruction boundary; if not playing, change nothing."""
         if not self.cockpit.playing:
@@ -273,9 +283,12 @@ class _Live:
 
 
 def _example_source(name: str) -> str:
-    """Read just the one example file called `name`."""
-    folder = resources.files("pycpu.cockpit").joinpath("examples")
-    return folder.joinpath(f"{name}.pebble").read_text(encoding="utf-8")
+    """Read just the one example file called `name`, which must be one of `EXAMPLE_NAMES`."""
+    source = example_source(name)
+    if source is None:  # pragma: no cover - every name in EXAMPLE_NAMES has a file
+        msg = f"no example file called {name}"
+        raise ValueError(msg)
+    return source
 
 
 def example_programs() -> list[dict[str, str]]:
@@ -321,7 +334,8 @@ def create_cockpit(
         `GET /api/events`,
         `POST /api/step`,
         `POST /api/rewind`, `POST /api/run`, `POST /api/play`, `POST /api/pause`,
-        `POST /api/program` and `POST /api/pebble`. See the Cockpit pages in the
+        `POST /api/program`, `POST /api/pebble`, `GET /api/walks`, `POST /api/walk`
+        and `POST /api/walk/leave`. See the Cockpit pages in the
         docs for each one.
 
     Raises:
@@ -337,6 +351,7 @@ def create_cockpit(
     _reading_routes(app, live)
     _moving_routes(app, live)
     _play_routes(app, live)
+    _walk_routes(app, live)
     return app
 
 
@@ -484,3 +499,42 @@ def _play_routes(app: App, live: _Live) -> None:
     def pause(_request: HttpRequest) -> HttpResponse:  # pyright: ignore[reportUnusedFunction]
         """Stop play just before the next instruction; if not playing, change nothing."""
         return live.pause()
+
+
+def _walk_request(request: HttpRequest) -> tuple[str, int]:
+    """Read a `POST /api/walk` body: the walk's `name` and the `step` to open it at."""
+    body = _object(request, "a walk name and a step")
+    name, step = body.get("name"), body.get("step")
+    if not isinstance(name, str):
+        raise HTTPError(BAD_REQUEST, "name must be the name of a walk")
+    if isinstance(step, bool) or not isinstance(step, int):
+        raise HTTPError(BAD_REQUEST, "step must be a whole number")
+    return name, step
+
+
+def _walk_routes(app: App, live: _Live) -> None:
+    """Add the guided walks: list them, open one at a step, and leave."""
+
+    @app.get("/api/walks")
+    def walks(_request: HttpRequest) -> HttpResponse:  # pyright: ignore[reportUnusedFunction]
+        """List the walks in the order the page offers them."""
+        listed: list[JsonValue] = [
+            {"name": w.name, "title": w.title, "see_also": w.see_also} for w in load_walks()
+        ]
+        return json(listed)
+
+    @app.post("/api/walk")
+    def walk(request: HttpRequest) -> HttpResponse:  # pyright: ignore[reportUnusedFunction]
+        """Open a walk at a step by replaying it from its start; play stops first."""
+        name, step = _walk_request(request)
+        with _as_http():
+            try:
+                return live.walk(name, step)
+            except NoSuchWalk as error:  # a refusal too, but one that answers 404
+                raise HTTPError(NOT_FOUND, str(error)) from None
+
+    @app.post("/api/walk/leave")
+    def leave(_request: HttpRequest) -> HttpResponse:  # pyright: ignore[reportUnusedFunction]
+        """Leave the walk; the machine stays where it is."""
+        live.cockpit.leave_walk()
+        return live.moved()

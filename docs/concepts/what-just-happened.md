@@ -247,6 +247,6 @@ did into words a person can read is one of the most useful things a program can 
 
 ## What's Next
 
-That is the last page of the climb for now. Go back to
-[What Is a Computer, Really?](../index.md) to see the whole ladder from one NAND gate
-to a Pebble program, or open the Cockpit and read the sentence after every Step.
+You can now read every move the machine makes. Next, let the Cockpit show you round:
+[Guided Walks](guided-walks.md) are short tours that move the real machine one step at
+a time, with one sentence for each step.

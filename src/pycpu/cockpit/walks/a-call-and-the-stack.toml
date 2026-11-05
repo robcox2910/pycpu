@@ -1,0 +1,45 @@
+title = "What a function call does to the stack"
+example = "factorial"
+see_also = "how-a-function-call-really-works"
+
+[[steps]]
+say = "This program has a function, fact, that works out 5 times 4 times 3 times 2 times 1 by calling itself."
+do = "start"
+look = "line"
+show = "pebble.line"
+
+[[steps]]
+say = "We ran until fact started: line 8 called it with n = 5, and the call put a return address on the stack so the CPU can find its way back."
+do = "run to line 3"
+look = "line"
+show = "stack"
+
+[[steps]]
+say = "Running to line 3 again, fact has called itself with n = 4, and the stack has grown with a second frame for it."
+do = "run to line 3"
+look = "line"
+show = "stack"
+
+[[steps]]
+say = "We ran on until n reached 1, so the copies of fact for 5, 4, 3 and 2 are all waiting on the stack."
+do = "run to line 4"
+look = "line"
+show = "stack"
+
+[[steps]]
+say = "Line 4 returns 1: the CPU took the return address off the stack and went back into the copy of fact that called it."
+do = "step line"
+look = "line"
+show = "stack"
+
+[[steps]]
+say = "Each copy of fact finished in turn, the stack shrank back, and the screen shows 120."
+do = "run to line 9"
+look = "line"
+show = "output"
+
+[try]
+task = "Press Step until the screen shows 5040, which is 7 times 6 times 5 times 4 times 3 times 2 times 1."
+look = "line"
+check = 'output contains "5040"'
+solution = ["step line"]

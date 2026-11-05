@@ -10,6 +10,7 @@ from typing import cast
 
 from pycpu.assembler import disassemble
 from pycpu.cockpit.session import BUSY_MESSAGE, Cockpit, CockpitBusy
+from pycpu.cockpit.walks import walk_named
 from pycpu.computer import Computer
 from pycpu.isa import Fault, Opcode, decode
 from pycpu.state import WORD_BITS, MachineState
@@ -214,6 +215,43 @@ def _last_gate(cockpit: Cockpit) -> dict[str, object] | None:
     return {"id": micro.gate, "path": circuit.scope_of(micro.gate), "value": micro.value}
 
 
+def walk_picture(cockpit: Cockpit) -> dict[str, object] | None:
+    """Describe the walk the learner is on, for the page to drive the glass and say its words.
+
+    Returns:
+        None with no walk, else `name`, `title`, `step`, `count` (how many steps it
+        has), and for that step `say`, `look` and `show`. At the "Now you try" stage
+        (`step == count`) `trying` is true, `say` is None, and `look` and `show` are
+        the try's. `task` is always the try's task, and `done` and `off_script` come
+        from the session's `WalkProgress`.
+
+    """
+    progress = cockpit.walk
+    walk = None if progress is None else walk_named(progress.name)
+    if progress is None or walk is None:
+        return None
+    count = len(walk.steps)
+    trying = progress.step >= count
+    if trying:
+        say, look, show = None, walk.trial.look, walk.trial.show
+    else:
+        here = walk.steps[progress.step]
+        say, look, show = here.say, here.look, here.show
+    return {
+        "name": walk.name,
+        "title": walk.title,
+        "step": progress.step,
+        "count": count,
+        "say": say,
+        "look": str(look),
+        "show": show,
+        "trying": trying,
+        "task": walk.trial.task,
+        "done": progress.done,
+        "off_script": progress.off_script,
+    }
+
+
 def listing(cockpit: Cockpit) -> dict[str, object]:
     """Describe the whole loaded program, one row for each word of machine code.
 
@@ -314,7 +352,8 @@ def machine_picture(cockpit: Cockpit) -> dict[str, object]:
     `variables` is the `variables_picture` of the current instruction (None while
     playing). `steps` is the label of each Step depth, with the part's name taken from
     `PART_NAMES`. `happened` is the "What just happened" sentence for the last move
-    (None before any move and after a load). `program` is the session's load count, so
+    (None before any move and after a load). `walk` is the `walk_picture` of the walk the
+    learner is on, or None. `program` is the session's load count, so
     the page can tell whether its listing is of the program on the machine.
 
     Args:
@@ -368,6 +407,7 @@ def machine_picture(cockpit: Cockpit) -> dict[str, object]:
         "note": cockpit.note,
         "happened": cockpit.happened,
         "program": cockpit.loads,
+        "walk": walk_picture(cockpit),
         "parts": {
             "registers": [f"cpu.registers.r{i}" for i in range(len(state.registers))],
             "pc": "cpu.pc",
