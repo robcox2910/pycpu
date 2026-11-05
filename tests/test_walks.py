@@ -8,6 +8,7 @@ from typing import Any, cast
 
 import pytest
 from pynet.loop import run as run_loop
+from pynet.loop import sleep
 from pyweb.testing import TestClient, TestResponse
 
 from pycpu.cockpit.app import create_cockpit
@@ -32,6 +33,7 @@ from pycpu.cockpit.walks import (
     Start,
     StepAt,
     StepGateUntil,
+    StepLineInto,
     VariableIs,
     Walk,
     WalkError,
@@ -45,6 +47,7 @@ from pycpu.cockpit.walks import (
     walk_named,
 )
 from pycpu.memory import RAM_ADDRESS_BITS
+from pycpu.translator import FRAME_POINTER
 
 BITS = 8
 OK = 200
@@ -55,6 +58,9 @@ MOST_STEPS = 8
 FULL_SIZE_SECONDS = 5.0
 CONCEPTS = Path(__file__).parent.parent / "docs" / "concepts"
 SOME_GATES = 5
+THIRTEEN = 13
+FAST_TICK = 0.01
+QUICK_PLAY = 1_000
 
 GOOD = """
 title = "A test walk"
@@ -182,6 +188,7 @@ class TestGoingToEveryStep:
                 "say": step.say,
                 "look": step.look.value,
                 "show": step.show,
+                "step_kind": None,
                 "trying": False,
                 "task": walk.trial.task,
                 "done": False,
@@ -207,6 +214,37 @@ class TestGoingToEveryStep:
         assert picture["say"] is None
         assert picture["look"] == walk.trial.look.value
         assert picture["task"] == walk.trial.task
+        assert picture["step_kind"] == walk.trial.step
+
+    def test_the_call_walk_offers_step_into(self) -> None:
+        """Only the call walk's try asks the page for Step into."""
+        kinds = {walk.name: walk.trial.step for walk in _walks()}
+        assert kinds == {name: "into" if name == "a-call-and-the-stack" else None for name in kinds}
+
+    def test_the_clock_try_takes_two_beats_an_instruction(self, cockpit: Cockpit) -> None:
+        """Each instruction is a fetch beat then an execute beat, and li r3, 13 is the third."""
+        walk = _walk("why-the-clock-ticks")
+        cockpit.go_to_walk(walk.name, len(walk.steps))
+        assert "li r3, 13" in walk.trial.task
+        assert "every instruction takes two" in walk.trial.task
+        beats: list[tuple[str, bool, str]] = []
+        for _ in walk.trial.solution:
+            cockpit.step_at(Depth.PART)
+            picture = machine_picture(cockpit)
+            text = cast("dict[str, Any]", picture["instruction"])["text"]
+            beats.append(
+                (cast("str", picture["phase"]), cast("bool", picture["at_boundary"]), text)
+            )
+        assert beats == [
+            ("fetch", True, "li r2, 157"),  # the first beat finishes getsp r1
+            ("execute", False, "li r2, 157"),
+            ("fetch", True, "lhi r2, 0"),
+            ("execute", False, "lhi r2, 0"),
+            ("fetch", True, "li r3, 13"),
+            ("execute", False, "li r3, 13"),
+            ("fetch", True, "add r2, r2, r3"),
+        ]
+        assert cockpit.computer.state().registers[3] == THIRTEEN
 
 
 # The "What just happened" sentence at each step of each walk, on the 256-word machine.
@@ -260,7 +298,7 @@ CLAIMS: dict[tuple[str, int], dict[str, object]] = {
     ("many-instructions", 1): {"line": 5, N: 5},
     ("many-instructions", 2): {"r1": 5, N: 5},
     ("many-instructions", 3): {"stack top": 5},
-    ("many-instructions", 4): {N: 4},
+    ("many-instructions", 4): {N: 4, "words on line 5": 10},
     ("where-n-lives", 1): {N: 5},
     ("where-n-lives", 2): {"line": 5, N: 5},
     ("where-n-lives", 3): {"r1": 5},
@@ -269,20 +307,45 @@ CLAIMS: dict[tuple[str, int], dict[str, object]] = {
     ("subtracting-with-gates", 2): {"r1": 5, "r2": 1, "next": "sub"},
     ("subtracting-with-gates", 3): {"gate in": "cpu.alu.", "next": "sub", "phase": "execute"},
     ("subtracting-with-gates", 4): {"r1": 4},
-    ("a-call-and-the-stack", 1): {"line": 3, N: 5},
-    ("a-call-and-the-stack", 2): {"line": 3, N: 4},
-    ("a-call-and-the-stack", 3): {"line": 4, N: 1},
-    ("a-call-and-the-stack", 4): {"line": 6, N: 2},
-    ("a-call-and-the-stack", 5): {"output": "120\n"},
+    ("a-call-and-the-stack", 1): {
+        "line": 3,
+        N: 5,
+        "sp": "falls",
+        "frames": [5],
+        "return to line": 8,
+    },
+    ("a-call-and-the-stack", 2): {"line": 3, N: 4, "sp": "falls", "frames": [4, 5]},
+    ("a-call-and-the-stack", 3): {"line": 4, N: 1, "sp": "falls", "frames": [1, 2, 3, 4, 5]},
+    ("a-call-and-the-stack", 4): {"line": 6, N: 2, "sp": "rises", "frames": [2, 3, 4, 5]},
+    ("a-call-and-the-stack", 5): {"output": "120\n", "sp": "rises", "frames": []},
     ("why-the-clock-ticks", 2): {"listens to write": True},
     ("why-the-clock-ticks", 4): {"listens to write": True},
     ("why-the-clock-ticks", 6): {"next": "getsp r1", "phase": "execute"},
 }
 
 
+def _frames(cockpit: Cockpit) -> list[int]:
+    """List the `n` of every frame of fact on the stack, the running one first.
+
+    Each frame keeps the caller's `r7` at `[r7]`, the return address at `[r7+1]`
+    and the argument `n` at `[r7+2]`. The chain ends at the main program's frame,
+    which sits at the top of memory.
+    """
+    state = cockpit.computer.state()
+    memory, top = state.memory, len(state.memory) - 1
+    pointer, found = state.registers[FRAME_POINTER], list[int]()
+    while pointer != top and len(found) < len(memory):
+        found.append(memory[pointer + 2])
+        pointer = memory[pointer]
+    return found
+
+
 def _seen(cockpit: Cockpit, claim: str) -> object:
     """Read from the machine the one thing a claim is about."""
     picture = machine_picture(cockpit)
+    state = cockpit.computer.state()
+    translated = cockpit.translated
+    assert translated is not None
     registers = cast("list[int]", picture["registers"])
     text = cast("dict[str, Any]", picture["instruction"])["text"]
     last_gate = cast("dict[str, Any] | None", picture["last_gate"])
@@ -298,16 +361,41 @@ def _seen(cockpit: Cockpit, claim: str) -> object:
         "phase": picture["phase"],
         "output": picture["output"],
         "listens to write": last_gate is not None and _listens_to_write(cockpit),
+        "words on line 5": sum(
+            1
+            for a in range(len(translated.frames))
+            if translated.line_at(a) == 5  # noqa: PLR2004
+        ),
+        "frames": _frames(cockpit) if "fact" in translated.source else None,
+        "return to line": translated.line_at(
+            state.memory[(state.registers[FRAME_POINTER] + 1) % len(state.memory)]
+        ),
     }
     return seen[claim] if claim in seen else _variables(cockpit).get(claim)
 
 
+# What differs in the sentences on the 4K machine: memory addresses near the top of
+# memory, and gate ids (the bigger RAM is built first, so later gates are numbered higher).
+FULL_SIZE_CHANGES = {
+    "memory address 254": "memory address 4094",
+    "address 253": "address 4093",
+    "Gate 41152": "Gate 610564",
+}
+
+
 def check_the_numbers(cockpit: Cockpit, name: str) -> None:
     """Replay every step of the walk `name` and check each claim in `CLAIMS` there."""
+    sp = None
     for number in range(len(_walk(name).steps)):
         cockpit.go_to_walk(name, number)
+        now = cockpit.computer.state().sp
         for claim, expected in CLAIMS.get((name, number), {}).items():
-            assert _seen(cockpit, claim) == expected, (name, number, claim)
+            if claim == "sp":
+                assert sp is not None
+                assert ("falls" if now < sp else "rises") == expected, (name, number)
+            else:
+                assert _seen(cockpit, claim) == expected, (name, number, claim)
+        sp = now
 
 
 def _listens_to_write(cockpit: Cockpit) -> bool:
@@ -566,6 +654,7 @@ class TestGrammar:
             ("run 6 instructions", RunInstructions(6)),
             ("run 1 instruction", RunInstructions(1)),
             ("step gate until cpu.alu", StepGateUntil("cpu.alu")),
+            ("step line into", StepLineInto()),
         ],
     )
     def test_each_action(self, text: str, action: object) -> None:
@@ -689,6 +778,13 @@ class TestBadFiles:
         _bad(GOOD.replace('show = "variables"', 'show = "wires"'), "show 'wires'")
         _bad(GOOD.replace('do = "start"', 'do = "step line"'), "the first step must do start")
         _bad(GOOD.replace('solution = ["step line"]', "solution = []"), "[try] needs a solution")
+        into = 'step = "into"\nsolution'
+        _bad(GOOD.replace("solution", 'step = "over"\nsolution'), 'step may only be "into"')
+        _bad(
+            GOOD.replace("solution", into).replace('look = "line"\ncheck', 'look = "part"\ncheck'),
+            'with look = "line"',
+        )
+        assert parse_walk("into", GOOD.replace("solution", into)).trial.step == "into"
         _bad(GOOD.replace('solution = ["step line"]', "solution = [1]"), "list of actions")
         _bad(GOOD.replace("[[steps]]", "[steps]", 1), "")  # TOML refuses a table then an array
         _bad(
@@ -780,6 +876,65 @@ class TestRoutes:
         assert _json(response)["paused"] is True
 
 
+class TestPlay:
+    """A walk and play together: refusals leave play alone, and checks read the live state."""
+
+    def test_a_refused_walk_leaves_play_running(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """A bad walk name or step while playing is refused, and play keeps moving."""
+        sessions: list[Cockpit] = []
+
+        class RecordingCockpit(Cockpit):
+            """A Cockpit that tells the test about itself."""
+
+            def __init__(self, address_bits: int) -> None:
+                """Build as usual and record this session."""
+                super().__init__(address_bits)
+                sessions.append(self)
+
+        monkeypatch.setattr("pycpu.cockpit.app.Cockpit", RecordingCockpit)
+        client = TestClient(create_cockpit(BITS, tick_seconds=FAST_TICK))
+        session = sessions[-1]
+
+        async def main() -> tuple[list[int], int, int]:
+            """Play a counting loop, send two bad walks, then see that it still counts."""
+            await client.post("/api/program", json={"source": "loop:\n addi r1, 1\n jmp loop\n"})
+            await client.post("/api/play", json={"speed": QUICK_PLAY})
+            refused = [
+                (await client.post("/api/walk", json={"name": "nonsense", "step": 0})).status,
+                (await client.post("/api/walk", json={"name": "where-n-lives", "step": 99})).status,
+            ]
+            before = session.computer.state().registers[1]
+            await sleep(FAST_TICK * 10)
+            after = session.computer.state().registers[1]
+            await client.post("/api/pause", json={})
+            return refused, before, after
+
+        refused, before, after = run_loop(main())
+        assert refused == [NOT_FOUND, BAD_REQUEST]
+        assert after > before
+
+    def test_a_line_check_is_judged_on_the_live_state_while_playing(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Playing at the try stage passes a `line == n` check on the line really running."""
+        walk = parse_walk("line-check", GOOD.replace("variable n == 0", "line == 4"))
+
+        def only_this_walk(_name: str) -> Walk:
+            """Stand in for `walk_named`: every name is this one test walk."""
+            return walk
+
+        monkeypatch.setattr("pycpu.cockpit.session.walk_named", only_this_walk)
+        cockpit = Cockpit(BITS)
+        cockpit.go_to_walk(walk.name, len(walk.steps))
+        assert cockpit.walk is not None
+        assert cockpit.walk.done is False
+        cockpit.start_playing()
+        while cockpit.play_tick(1) and not cockpit.walk.done:
+            pass
+        cockpit.stop_playing()
+        assert cockpit.walk.done is True
+
+
 class TestFullSize:
     """The real Cockpit: every walk at 12 address bits."""
 
@@ -807,3 +962,16 @@ class TestFullSize:
     def test_the_numbers_hold_at_full_size(self, full: Cockpit, name: str) -> None:
         """Every number a walk sentence claims is the same on the 4K machine."""
         check_the_numbers(full, name)
+
+    @pytest.mark.slow
+    @pytest.mark.parametrize("name", WALK_ORDER)
+    def test_what_just_happened_at_full_size(self, full: Cockpit, name: str) -> None:
+        """The sentences are the small machine's, but for addresses and gate ids."""
+        said: list[str | None] = []
+        for number in range(len(_walk(name).steps)):
+            full.go_to_walk(name, number)
+            said.append(full.happened)
+        expected = HAPPENED[name]
+        for small, large in FULL_SIZE_CHANGES.items():
+            expected = [None if s is None else s.replace(small, large) for s in expected]
+        assert said == expected

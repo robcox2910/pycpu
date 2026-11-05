@@ -15,7 +15,7 @@ look = "line"
 show = "variables"
 
 [[steps]]
-say = "Six tiny instructions fetched the two numbers, so r1 holds 5, r2 holds 1, and the next instruction is a subtract."
+say = "Six tiny instructions got the two numbers ready, so r1 holds 5, r2 holds 1, and the next instruction is a subtract."
 do = "run 6 instructions"
 look = "instruction"
 show = "registers"

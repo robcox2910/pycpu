@@ -251,7 +251,12 @@ class _Live:
         return self.moved()
 
     def walk(self, name: str, step: int) -> HttpResponse:
-        """Open a walk at `step` (stopping any play loop first), and publish the picture."""
+        """Open a walk at `step` (stopping any play loop first), and publish the picture.
+
+        The name and step are checked before the play loop is touched, so a refused
+        request leaves play running.
+        """
+        self.cockpit.check_walk(name, step)
         self._cancel_player()
         self.cockpit.go_to_walk(name, step)
         return self.moved()

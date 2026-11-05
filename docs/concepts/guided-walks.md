@@ -21,7 +21,7 @@ until n is 0." The Cockpit checks the real machine to see when you have done it.
 | "Walk to the next painting" | A step's `do`: the move the machine makes |
 | The sentence in your ear | A step's `say` |
 | "Look closely at the dog" | A step's `look` (the depth the glass shows) and `show` (what to highlight) |
-| The quiz at the end | `[try]`: a `task`, a `check` and a `solution` |
+| The quiz at the end | `[try]`: a `task`, a `check` and a `solution`, and `step = "into"` when the task needs Step into |
 | Rewinding the tour to hear a bit again | `Cockpit.go_to_walk(name, step)`, which **replays** the walk from the start |
 
 A step's `do` is one of these **actions**. Each one is a real move, the same as a
@@ -31,6 +31,7 @@ button in the Cockpit:
 |--------|--------------|
 | `start` | Loads the walk's program and pauses at its start. Every walk's first step does this. |
 | `step <depth>` | Presses Step once at `line`, `instruction`, `part` or `gate` depth. |
+| `step line into` | Presses Step into once: a line step that follows a call into the function it calls. |
 | `run to line <n>` | Runs on the fast engine until line *n* is about to start, then pauses. |
 | `run <n> instructions` | Presses Run for *n* instructions. |
 | `step gate until <part>` | Takes gate steps until a gate inside that part (such as `cpu.alu`) works. |
@@ -87,7 +88,9 @@ Read it from the top:
   carries the sentence to say. The numbers in the sentences (5, 8, 10, 4) are the
   numbers the real machine shows at that moment; the tests check each one.
 - The **Now you try** stage starts with `done` false. The 12 presses of Step at line
-  depth run the loop on round until `n` is 0, and then `done` is true.
+  depth go round the loop again and again until `n` is 0, and then `done` is true.
+- In Python the try is `walk.trial`, not `walk.try`, because `try` is a word Python
+  keeps for itself.
 
 ## How It Works
 
@@ -153,7 +156,16 @@ print(
 **4. Checks are latched.** After every move at the **Now you try** stage, the session
 tests the walk's `check` on the real machine. Once it has passed, `done` stays true. So
 if you keep pressing Step after `n` reaches 0, all the way to the end of the program,
-you have still done it:
+you have still done it.
+
+The check is tested once at the end of each move. A Step moves a little at a time, so
+it never misses a moment. A Run or Play moves many instructions in one go, so a check
+that is true for only a moment in the middle of a run can be missed: the session sees
+where the run stopped, not every instruction on the way. That is why each task says
+"Press Step", and why every walk's solution is made of Steps.
+
+Here is the countdown's try, done and then stepped on past `n == 0` to the very end:
+
 
 ```python
 from pycpu.cockpit.session import Cockpit, Depth
@@ -178,7 +190,10 @@ loading a different program counts as wandering off.
 
 The web app has three routes for walks: `GET /api/walks` lists them, `POST /api/walk`
 with `{"name", "step"}` opens one and answers the picture, and `POST /api/walk/leave`
-puts the guide away. A walk name that does not exist gets a 404 that says
+puts the guide away. The picture's `walk` key carries the step's `say`, `look` and
+`show`, and at the **Now you try** stage the `task`, `done`, and `step_kind`, which is
+`"into"` when the page should offer Step into (as the function-call walk does) and
+null otherwise. A walk name that does not exist gets a 404 that says
 "There is no walk called nonsense." in plain words.
 
 ## Why Does This Matter?

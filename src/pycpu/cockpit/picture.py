@@ -222,7 +222,8 @@ def walk_picture(cockpit: Cockpit) -> dict[str, object] | None:
         None with no walk, else `name`, `title`, `step`, `count` (how many steps it
         has), and for that step `say`, `look` and `show`. At the "Now you try" stage
         (`step == count`) `trying` is true, `say` is None, and `look` and `show` are
-        the try's. `task` is always the try's task, and `done` and `off_script` come
+        the try's, and `step_kind` is the try's `step` (`"into"` when the page should
+        offer Step into; None otherwise, and always None before the try). `task` is always the try's task, and `done` and `off_script` come
         from the session's `WalkProgress`.
 
     """
@@ -233,10 +234,10 @@ def walk_picture(cockpit: Cockpit) -> dict[str, object] | None:
     count = len(walk.steps)
     trying = progress.step >= count
     if trying:
-        say, look, show = None, walk.trial.look, walk.trial.show
+        say, look, show, kind = None, walk.trial.look, walk.trial.show, walk.trial.step
     else:
         here = walk.steps[progress.step]
-        say, look, show = here.say, here.look, here.show
+        say, look, show, kind = here.say, here.look, here.show, None
     return {
         "name": walk.name,
         "title": walk.title,
@@ -245,6 +246,7 @@ def walk_picture(cockpit: Cockpit) -> dict[str, object] | None:
         "say": say,
         "look": str(look),
         "show": show,
+        "step_kind": kind,
         "trying": trying,
         "task": walk.trial.task,
         "done": progress.done,

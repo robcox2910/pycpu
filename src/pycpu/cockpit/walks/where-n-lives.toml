@@ -21,7 +21,7 @@ look = "line"
 show = "pebble.line"
 
 [[steps]]
-say = "The CPU can only do sums in its registers, so its first instruction copies 5 out of n's box into r1."
+say = "The CPU can only do sums in its registers, so its first instruction copied 5 out of n's box into r1."
 do = "step instruction"
 look = "instruction"
 show = "memory"

@@ -48,7 +48,8 @@ SHOW_TARGETS = (
 _SIGN_BIT = 1 << (WORD_BITS - 1)
 _WALK_KEYS = frozenset({"title", "example", "source", "see_also", "steps", "try"})
 _STEP_KEYS = frozenset({"say", "do", "look", "show"})
-_TRY_KEYS = frozenset({"task", "look", "check", "solution", "show"})
+_TRY_KEYS = frozenset({"task", "look", "check", "solution", "show", "step"})
+TRY_STEP_KINDS = ("into",)  # the kinds of Step a try may ask the page to offer
 _DEPTHS = ", ".join(d.value for d in Depth)
 
 
@@ -66,6 +67,11 @@ class StepAt:
     """Press Step once at `depth`, exactly as the learner's Step button does."""
 
     depth: Depth
+
+
+@dataclass(frozen=True)
+class StepLineInto:
+    """Press Step into once at line depth: a line step that follows a call into a function."""
 
 
 @dataclass(frozen=True)
@@ -89,7 +95,7 @@ class StepGateUntil:
     prefix: str
 
 
-type Action = Start | StepAt | RunToLine | RunInstructions | StepGateUntil
+type Action = Start | StepAt | StepLineInto | RunToLine | RunInstructions | StepGateUntil
 
 
 @dataclass(frozen=True)
@@ -158,6 +164,8 @@ class WalkTry:
         check: The test, on the real machine, that the task is done.
         solution: Moves that do the task, so a test can prove it can be done.
         show: What the page highlights while trying, or None.
+        step: `"into"` when the page should offer Step into (a line step that
+            follows calls) for this task, else None for the plain Step.
 
     """
 
@@ -166,6 +174,7 @@ class WalkTry:
     check: Check
     solution: tuple[Action, ...]
     show: str | None
+    step: str | None = None
 
 
 @dataclass(frozen=True)
@@ -210,7 +219,7 @@ def _depth(text: object, where: str) -> Depth:
 def parse_action(text: str) -> Action:
     """Read one action, such as `"step line"` or `"run to line 5"`.
 
-    The actions are `start`, `step <depth>`, `run to line <n>`,
+    The actions are `start`, `step <depth>`, `step line into`, `run to line <n>`,
     `run <n> instructions` and `step gate until <scope prefix>`.
 
     Raises:
@@ -220,6 +229,8 @@ def parse_action(text: str) -> Action:
     match text.split():
         case ["start"]:
             return Start()
+        case ["step", "line", "into"]:
+            return StepLineInto()
         case ["step", "gate", "until", prefix]:
             return StepGateUntil(prefix)
         case ["step", depth]:
@@ -432,7 +443,19 @@ def _trial(data: dict[str, object]) -> WalkTry:
         check=parse_check(_text(trial, "check", "[try]")),
         solution=tuple(actions),
         show=_show(trial, "[try]"),
+        step=_step_kind(trial),
     )
+
+
+def _step_kind(trial: dict[str, object]) -> str | None:
+    """Return the try's optional `step` kind, which only `"into"` (at line depth) may be."""
+    kind = trial.get("step")
+    if kind is None:
+        return None
+    if kind not in TRY_STEP_KINDS or trial.get("look") != Depth.LINE.value:
+        msg = f'[try]\'s step may only be "into", with look = "line", not {kind!r}'
+        raise WalkError(msg)
+    return str(kind)
 
 
 def parse_walk(name: str, text: str) -> Walk:

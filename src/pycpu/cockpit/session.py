@@ -33,6 +33,7 @@ from pycpu.cockpit.walks import (
     Start,
     StepAt,
     StepGateUntil,
+    StepLineInto,
     Walk,
     WalkError,
     passes,
@@ -229,8 +230,11 @@ class Cockpit:
         current = walk_named(walk.name)
         if current is None or walk.step < len(current.steps):
             return
-        start = self.computer.instruction_start
-        walk.done = passes(current.trial.check, self.computer.state(), start, self.translated)
+        now = self.computer.state()
+        # While playing the fast engine is live and the gate engine's instruction start is
+        # stale; play is always between two instructions, so the live state is the start.
+        start = self.computer.instruction_start if self.computer.paused else now
+        walk.done = passes(current.trial.check, now, start, self.translated)
 
     def _mark(self) -> None:
         """Remember the state before a move, and clear the last move's sentences and gate step."""
@@ -515,14 +519,7 @@ class Cockpit:
                 failure for the walk file, never something a learner can cause).
 
         """
-        walk = walk_named(name)
-        if walk is None:
-            msg = f"There is no walk called {name}."
-            raise NoSuchWalk(msg)
-        count = len(walk.steps)
-        if not 0 <= step <= count:
-            msg = f"step must be a whole number from 0 to {count}"
-            raise CockpitRefusal(msg)
+        walk = self.check_walk(name, step)
         self.stop_playing()
         self.walk = WalkProgress(name, step)
         self._replaying = True
@@ -535,6 +532,27 @@ class Cockpit:
         finally:
             self._replaying = False
         self._judge()
+
+    def check_walk(self, name: str, step: int) -> Walk:
+        """Return the walk called `name` if `step` is one of its steps, changing nothing.
+
+        `go_to_walk` checks this before it stops play, so a refused request leaves a
+        playing computer playing; the web app asks first for the same reason.
+
+        Raises:
+            NoSuchWalk: If there is no walk called `name`.
+            CockpitRefusal: If `step` is not from 0 to the walk's number of steps.
+
+        """
+        walk = walk_named(name)
+        if walk is None:
+            msg = f"There is no walk called {name}."
+            raise NoSuchWalk(msg)
+        count = len(walk.steps)
+        if not 0 <= step <= count:
+            msg = f"step must be a whole number from 0 to {count}"
+            raise CockpitRefusal(msg)
+        return walk
 
     def act(self, action: Action) -> None:
         """Make one walk action as a move of the learner's own, on the walk they are on.
@@ -564,6 +582,8 @@ class Cockpit:
                 self.load_pebble(walk.source)
             case StepAt(depth):
                 self.step_at(depth)
+            case StepLineInto():
+                self.step_line(into=True)
             case RunInstructions(count):
                 self.run(count)
             case RunToLine(line):
