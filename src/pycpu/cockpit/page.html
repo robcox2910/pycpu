@@ -130,6 +130,7 @@
     <div id="try" hidden>
       <p><strong>Now you try:</strong> <span id="try-task"></span></p>
       <p id="try-cheer" class="cheer" hidden>You did it! Pick another walk, or keep exploring.</p>
+      <button type="button" id="try-again" class="quiet" hidden>Start the task again</button>
     </div>
   </section>
 
@@ -421,7 +422,24 @@ function listen() {
 // ---- walks ----------------------------------------------------------------
 
 function openWalk(name, step, fromLink) {
-  send("/api/walk", { name: name, step: step }, fromLink ? () => { showWalks(WALK_NOT_FOUND); refresh(); } : undefined);
+  send("/api/walk", { name: name, step: step }, fromLink ? linkRefused : undefined);
+}
+
+// A walk link the Cockpit refused: a 404 means no walk has that name; anything else is
+// shown in the Cockpit's own words, as every other refusal is.
+function linkRefused(status, message) {
+  if (status === 404) showWalks(WALK_NOT_FOUND);
+  else { showWalks(); showError(message); }
+  refresh();
+}
+
+// Replay the walk to where it is now (a step, or the start of its task), on the real machine.
+function replayWalk() {
+  const w = latest && latest.walk;
+  if (!w) return;
+  walkKey = null;
+  latestText = "";
+  openWalk(w.name, w.step);
 }
 
 function showWalks(note) {
@@ -490,6 +508,7 @@ function drawWalk(m) {
   document.getElementById("try").hidden = !w.trying;
   document.getElementById("try-task").textContent = w.task || "";
   document.getElementById("try-cheer").hidden = !w.done;
+  document.getElementById("try-again").hidden = !(w.trying && !w.done);
   document.getElementById("walk-next").hidden = w.trying;
   document.getElementById("back-to-walk").hidden = !away;
 }
@@ -787,7 +806,7 @@ function drawShowGate(m, lens) {
       pickedGate = { id: g.id, path: g.path };
       setLook("gate", g.path);
     }));
-  } else if (look === "gate" && m.note && m.note.endsWith(NO_GATE) && m.note !== m.happened) {
+  } else if (look === "gate" && m.note && m.note.endsWith(NO_GATE) && !(m.happened || "").includes(m.note)) {
     // A gate step that ended on a clock wire (or an instruction's end): say why there is no button.
     showGate.append(el("p", m.note, "muted"));
   }
@@ -1025,7 +1044,7 @@ function setControls() {
   document.getElementById("play").disabled = busy || running;
   document.getElementById("pause").disabled = busy || !running;
   document.getElementById("count").disabled = busy || running;
-  ["load-example", "load-pebble", "load", "walk-next", "walk-back", "back-to-walk", "walk-leave", "explore"].forEach((id) => { document.getElementById(id).disabled = busy; });
+  ["load-example", "load-pebble", "load", "walk-next", "walk-back", "back-to-walk", "walk-leave", "explore", "try-again"].forEach((id) => { document.getElementById(id).disabled = busy; });
   const w = latest && latest.walk;
   if (w && w.step === 0) document.getElementById("walk-back").disabled = true;
   document.getElementById("step-into").hidden = !(w && w.trying && w.step_kind === "into" && look === "line");
@@ -1118,7 +1137,8 @@ document.getElementById("explore").addEventListener("click", () => {
 document.getElementById("walk-leave").addEventListener("click", () => send("/api/walk/leave", {}));
 document.getElementById("walk-next").addEventListener("click", () => { const w = latest && latest.walk; if (w) openWalk(w.name, w.step + 1); });
 document.getElementById("walk-back").addEventListener("click", () => { const w = latest && latest.walk; if (w) openWalk(w.name, w.step - 1); });
-document.getElementById("back-to-walk").addEventListener("click", () => { const w = latest && latest.walk; if (w) { walkKey = null; latestText = ""; openWalk(w.name, w.step); } });
+document.getElementById("back-to-walk").addEventListener("click", replayWalk);
+document.getElementById("try-again").addEventListener("click", replayWalk);
 window.addEventListener("hashchange", () => {
   if (location.hash.startsWith("#walk=")) openWalk(decodeURIComponent(location.hash.slice(6)), 0, true);
 });

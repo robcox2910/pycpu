@@ -1383,6 +1383,10 @@ EXPERT_SIZES = [
     ("line_into", None),
 ]
 WALK_NOT_FOUND = "Walk not found."
+TRY_AGAIN = "Start the task again"
+CALL_WALK = "a-call-and-the-stack"
+PANE_EDGES = 3  # a drawing row with two panes has three | edges
+OVERSHOOT_STEPS = 200  # far more line steps than the factorial needs to halt
 CHEER = "You did it! Pick another walk, or keep exploring."
 EXPLORE = "Explore on my own"
 WRITE_YOUR_OWN = "Write your own..."
@@ -1514,7 +1518,8 @@ class TestThePage:
             'document.getElementById("happened").textContent = m.happened || NOTHING_YET;' in text
         )
         assert 'const extra = m.note && m.note !== m.happened && !noGate ? m.note : "";' in text
-        assert "&& m.note !== m.happened" in text.split('showGate.append(el("p", m.note')[0]
+        before = text.split('showGate.append(el("p", m.note')[0]
+        assert '&& !(m.happened || "").includes(m.note)) {' in before
         assert text.count('showGate.append(el("p", m.note, "muted"));') == 1
 
     def test_the_expert_drawer_keeps_every_plan_4_step_size(self) -> None:
@@ -1625,6 +1630,27 @@ class TestWalksOnThePage:
         assert '"/api/walk"' in script
         assert '"/api/walks"' in script
         assert "else showWalks();" in script
+
+    def test_only_a_404_link_is_called_not_found(self) -> None:
+        """A refused link says "Walk not found." on a 404, and the Cockpit's own words otherwise."""
+        script = _script()
+        refused = script[script.index("function linkRefused(") :]
+        refused = refused[: refused.index("\n}\n")]
+        assert "if (status === 404) showWalks(WALK_NOT_FOUND);" in refused
+        assert "else { showWalks(); showError(message); }" in refused
+        assert "refresh();" in refused
+
+    def test_a_task_not_yet_done_can_be_started_again(self) -> None:
+        """At Now you try, until done, Start the task again replays the walk to the task."""
+        text = _page()
+        assert f'id="try-again" class="quiet" hidden>{TRY_AGAIN}</button>' in text
+        assert 'document.getElementById("try-again").hidden = !(w.trying && !w.done);' in text
+        assert 'getElementById("try-again").addEventListener("click", replayWalk);' in text
+        replay = text[text.index("function replayWalk(") :]
+        assert "openWalk(w.name, w.step);" in replay[: replay.index("\n}\n")]
+        docs = _cockpit_text()
+        assert f"the bar has a **{TRY_AGAIN}** button" in docs
+        assert "replays the walk on the real machine to the moment the task began" in docs
 
     def test_a_walk_that_is_not_found_falls_back_to_the_list(self) -> None:
         """A failed /api/walk from a link shows the list with "Walk not found."."""
@@ -1805,10 +1831,82 @@ class TestTheDrawing:
         f = machine["flags"]
         flags = f"zero {f['zero']} negative {f['negative']} carry {f['carry']}"
         assert f"{flags} overflow {f['overflow']}" in text
-        (n,) = machine["variables"]["names"]
-        stack = machine["stack"]
-        assert f"{n['name']} {n['value']} at {n['address']} {stack[0]['address']}: " in text
-        assert f"{stack[1]['address']}: {stack[1]['word']}" in text
+        variables = machine["variables"]
+        (n,) = variables["names"]
+        top, below = machine["stack"]
+        output = machine["output"].strip()
+        assert variables["function"] is None  # the page says "The top level"
+        raw = (DOCS / "the-cockpit.md").read_text(encoding="utf-8")
+        rows = (
+            rf"\| The top level,\s+{top['address']}: {top['word']}\s+{output}\s+\|",
+            rf"\| frame pointer\s+{below['address']}: {below['word']}\s+\|",
+            rf"\| r7 = {variables['frame_pointer']}\.\s+\|",
+            rf"\| {n['name']}\s+{n['value']}\s+at {n['address']}\s+\|",
+        )
+        for row in rows:
+            assert re.search(row, raw), row
+
+
+def _left_column(text: str) -> str:
+    """Join the left pane of the Cockpit page's drawing onto one line."""
+    drawing = text[text.index("```text\n [Walks]") :]
+    drawing = drawing[: drawing.index("```\n", len("```text"))]
+    cells = [line.split("|")[1] for line in drawing.splitlines() if line.count("|") == PANE_EDGES]
+    return " ".join(" ".join(cells).split())
+
+
+class TestTheDrawnSmallPrint:
+    """The drawing shows the page's small print too: the lamp, the note and the frame."""
+
+    def test_the_running_line_sentence_and_the_paused_lamp(self) -> None:
+        """Above the program the page says which line runs; the bar's lamp says paused."""
+        machine, _listing = _drawn_moment(WALK_BITS)
+        raw = (DOCS / "the-cockpit.md").read_text(encoding="utf-8")
+        line = machine["pebble"]["line"]
+        sentence = (
+            f"Running line {line}. One line is many instructions: they are listed under it,"
+            " and > marks the next one."
+        )
+        assert sentence in _left_column(raw)
+        page = _page()
+        assert '"Running line " + p.line + ". One line is many instructions' in page
+        assert sentence.split(". ", 1)[1] in page
+        assert not machine["running"]
+        assert "[Expert] (paused)" in raw
+        assert 'm.running ? "playing" : "paused"' in _page()
+
+    def test_what_just_happened_is_its_own_block(self) -> None:
+        """The sentence sits on its own line between the walk bar and the panes."""
+        raw = (DOCS / "the-cockpit.md").read_text(encoding="utf-8")
+        assert re.search(r"-\+\n What just happened: [^|\n]+\n\+-", raw)
+        assert "frame pointer r7 = " in _page()
+
+
+class TestStartingTheTaskAgain:
+    """Going past a task and starting it again, on the real machine."""
+
+    def test_stepping_over_the_recursion_misses_the_task_and_a_replay_restores_it(self) -> None:
+        """Step over fact runs to the halt with n never 1; replaying the try step starts afresh."""
+        client = TestClient(create_cockpit(WALK_BITS))
+        body: dict[str, object] = {"name": CALL_WALK, "step": 0}
+        count = _json(_run(client.post("/api/walk", json=body)))["walk"]["count"]  # pyright: ignore[reportArgumentType]
+        body["step"] = count
+        start = _json(_run(client.post("/api/walk", json=body)))  # pyright: ignore[reportArgumentType]
+        assert start["walk"]["trying"]
+        assert start["walk"]["step_kind"] == "into"
+        machine = start
+        for _ in range(OVERSHOOT_STEPS):
+            if machine["halted"]:
+                break
+            machine = _json(_run(client.post("/api/step", json={"depth": "line"})))
+            seen = cast("dict[str, Any] | None", machine["variables"])
+            names = cast("list[dict[str, Any]]", seen["names"] if seen else [])
+            assert ("n", 1) not in [(v["name"], v["value"]) for v in names]
+        assert machine["halted"]
+        assert not machine["walk"]["done"]
+        again = _json(_run(client.post("/api/walk", json=body)))  # pyright: ignore[reportArgumentType]
+        same = {k: v for k, v in again.items() if k != "program"}
+        assert same == {k: v for k, v in start.items() if k != "program"}
 
 
 class TestTheButtonTours:

@@ -29,33 +29,39 @@ you count the instructions in between.
 
 The page always fits one screen, so whatever a button changes is in view: at the size
 of a laptop screen (1280 by 720 dots) the page itself never scrolls. A pane with more
-in it than fits, such as a long program, scrolls inside its own box. This is
-**layout C**: your program on the left and a **magnifying glass** on the right. Here
-it is in the middle of the first walk, just after its third step:
+in it than fits, such as a long program, scrolls inside its own box. Your program is
+on the left and a **magnifying glass** is on the right. Here is the whole screen in the
+middle of the first walk, just after its third step:
 
 ```text
- [Walks] [Play] [Pause] [Step one instruction ▸] [Rewind]  [an example v] [Load]  [Expert]
+ [Walks] [Play] [Pause] [Step one instruction ▸] [Rewind] [an example v] [Load] [Expert] (paused)
 +-------------------------------------------------------------------------------------------+
 | A line of Pebble is many tiny instructions   Step 3 of 5     [◂ Back] [Next ▸] [Leave]    |
 | Look closer: the CPU runs a line as tiny instructions, and this first one only copied n,  |
 | which is 5, into r1.                                                                      |
-| What just happened: The CPU copied 5 from memory address 4094 into r1.                    |
++-------------------------------------------------------------------------------------------+
+ What just happened: The CPU copied 5 from memory address 4094 into r1.
 +--------------------------------------------+----------------------------------------------+
 | YOUR PROGRAM                               | Line 5 › push r1                             |
+| Running line 5. One line is many           |                                              |
+| instructions: they are listed under it,    |   push r1                                    |
+| and > marks the next one.                  |   the instruction at address 35, next to run |
 |    1  # Count down to lift off             |                                              |
-|    2  let n = 5                            |   push r1                                    |
-|    3  while n > 0 {                        |   the instruction at address 35, next to run |
-|    4      print(n)                         |                                              |
-| ▶  5      n = n - 1                        |   1010   001   000000000                     |
-|          34  load r1, [r7-1]   ; r1 = n    |   job    rd    not used                      |
-|        > 35  push r1  ; onto the stack     |   push   r1                                  |
-|          36  li   r1, 1        ; r1 = 1    |                                              |
-|          ...                               |   r0 0  [r1 5 changed]  r2 53  r3 10  r4 5   |
-|    6  }                                    |   r5 0  r6 65535  r7 4095                    |
-|    7  print("Lift off!")                   |   [pc 35 changed]  sp 4094                   |
-| VARIABLES       THE STACK     PRINTED      |   zero 1  negative 0  carry 1  overflow 0    |
-|  n  5  at 4094  4094: 5       5            |                                              |
-|                 4095: 0                    |   [Look closer ▾]                            |
+|    2  let n = 5                            |   1010   001   000000000                     |
+|    3  while n > 0 {                        |   job    rd    not used                      |
+|    4      print(n)                         |   push   r1                                  |
+| ▶  5      n = n - 1                        |                                              |
+|          34  load r1, [r7-1]   ; r1 = n    |   r0 0  [r1 5 changed]  r2 53  r3 10  r4 5   |
+|        > 35  push r1  ; onto the stack     |   r5 0  r6 65535  r7 4095                    |
+|          36  li   r1, 1        ; r1 = 1    |   [pc 35 changed]  sp 4094                   |
+|          ...                               |   zero 1  negative 0  carry 1  overflow 0    |
+|    6  }                                    |                                              |
+|    7  print("Lift off!")                   |   [Look closer ▾]                            |
+| VARIABLES      THE STACK     PRINTED       |                                              |
+| The top level, 4094: 5       5             |                                              |
+| frame pointer  4095: 0                     |                                              |
+| r7 = 4095.                                 |                                              |
+| n  5  at 4094                              |                                              |
 +--------------------------------------------+----------------------------------------------+
 ```
 
@@ -65,7 +71,8 @@ it is in the middle of the first walk, just after its third step:
   as "Step one instruction ▸" (see [The Magnifying Glass](the-magnifying-glass.md)).
   **Rewind** goes back to the start of the current instruction. The example list loads
   one of the example programs, or, with **Write your own...**, opens a box for your own
-  program. **Expert** opens the Expert drawer.
+  program. **Expert** opens the Expert drawer. The lamp at the end says whether the
+  computer is `paused` or `playing`.
 - **The walk bar** shows the walk you are on, how far along it is, and its one sentence
   for this step. **Next ▸** and **◂ Back** move through the walk, and **Leave** puts the
   guide away. After the last step comes **Now you try**: one small task, such as "Press
@@ -73,7 +80,11 @@ it is in the middle of the first walk, just after its third step:
   it the bar cheers: "You did it! Pick another walk, or keep exploring." If you wander
   off during a walk's steps, by pressing a button of your own or by moving the glass,
   the walk waits for you and a **Back to the walk** button takes you back to the
-  step you were on.
+  step you were on. Going past the task is fine too. Say the task asks for
+  **Step into ▸**, but you press the big Step button instead: it steps *over* a
+  function call, and the program can run to its end without ever doing the task. Until
+  the task is done, the bar has a **Start the task again** button. It replays the walk
+  on the real machine to the moment the task began, so you can try again.
 - **What just happened** is one sentence, in plain words, about the last move (see
   [What Just Happened](what-just-happened.md)). Sometimes the Cockpit has a second
   sentence about that move, such as where a line step stopped; it appears under the
@@ -520,7 +531,7 @@ whole page is one grid exactly as tall as the browser window (`height: 100vh`, w
 `overflow: hidden`, so it cannot scroll. Each pane has `overflow: auto` instead, so a
 long program scrolls inside its own box and nothing else moves. Under 44rem wide (about
 a phone held upright) the two halves stack into one column, with the glass above the
-program, so the effect of a step is still at the top. It draws layout C from the
+program, so the effect of a step is still at the top. It draws the screen from the
 picture every route answers with:
 
 - **The walks list** comes from `GET /api/walks`. Choosing a walk sends
@@ -541,9 +552,9 @@ picture every route answers with:
   Every picture carries `program`, a count the session adds one to on every load, and
   the listing carries the `program` it was made for; when the two differ, the page
   fetches the listing again, so it never shows a program that is not loaded. Every
-  other picture only moves the marks: `▶` on `pebble.line`, that line's instructions
-  (every row whose `pebble_line` is the running line) under it, and `>` on the current
-  instruction (none once the machine has halted, because nothing runs next). Above the
+  picture then redraws the program pane from that one listing, with `▶` on
+  `pebble.line`, that line's instructions (every row whose `pebble_line` is the running
+  line) under it, and `>` on the current instruction (none once the machine has halted, because nothing runs next). Above the
   program, a sentence says what is happening ("Running line 18", "Inside a ready-made
   routine", or, once halted, how the run ended). Under it come `variables` (a name whose
   `hidden` is true is dim, with a title saying the compiler made it), the `stack` cells
