@@ -411,7 +411,7 @@ class Cockpit:
             ran = self.computer.run(instructions)
         finally:
             self.computer.pause()
-        self.happened = describe_run(ran + finishing, self.computer.state())
+        self.happened = describe_run(ran, self.computer.state(), finishing)
         return ran
 
     def step_line(self, *, into: bool) -> LineStep:
@@ -483,7 +483,7 @@ class Cockpit:
             self.computer.pause()
         self.note = _line_note(ran, stopped, line)
         self.happened = describe_move(
-            Depth.LINE, start, self.computer.state(), None, translated, ran + finishing
+            Depth.LINE, start, self.computer.state(), None, translated, ran, finishing=finishing
         )
         return LineStep(ran, stopped)
 

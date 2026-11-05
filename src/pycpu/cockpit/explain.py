@@ -51,8 +51,8 @@ OPCODE_TEMPLATES: dict[Opcode, str] = {
     Opcode.ALU: "{alu} The answer, {answer}, went into r{rd}.",
     Opcode.CMP: (
         "The ALU compared {a} with {b} by taking {b} away from {a}. It kept no answer, "
-        "only the flag lamps: zero {zero}, negative {negative}, carry {carry}, "
-        "overflow {overflow}."
+        "only the flag lamps: zero lamp {zero}, negative lamp {negative}, carry lamp "
+        "{carry} ({borrow}), overflow lamp {overflow}."
     ),
     Opcode.LI: "The CPU put the number {answer} into r{rd}.",
     Opcode.LHI: "The CPU put {imm} into the top half of r{rd}, so r{rd} is now {answer}.",
@@ -77,6 +77,13 @@ ADDI_DOWN_TEMPLATE = "The ALU took {down} away from {value}. The answer, {answer
 SCREEN_TEMPLATE = "The CPU sent {stored} from r{rd} to the screen{shown}."
 TAKEN_TEMPLATE = "The answer was yes, so the CPU jumped to address {pc}."
 NOT_TAKEN_TEMPLATE = "The answer was no, so the CPU went on to address {pc}."
+# A branch whose target is the very next word goes there whatever the answer, so the
+# sentence cannot say which answer it was without working the condition out again.
+NEXT_ANYWAY_TEMPLATE = (
+    "Either answer leads to the next address, so the CPU went on to address {pc}."
+)
+LAMP_WORDS = ("off", "on")
+BORROW_WORDS = ("it had to borrow", "nothing had to be borrowed")  # carry after a subtract
 HALT_CODE_TEMPLATE = "The CPU stopped with code {code}, which means {meaning}."
 OWN_CODE_TEMPLATE = "The program stopped itself with code {code}."
 FAULT_TEMPLATE = "The CPU stopped: {text} tried to use an address outside memory."
@@ -84,18 +91,23 @@ FETCH_FAULT_TEMPLATE = (
     "The CPU stopped: it tried to fetch an instruction from address {pc}, which is outside memory."
 )
 FETCH_TEMPLATE = "Fetch: the CPU read the word at address {pc}, which says {text}."
-GATE_TEMPLATE = "Gate {gate} in the {words} worked out a {value}."
+GATE_TEMPLATE = "Gate {gate}, a NAND inside {place}, worked out a {value}."
 BARE_GATE_TEMPLATE = "Gate {gate} worked out a {value}."
-LINE_TEMPLATE = "Line {line} ran {count}."
+LINE_TEMPLATE = "Line {line} {ran}."
 ROUTINE_TEMPLATE = (
-    "Ran {count}, starting inside a built-in routine (such as the one print uses), "
+    "{ran}, starting inside a built-in routine (such as the one print uses), "
     "which has no Pebble line."
 )
+# How a count of instructions is said. A move begun part-way through an instruction
+# first finishes it in the gates; that one is said apart, so every number is real.
+RAN_PHRASE = "ran {count}"
+FINISHED_PHRASE = "finished the instruction you were in"
+FINISHED_THEN_PHRASE = "finished the instruction you were in, then ran {more:,} more"
 CHANGED_TEMPLATE = " {name} changed from {old} to {new}."
 STOPPED_ENDING = ", and then the program stopped."
 SCREEN_SHOWED_TEMPLATE = ' The screen showed "{text}".'
 GATE_STEPS_TEMPLATE = "Took {count:,} gate steps. {last}"
-RUN_TEMPLATE = "Ran {count}."
+RUN_TEMPLATE = "{ran}."
 NOTHING_RAN = "Nothing ran, because the program has already finished."
 REWOUND = "Went back to the start of this instruction."
 ALREADY_AT_START = "You were already at the start of this instruction, so nothing changed."
@@ -106,12 +118,16 @@ ALREADY_AT_START = "You were already at the start of this instruction, so nothin
 BRANCH_QUESTIONS: dict[Condition, str] = {
     Condition.EQ: "is the zero lamp on",
     Condition.NE: "is the zero lamp off",
-    Condition.LT: "was the first number less than the second",
-    Condition.GE: "was the first number at least the second",
-    Condition.LE: "was the first number at most the second",
-    Condition.GT: "was the first number more than the second",
-    Condition.LTU: "was the first number less than the second, counting without signs",
-    Condition.GEU: "was the first number at least the second, counting without signs",
+    Condition.LT: "was the first number in the last compare less than the second",
+    Condition.GE: "was the first number in the last compare at least the second",
+    Condition.LE: "was the first number in the last compare at most the second",
+    Condition.GT: "was the first number in the last compare more than the second",
+    Condition.LTU: (
+        "was the first number in the last compare less than the second, counting without signs"
+    ),
+    Condition.GEU: (
+        "was the first number in the last compare at least the second, counting without signs"
+    ),
 }
 
 # What each fault code means, for a `halt` that uses one.
@@ -123,6 +139,7 @@ FAULT_MEANINGS: dict[Fault, str] = {
 
 # Plain words for the last name in a gate's scope path. Numbered names are handled apart.
 GATE_PART_WORDS: dict[str, str] = {
+    "cpu": "CPU",
     "and": "AND",
     "or": "OR",
     "xor": "XOR",
@@ -149,6 +166,35 @@ GATE_PART_WORDS: dict[str, str] = {
     "sp": "stack pointer",
     "write_back": "write-back part",
 }
+# Plain words for the top-level part of the CPU a gate sits in: the name after `cpu.`.
+CPU_PART_WORDS: dict[str, str] = {
+    "address_check": "address checker",
+    "address_mux": "memory address chooser",
+    "alu": "ALU",
+    "branch_target": "branch-target adder",
+    "condition": "branch checker",
+    "control": "control unit",
+    "decode": "instruction decoder",
+    "fault": "fault checker",
+    "flags": "flag register",
+    "halt": "halt part",
+    "ir": "instruction register",
+    "next_pc": "next-instruction part",
+    "next_sp": "stack pointer part",
+    "operand": "operand chooser",
+    "pc": "program counter",
+    "pc_plus_1": "pc + 1 adder",
+    "phase": "phase register",
+    "port": "screen port",
+    "ram_data": "memory data chooser",
+    "ram_wires": "memory wires",
+    "registers": "registers",
+    "sp": "stack pointer",
+    "sp_minus_1": "sp - 1 adder",
+    "sp_plus_1": "sp + 1 adder",
+    "write_back": "write-back part",
+}
+_REGISTER = re.compile(r"^r\d$")
 _COPY_NUMBER = re.compile(r"#\d+$")  # `half_adder#1` is the second half adder in its part
 _NUMBERED = re.compile(r"^(bit|word|r)(\d+)$")
 
@@ -210,6 +256,52 @@ def gate_words(path: str) -> str:
     return GATE_PART_WORDS.get(last, last.replace("_", " "))
 
 
+def _top_part(path: str) -> tuple[str, str]:
+    """Return the scope path and plain words of the top-level part `path` sits in.
+
+    That is the memory for `ram...`, a register for `cpu.registers.r1...`, and otherwise
+    the part named just after `cpu.`, such as the ALU.
+    """
+    if not path:
+        return path, "the circuit"
+    first, _, rest = path.partition(".")
+    if first == "ram":
+        return "ram", "the memory"
+    if first != "cpu" or not rest:
+        return path, f"the {gate_words(path)}"
+    name, _, inner = rest.partition(".")
+    register = inner.partition(".")[0]
+    if name == "registers" and _REGISTER.match(register):
+        return f"cpu.registers.{register}", f"register {register}"
+    return f"cpu.{name}", f"the {CPU_PART_WORDS.get(name, name.replace('_', ' '))}"
+
+
+def gate_place(path: str) -> str:
+    """Say where a gate sits: the small part it belongs to, inside the big part.
+
+    `cpu.alu.adder.bit0.full_adder.half_adder#1.xor` gives "an XOR in the ALU". A gate
+    straight inside a big part names only that part ("the program counter"), and a
+    numbered register or memory word already says where it is ("memory word 12").
+    """
+    top_path, top = _top_part(path)
+    small = gate_words(path)
+    # A gate straight inside the big part, or a small part named like it (a chooser in
+    # the operand chooser), names only the big part.
+    if _COPY_NUMBER.sub("", path) == top_path or small in top:
+        return top
+    if _NUMBERED.match(_COPY_NUMBER.sub("", path.rpartition(".")[2])):
+        return small
+    article = "an" if small[0] in "AEIOUaeiou" or small.startswith("XOR") else "a"
+    return f"{article} {small} in {top}"
+
+
+def _ran_words(ran: int, finishing: int) -> str:
+    """Say how many instructions a move ran, saying a gate-finished one apart."""
+    if not finishing:
+        return RAN_PHRASE.format(count=count_instructions(ran))
+    return FINISHED_THEN_PHRASE.format(more=ran) if ran else FINISHED_PHRASE
+
+
 def _signed(word: int) -> int:
     """Read a 16-bit word as a signed number, the way Pebble's code means it (65535 is -1)."""
     return word - (_SIGN_BIT << 1) if word & _SIGN_BIT else word
@@ -261,6 +353,11 @@ def _fill(i: Instruction, start: MachineState, after: MachineState) -> str:
     """Fill the opcode's template for an instruction that finished normally."""
     a, b, value = start.registers[i.ra], start.registers[i.rb], start.registers[i.rd]
     answer = after.registers[i.rd]
+    # The one number not read from a state: no `MachineState` keeps the address a load
+    # or store used. Working it out here is safe because it is only shown, never used to
+    # decide what happened, and only for a load or store that finished without a fault,
+    # where the machine used exactly this sum (`ra` plus the offset, wrapped to 16 bits,
+    # as `isa.py` defines it). A store's value is then read from `after` at this address.
     address = (start.registers[i.ra] + i.imm) & WORD_MASK
     top = after.memory[after.sp] if after.sp < len(after.memory) else 0
     fields: dict[str, object] = {
@@ -274,7 +371,8 @@ def _fill(i: Instruction, start: MachineState, after: MachineState) -> str:
         "pc": after.pc,
         "sp": after.sp,
         "top": top,
-        **after.flags._asdict(),
+        **{name: LAMP_WORDS[lamp] for name, lamp in after.flags._asdict().items()},
+        "borrow": BORROW_WORDS[after.flags.carry],
     }
     match i.opcode:
         case Opcode.ALU:
@@ -286,10 +384,12 @@ def _fill(i: Instruction, start: MachineState, after: MachineState) -> str:
             fields["stored"] = after.memory[address]
         case Opcode.BR:
             fields["question"] = BRANCH_QUESTIONS[Condition(i.rd)]
-            jumped = after.pc != (start.pc + 1) & WORD_MASK
-            fields["outcome"] = (TAKEN_TEMPLATE if jumped else NOT_TAKEN_TEMPLATE).format(
-                pc=after.pc
-            )
+            following = (start.pc + 1) & WORD_MASK
+            if (following + i.imm) & WORD_MASK == following:
+                outcome = NEXT_ANYWAY_TEMPLATE
+            else:
+                outcome = TAKEN_TEMPLATE if after.pc != following else NOT_TAKEN_TEMPLATE
+            fields["outcome"] = outcome.format(pc=after.pc)
         case Opcode.ADDI if i.imm < 0:
             return ADDI_DOWN_TEMPLATE.format(down=-i.imm, value=value, answer=answer, rd=i.rd)
         case _:
@@ -319,7 +419,11 @@ def _frame_names(
 
 
 def describe_line(
-    translated: TranslatedProgram, start: MachineState, after: MachineState, ran: int
+    translated: TranslatedProgram,
+    start: MachineState,
+    after: MachineState,
+    ran: int,
+    finishing: int = 0,
 ) -> str:
     """Say what one Pebble line step did: the line, how many instructions, what changed.
 
@@ -331,15 +435,17 @@ def describe_line(
         translated: The Pebble program, with its source map and frames.
         start: The state at the start of the instruction the step began in.
         after: The state where the step stopped.
-        ran: How many whole instructions the step ran, counting one the gates finished.
+        ran: How many instructions the step ran on the fast engine.
+        finishing: 1 if the step first finished, in the gates, an instruction that was
+            part-way through; else 0.
 
     """
     line = translated.line_at(start.pc)
-    count = count_instructions(ran)
+    words = _ran_words(ran, finishing)
     if line is None:
-        sentence = ROUTINE_TEMPLATE.format(count=count)
+        sentence = ROUTINE_TEMPLATE.format(ran=words[0].upper() + words[1:])
     else:
-        sentence = LINE_TEMPLATE.format(line=line, count=count)
+        sentence = LINE_TEMPLATE.format(line=line, ran=words)
     if after.halted:
         sentence = sentence.removesuffix(".") + STOPPED_ENDING
     names = _frame_names(translated, after) or _frame_names(translated, start) or []
@@ -362,6 +468,7 @@ def describe_move(
     ran: int,
     *,
     gate_path: str | None = None,
+    finishing: int = 0,
 ) -> str:
     """Say in one plain sentence what a step at `depth` really did.
 
@@ -370,8 +477,8 @@ def describe_move(
       "The ALU took 1 away from 2. The answer, 1, went into r1."
     - **PART**: a fetch beat ("Fetch: the CPU read the word at address 2, which says
       sub r1, r1, r2.") or, when the beat finished the instruction, its sentence.
-    - **GATE**: "Gate 41226 in the XOR worked out a 1.", or the no-gate note for a
-      clock wire or an instruction's end.
+    - **GATE**: "Gate 41226, a NAND inside an XOR in the ALU, worked out a 1.", or the
+      no-gate note for a clock wire or an instruction's end.
 
     Args:
         depth: How big the step was.
@@ -381,16 +488,18 @@ def describe_move(
         after: The state after the step.
         micro: The last gate step's micro step, for GATE; else None.
         translated: The Pebble program, needed for LINE; None for assembly.
-        ran: How many whole instructions the step finished: a line's count, 1 for
-            an instruction, and 0 or 1 for a beat (0 means it was a fetch).
+        ran: How many whole instructions the step ran: a line's count on the fast
+            engine, 1 for an instruction, and 0 or 1 for a beat (0 means a fetch).
         gate_path: The scope path of the gate in `micro`, for its part's words.
+        finishing: For LINE, 1 if the step first finished a part-done instruction in
+            the gates, which is said apart from `ran`.
 
     """
     if start.halted:
         return FINISHED_NOTE
     match depth:
         case Depth.LINE if translated is not None:
-            return describe_line(translated, start, after, ran)
+            return describe_line(translated, start, after, ran, finishing)
         case Depth.PART if ran == 0 and start.pc < len(start.memory):
             word = start.memory[start.pc]
             return FETCH_TEMPLATE.format(pc=start.pc, text=disassemble(word, start.pc))
@@ -406,7 +515,7 @@ def _describe_gate(micro: MicroStep, path: str | None) -> str:
         return no_gate_note(micro)
     if path is None:
         return BARE_GATE_TEMPLATE.format(gate=micro.gate, value=micro.value)
-    return GATE_TEMPLATE.format(gate=micro.gate, words=gate_words(path), value=micro.value)
+    return GATE_TEMPLATE.format(gate=micro.gate, place=gate_place(path), value=micro.value)
 
 
 def describe_gate_steps(count: int, last: str) -> str:
@@ -414,17 +523,20 @@ def describe_gate_steps(count: int, last: str) -> str:
     return GATE_STEPS_TEMPLATE.format(count=count, last=last)
 
 
-def describe_run(ran: int, after: MachineState) -> str:
+def describe_run(ran: int, after: MachineState, finishing: int = 0) -> str:
     """Say how many instructions a press of Run ran, and whether the program stopped.
 
     Args:
-        ran: Every whole instruction that ran, counting one the gates finished first.
+        ran: How many instructions ran on the fast engine.
         after: The state once the run paused again.
+        finishing: 1 if Run first finished, in the gates, an instruction that was
+            part-way through; else 0. It is said apart from `ran`.
 
     """
-    if ran == 0:
+    if ran == 0 and not finishing:
         return NOTHING_RAN
-    sentence = RUN_TEMPLATE.format(count=count_instructions(ran))
+    words = _ran_words(ran, finishing)
+    sentence = RUN_TEMPLATE.format(ran=words[0].upper() + words[1:])
     return sentence.removesuffix(".") + STOPPED_ENDING if after.halted else sentence
 
 

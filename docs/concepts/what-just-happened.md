@@ -31,10 +31,11 @@ sentence:
 | line | "Line *n* ran *k* instructions.", then one sentence for each variable that changed, and what the screen showed | "Line 5 ran 10 instructions. n changed from 2 to 1." |
 | instruction | One template for each kind of instruction, filled with the real numbers | "The ALU took 1 away from 2. The answer, 1, went into r1." |
 | part | A fetch beat says which word the CPU read; an execute beat gives the sentence of the instruction it finished | "Fetch: the CPU read the word at address 44, which says jmp 15." |
-| gate | Which gate worked, the part it lives in, and the 0 or 1 it worked out; a clock step says so instead | "Gate 41226 in the XOR worked out a 1." |
+| gate | Which NAND gate worked, the small part and the big part it lives in, and the 0 or 1 it worked out; a clock step says so instead | "Gate 41226, a NAND inside an XOR in the ALU, worked out a 1." |
 
 Run and Rewind get a sentence too: "Ran *k* instructions." and "Went back to the start
-of this instruction."
+of this instruction." A Run or a line step pressed part-way through an instruction says
+"finished the instruction you were in, then ran *k* more", so each count is real.
 
 ## Try It
 
@@ -71,6 +72,8 @@ for _ in range(10):
     print("instruction:", cockpit.happened)
 cockpit.step_at(Depth.PART)
 print("part:", cockpit.happened)
+lines = cockpit.translated.line_at
+print(f"address 14 is on line {lines(14)}, address 15 on line {lines(15)}")
 while True:
     cockpit.step_at(Depth.GATE)
     print("gate:", cockpit.happened)
@@ -90,8 +93,9 @@ while True:
 # instruction: The CPU popped 1 off the stack into r1.
 # instruction: The CPU copied 1 from r1 into memory address 254.
 # part: Fetch: the CPU read the word at address 44, which says jmp 15.
+# address 14 is on line 2, address 15 on line 3
 # gate: That step moved the write clock wire, not a gate, so there is no gate to show.
-# gate: Gate 0 in the AND worked out a 1.
+# gate: Gate 0, a NAND inside an AND in the memory, worked out a 1.
 ```
 
 Read it from the top:
@@ -104,11 +108,13 @@ Read it from the top:
   `r2`, the `sub` works out the answer, and the last one puts the answer back in `n`'s
   box in memory.
 - The part step was a **fetch** beat: the CPU read the next instruction, `jmp 15`, but
-  has not obeyed it yet, so its sentence says what the word says. (Address 15 is the
-  start of line 3, `while n > 0`, so this jump takes the loop round again.)
+  has not obeyed it yet, so its sentence says what the word says. The next printed line
+  shows that address 15 is the first word of line 3, `while n > 0` (address 14 still
+  belongs to line 2), so this jump takes the loop round again.
 - The first gate step did not work out a gate at all: it moved the `write` clock wire,
-  and the sentence says so instead of making a gate up. The next one worked out gate 0,
-  an AND gate, and the sentence names it and the 1 it worked out.
+  and the sentence says so instead of making a gate up. The next one worked out gate 0.
+  Like every gate in the machine it is a NAND; this one is one of the NAND gates that
+  make up an AND in the memory, and the sentence names it and the 1 it worked out.
 
 ## How It Works
 
@@ -157,17 +163,21 @@ for function, template in ALU_TEMPLATES.items():
 
 Each ALU sentence then ends with "The answer, *answer*, went into r*d*.", read from
 `after`. The numbers are the plain register words, the same numbers the register pane
-shows.
+shows. A register holds a raw 16-bit word, so an instruction sentence says 65535 where
+a line sentence about a Pebble variable says -1: the line and variable sentences read
+the word as a signed number, the way the variables pane and your Pebble program do (see
+[Why 16-Bit Numbers Wrap](why-16-bit-numbers-wrap.md)).
 
 The other depths build on the instruction sentence:
 
 - **part**: a fetch beat finishes no instruction, so its sentence reads the word at
   `start`'s `pc` and says what it says. An execute beat finishes the instruction, so
   its sentence is that instruction's sentence.
-- **gate**: the sentence names the gate, its new output, and the part it lives in. The
-  part is the last name in the gate's scope path made into words, so
-  `cpu.alu.adder.bit0.full_adder.half_adder#1.xor` becomes "XOR". A step that moved a
-  clock wire instead of a gate says so.
+- **gate**: every gate is a NAND, so the sentence names the gate, its new output, and
+  where it sits. That place is made from the gate's scope path: its last name gives
+  the small part, and the name just after `cpu.` gives the big part, so
+  `cpu.alu.adder.bit0.full_adder.half_adder#1.xor` becomes "an XOR in the ALU". A step
+  that moved a clock wire instead of a gate says so.
 - **line**: the sentence counts the instructions the line ran and compares each Pebble
   variable in `start`'s memory with `after`'s. Hidden helper variables the translator
   makes up for itself, such as `$for_limit_0`, are left out, because you never wrote
@@ -177,8 +187,9 @@ The other depths build on the instruction sentence:
   commentator stays quiet, and `note` says why in one sentence.
 
 Here is the line sentence for `n = n - 1`, and what happens if you press a deeper Step
-first. Five gate steps start the line's first instruction; the line step then finishes
-that instruction and runs on, and the sentence still counts the whole line:
+first. Five gate steps start the line's first instruction. The line step then finishes
+that instruction in the gates and runs the other 9 on the fast engine, and the sentence
+says the two parts apart, so every number in it is a real count:
 
 ```python
 from pycpu.cockpit.app import example_programs
@@ -186,11 +197,9 @@ from pycpu.cockpit.picture import machine_picture
 from pycpu.cockpit.session import Cockpit, Depth
 
 countdown = next(e["source"] for e in example_programs() if e["name"] == "countdown")
-cockpit = Cockpit(8)
-cockpit.load_pebble(countdown)
 
 
-def at_line_5_with_n_2():
+def at_line_5_with_n_2(cockpit):
     picture = machine_picture(cockpit)
     if picture["pebble"]["line"] != 5:
         return False
@@ -198,14 +207,26 @@ def at_line_5_with_n_2():
     return next(name["value"] for name in names if name["name"] == "n") == 2
 
 
-while not at_line_5_with_n_2():
-    cockpit.step_at(Depth.LINE)
+def ready():
+    cockpit = Cockpit(8)
+    cockpit.load_pebble(countdown)
+    while not at_line_5_with_n_2(cockpit):
+        cockpit.step_at(Depth.LINE)
+    return cockpit
+
+
+plain = ready()
+plain.step_at(Depth.LINE)
+print(plain.happened)
+
+deeper_first = ready()
 for _ in range(5):
-    cockpit.step_at(Depth.GATE)
-cockpit.step_at(Depth.LINE)
-print(cockpit.happened)
+    deeper_first.step_at(Depth.GATE)
+deeper_first.step_at(Depth.LINE)
+print(deeper_first.happened)
 # Output:
 # Line 5 ran 10 instructions. n changed from 2 to 1.
+# Line 5 finished the instruction you were in, then ran 9 more. n changed from 2 to 1.
 ```
 
 The line sentence does not list the ten instructions by name. Ten names in a row is

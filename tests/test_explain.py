@@ -19,6 +19,7 @@ from pycpu.cockpit.explain import (
     describe_move,
     describe_rewind,
     describe_run,
+    gate_place,
     gate_words,
 )
 from pycpu.cockpit.picture import machine_picture, variables_picture
@@ -45,6 +46,12 @@ FAR_ADDRESS = 300  # outside a 256-word memory
 HIDDEN = "$"
 ANSWER = re.compile(r"The answer, (\d+), went into r(\d)\.$")
 ZERO_FLAG = Flags(1, 0, 0, 0)
+NEGATIVE_FLAG = Flags(0, 1, 0, 0)
+NEXT_ANYWAY = "li r1, 0\naddi r1, 0\nbr eq, next\nnext:\n    halt\n"
+TOUR_GATE_SENTENCE = f"Gate {TOUR_GATE}, a NAND inside an XOR in the ALU, worked out a 1."
+MID_LINE_SENTENCE = (
+    "Line 5 finished the instruction you were in, then ran 9 more. n changed from 2 to 1."
+)
 
 
 def _countdown() -> str:
@@ -135,7 +142,17 @@ CASES: list[tuple[str, dict[str, object], str]] = [
         {"registers": {1: 2, 2: 1}},
         (
             "The ALU compared 2 with 1 by taking 1 away from 2. It kept no answer, only the "
-            "flag lamps: zero 0, negative 0, carry 1, overflow 0."
+            "flag lamps: zero lamp off, negative lamp off, carry lamp on (nothing had to be "
+            "borrowed), overflow lamp off."
+        ),
+    ),
+    (
+        "cmp r1, r2",
+        {"registers": {1: 1, 2: 2}},
+        (
+            "The ALU compared 1 with 2 by taking 2 away from 1. It kept no answer, only the "
+            "flag lamps: zero lamp off, negative lamp on, carry lamp off (it had to borrow), "
+            "overflow lamp off."
         ),
     ),
     ("li r1, 5", {}, "The CPU put the number 5 into r1."),
@@ -177,6 +194,14 @@ CASES: list[tuple[str, dict[str, object], str]] = [
         (
             'The branch asked "is the zero lamp on?" The answer was yes, so the CPU '
             "jumped to address 5."
+        ),
+    ),
+    (
+        "br lt, 5",
+        {"flags": NEGATIVE_FLAG},
+        (
+            'The branch asked "was the first number in the last compare less than the '
+            'second?" The answer was yes, so the CPU jumped to address 5.'
         ),
     ),
     (
@@ -378,24 +403,34 @@ class TestSession:
     def test_the_countdown_line_sentence(self) -> None:
         """`n = n - 1` ran 10 instructions and changed n from 2 to 1."""
         cockpit = _countdown_at_line_5()
-        translated = cockpit.translated
-        assert translated is not None
-        made = [
-            a
-            for a in range(len(translated.program.words))
-            if translated.line_at(a) == LINE_N_MINUS_1
-        ]
-        assert len(made) == LINE_INSTRUCTIONS
-        cockpit.step_at(Depth.LINE)
+        step = cockpit.step_line(into=False)  # what `step_at(Depth.LINE)` runs
+        assert step.instructions == LINE_INSTRUCTIONS
         assert cockpit.happened == "Line 5 ran 10 instructions. n changed from 2 to 1."
+        again = _countdown_at_line_5()
+        again.step_at(Depth.LINE)
+        assert again.happened == cockpit.happened
 
-    def test_a_line_step_started_mid_instruction_counts_the_whole_line(self) -> None:
-        """Gate steps into the line's first instruction, then Line: still all 10."""
+    def test_a_line_step_started_mid_instruction_says_the_finish_apart(self) -> None:
+        """Gate steps into the line's first instruction, then Line: 1 finished, 9 more."""
         cockpit = _countdown_at_line_5()
         for _ in range(SOME_GATES):
             cockpit.step_at(Depth.GATE)
-        cockpit.step_at(Depth.LINE)
-        assert cockpit.happened == "Line 5 ran 10 instructions. n changed from 2 to 1."
+        step = cockpit.step_line(into=False)
+        assert step.instructions == LINE_INSTRUCTIONS - 1
+        assert cockpit.happened == MID_LINE_SENTENCE
+
+    def test_a_branch_to_the_next_word_does_not_guess_the_answer(self) -> None:
+        """With the zero lamp on, `br eq` to the very next word says either answer leads there."""
+        cockpit = Cockpit(BITS)
+        cockpit.load_assembly(NEXT_ANYWAY)
+        cockpit.step_at(Depth.INSTRUCTION)
+        cockpit.step_at(Depth.INSTRUCTION)
+        assert cockpit.computer.state().flags.zero == 1
+        cockpit.step_at(Depth.INSTRUCTION)
+        assert cockpit.happened == (
+            'The branch asked "is the zero lamp on?" Either answer leads to the next '
+            "address, so the CPU went on to address 3."
+        )
 
     def test_hidden_variables_never_appear(self) -> None:
         """A `for` loop's made-up `$for_limit_0` never reaches a sentence; `i` does."""
@@ -428,7 +463,7 @@ class TestSession:
                 and circuit.scope_of(last.gate).startswith("cpu.alu.adder")
             ):
                 break
-        assert cockpit.happened == f"Gate {TOUR_GATE} in the XOR worked out a 1."
+        assert cockpit.happened == TOUR_GATE_SENTENCE
 
     def test_a_clock_step_and_an_end_step_give_the_no_gate_notes(self) -> None:
         """A step that moved a clock wire, or ended the instruction, says there is no gate."""
@@ -453,14 +488,14 @@ class TestSession:
         assert cockpit.happened.startswith("Took 3 gate steps. ")
 
     def test_run_says_how_many_instructions_ran(self) -> None:
-        """Run counts every instruction, including one the gates finish first."""
+        """Run counts its instructions, and says apart one the gates finish first."""
         cockpit = Cockpit(BITS)
         cockpit.load_assembly(SUB_PROGRAM)
         cockpit.run(1)
         assert cockpit.happened == "Ran 1 instruction."
         cockpit.step_at(Depth.GATE)
         cockpit.run(1)
-        assert cockpit.happened == "Ran 2 instructions."
+        assert cockpit.happened == "Finished the instruction you were in, then ran 1 more."
         cockpit.run(10)
         assert cockpit.happened == "Ran 1 instruction, and then the program stopped."
         cockpit.run(1)
@@ -493,6 +528,10 @@ class TestHelpers:
         """The run sentence counts in words, with thousands written with a comma."""
         start = Cockpit(BITS).computer.state()
         assert describe_run(1_234, start) == "Ran 1,234 instructions."
+        stopped = replace(start, halted=True)
+        assert describe_run(0, stopped, finishing=1) == (
+            "Finished the instruction you were in, and then the program stopped."
+        )
         assert describe_rewind(moved=True) == "Went back to the start of this instruction."
 
     @pytest.mark.parametrize(
@@ -512,10 +551,31 @@ class TestHelpers:
         """The deepest scope name becomes plain words."""
         assert gate_words(path) == words
 
+    @pytest.mark.parametrize(
+        ("path", "place"),
+        [
+            ("cpu.alu.adder.bit0.full_adder.half_adder#1.xor", "an XOR in the ALU"),
+            ("ram.and", "an AND in the memory"),
+            ("cpu.registers.r1.bit3.master", "a master latch in register r1"),
+            ("cpu.registers.read_a.mux_bus", "a chooser in the registers"),
+            ("cpu.operand.mux_bus.choose", "the operand chooser"),
+            ("cpu.pc", "the program counter"),
+            ("ram.word12.bit3", "bit 3 of memory word 12"),
+            ("cpu.decode.decoder.not_bus", "a row of NOT gates in the instruction decoder"),
+            ("cpu", "the CPU"),
+            ("other.thing", "the thing"),
+            ("", "the circuit"),
+        ],
+    )
+    def test_gate_place(self, path: str, place: str) -> None:
+        """A gate's place names its small part and the big part it sits in."""
+        assert gate_place(path) == place
+
     def test_every_gate_has_plain_words(self) -> None:
         """No gate in the whole machine is named with an underscore or a `#`."""
         circuit = GateMachine(BITS).simulator.circuit
-        names = {gate_words(circuit.scope_of(gate)) for gate in range(circuit.gate_count)}
+        paths = {circuit.scope_of(gate) for gate in range(circuit.gate_count)}
+        names = {gate_words(path) for path in paths} | {gate_place(path) for path in paths}
         assert all("_" not in name and "#" not in name for name in names)
 
     def test_a_line_step_from_a_routine_says_where_it_started(self) -> None:
