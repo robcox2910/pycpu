@@ -167,6 +167,8 @@ slightly different times, and the machine would act on half-changed numbers.
 Splitting the beat into "write, then step" is how a real computer avoids
 trampling its own data.
 
+**See it in the Cockpit.** The Cockpit has a guided walk about this page's idea, the clock ticking the machine along. Start the Cockpit first with `uv run python -m pycpu`, then open [the walk](http://127.0.0.1:8765/#walk=why-the-clock-ticks).
+
 ## What's Next
 
 One flip-flop holds one bit. Line sixteen of them up and you have something

@@ -14,10 +14,12 @@ and the line has a footnote, you have a choice. You can **step over** it: read t
 footnote and come back, and put the bookmark on the next line of the *story*. Or you can
 **step into** it: follow the footnote, and put the bookmark on the footnote's first line.
 
-In a Pebble program, a footnote is a **function**. The Cockpit has two new buttons that
-do exactly this. **Line** (step over) runs to the next line of the code you are
-in, running any function it calls all the way through. **Line into** (step into)
-follows a call and stops on the first line inside the function.
+In a Pebble program, a footnote is a **function**. The Cockpit can do exactly this.
+With the magnifying glass at Line depth, **Step** (step over) runs to the next line of the
+code you are in, running any function it calls all the way through, and **Step into**
+follows a call and stops on the first line inside the function. The same two moves are the
+**Line** and **Line into** buttons in the Expert drawer, and those are the names this page
+uses below.
 
 | Reading aloud | In PyCPU |
 |---------------|----------|
@@ -161,7 +163,7 @@ program, so it halts with `6` printed.
 ### A line is many instructions
 
 One Pebble line becomes many machine instructions, and the Try It shows it: 14, 13,
-174, 10. Over the 15 test programs in `tests/pebble_programs/`, run to the end on the
+174, 10. Over the 15 test programs that folder held then (`tests/pebble_programs/`), run to the end on the
 project laptop on 2026-11-03, the middle-sized line step (the **median**: half are
 smaller, half bigger) ran 22 instructions.
 
@@ -283,6 +285,8 @@ editors draw them as little arrows. Under the hood they do what `step_line` does
 machine at full speed, check the program counter against the compiler's line table, and
 compare the frame (or stack) pointer to tell "a deeper call" from "back in my own code".
 And they too need a way out when a line never ends: you press pause.
+
+**See it in the Cockpit.** The Cockpit has a guided walk about this page's idea, one line of Pebble turning into many instructions. Start the Cockpit first with `uv run python -m pycpu`, then open [the walk](http://127.0.0.1:8765/#walk=many-instructions).
 
 ## What's Next
 
