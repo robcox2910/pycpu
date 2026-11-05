@@ -92,17 +92,71 @@ Each depth is one of the moves from the pages before this one. The mapping lives
 both. A depth the Cockpit has never heard of is a 400, and so is a count: a depth step
 always takes exactly one step.
 
-The depths nest inside each other, like boxes inside boxes:
+The depths nest inside each other, like boxes inside boxes. This block measures the
+real thing for the Pebble line `n = n - 1`: the instructions the translator made for
+it, and how many gates the first one works out in each of its two beats. (The CPU has
+exactly two phases, `Phase.FETCH` and `Phase.EXECUTE`, so every instruction is one
+fetch beat and one execute beat.)
+
+```python
+from pycpu.assembler import disassemble
+from pycpu.cockpit.session import Cockpit
+from pycpu.computer import StepSize
+from pycpu.cpu import Phase
+
+cockpit = Cockpit(8)
+cockpit.load_pebble("let n = 2\nn = n - 1\n")
+translated = cockpit.translated
+assert translated is not None
+# Line 2 is `n = n - 1`; the `halt` the translator adds at the end belongs to no line we care about.
+words = [
+    disassemble(word, address)
+    for address, word in enumerate(translated.program.words)
+    if translated.line_at(address) == 2
+]
+words = [text for text in words if text != "halt"]
+print(f"{len(words)} instructions:", ", ".join(words))
+print("phases:", ", ".join(phase.name for phase in Phase))
+
+computer = cockpit.computer
+for _ in Phase:
+    phase = computer.gate.phase
+    gates = 0
+    while True:
+        micro = computer.step(StepSize.GATE)
+        gates += micro.kind == "gate"
+        if computer.gate.phase != phase or (micro.kind == "end" and computer.gate.at_boundary):
+            break
+    print(f"{phase.name} beat of the first instruction: {gates} gates")
+# Output:
+# 10 instructions: load r1, [r7-1], push r1, li r1, 1, push r1, pop r2, pop r1, sub r1, r1, r2, push r1, pop r1, store r1, [r7-1]
+# phases: FETCH, EXECUTE
+# FETCH beat of the first instruction: 400 gates
+# EXECUTE beat of the first instruction: 3551 gates
+```
+
+Drawn with those exact figures (only the first two instructions are drawn in full):
 
 ```text
-  one line      |  n = n - 1                                                   |
-                |                                                              |
-  instructions  |  [load] [push] [li] [push] [pop] [pop] [sub] [push] ...      |
-                |                                                              |
-  beats         |  one instruction = [fetch beat] [execute beat]               |
-                |                                                              |
-  gates         |  one beat = hundreds of NAND gates, worked out one by one    |
++- one line: n = n - 1 ---------------------------------------------------+
+|                                                                         |
+|  +- instruction: load r1, [r7-1] -----------------------------------+   |
+|  |                                                                  |   |
+|  |  +- FETCH beat ----------+   +- EXECUTE beat -----------------+  |   |
+|  |  | 400 gates, one by one |   | 3551 gates, one by one         |  |   |
+|  |  +-----------------------+   +--------------------------------+  |   |
+|  |                                                                  |   |
+|  +------------------------------------------------------------------+   |
+|                                                                         |
+|  +- instruction: push r1 --+   ... then li, push, pop, pop, sub,        |
+|  |  FETCH beat, EXECUTE    |   push, pop and store: 10 instructions     |
+|  +-------------------------+   in all                                   |
+|                                                                         |
++-------------------------------------------------------------------------+
 ```
+
+The picture's gate counts belong to the first instruction on a 256-word machine; other
+instructions have their own counts.
 
 **A bigger step pressed part-way through a smaller one finishes the smaller one first.**
 Say you press Gate five times and then Line. The machine is part-way through an
