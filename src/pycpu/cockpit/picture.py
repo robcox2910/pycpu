@@ -9,7 +9,7 @@ line out as a dictionary the page can draw. Everything is read, nothing is chang
 from typing import cast
 
 from pycpu.assembler import disassemble
-from pycpu.cockpit.session import Cockpit
+from pycpu.cockpit.session import BUSY_MESSAGE, Cockpit, CockpitBusy
 from pycpu.computer import Computer
 from pycpu.isa import Fault, Opcode, decode
 from pycpu.state import WORD_BITS, MachineState
@@ -50,6 +50,42 @@ PART_NAMES = {
     "cpu.halt": "halt",
     "cpu": "CPU",
 }
+
+
+def part_picture(cockpit: Cockpit, path: str) -> dict[str, object]:
+    """Describe one part of the CPU by what goes into it and what comes out, right now.
+
+    Like a meter clipped onto the cables of a machine: each value is a row of the
+    part's real wires (its tap in `GateMachine.taps`), read one wire at a time with
+    `simulator.get` and added up, lowest bit first. Nothing is worked out here.
+
+    Args:
+        cockpit: The paused session to read.
+        path: The part's scope path, such as `"cpu.alu"`.
+
+    Returns:
+        `path`, `name` (from `PART_NAMES`), and `inputs` and `outputs`, each a list
+        of `{"name", "value"}` in the order the CPU's builder recorded them.
+
+    Raises:
+        KeyError: If the part has no taps (an unknown path, or the whole `cpu`).
+        CockpitBusy: If the session is playing: the gates stand still then, so
+            there are no live wires to read.
+
+    """
+    gate = cockpit.computer.gate
+    if path not in gate.taps:
+        raise KeyError(path)
+    if cockpit.playing:
+        raise CockpitBusy(BUSY_MESSAGE)
+    sim = gate.simulator
+    outputs = gate.tap_outputs[path]
+    inputs_seen: list[dict[str, object]] = []
+    outputs_seen: list[dict[str, object]] = []
+    for name, bus in gate.taps[path].items():
+        value = sum(sim.get(wire) << bit for bit, wire in enumerate(bus))
+        (outputs_seen if name in outputs else inputs_seen).append({"name": name, "value": value})
+    return {"path": path, "name": PART_NAMES[path], "inputs": inputs_seen, "outputs": outputs_seen}
 
 
 def _cell(state: MachineState, address: int) -> dict[str, object]:

@@ -7,7 +7,8 @@ pilot, and the answer read back. Visitors can freeze the flight, nudge it forwar
 it (`/api/play`, `/api/pause`), load a new program (`/api/program`, or `/api/pebble`
 for one that comes with its lyric sheet), pick from the flight plans kept on board
 (`/api/examples`), read its dials (`/api/machine`) and ask what any part is carrying
-(`/api/view`). `/api/events` is the radio left switched on: after
+(`/api/view`), or meter a CPU part's real inputs and outputs (`/api/part`).
+`/api/events` is the radio left switched on: after
 every move, and every slice of play, the new picture goes out to every open page. These
 routes only parse the request, call the session and answer; every rule lives in
 `session.py` and every dial in `picture.py`.
@@ -25,7 +26,7 @@ from pyweb.app import App
 from pyweb.messages import HTTPError, HttpRequest, HttpResponse, JsonValue, html, json
 from pyweb.sse import EventHub, EventStream, ServerEvent
 
-from pycpu.cockpit.picture import listing, machine_picture
+from pycpu.cockpit.picture import listing, machine_picture, part_picture
 from pycpu.cockpit.session import (
     MAX_GATE_STEPS,
     MAX_RUN,
@@ -316,7 +317,8 @@ def create_cockpit(
 
     Returns:
         A PyWeb `App` with the routes `GET /` (the page), `GET /api/machine`,
-        `GET /api/listing`, `GET /api/examples`, `GET /api/view`, `GET /api/events`,
+        `GET /api/listing`, `GET /api/examples`, `GET /api/view`, `GET /api/part`,
+        `GET /api/events`,
         `POST /api/step`,
         `POST /api/rewind`, `POST /api/run`, `POST /api/play`, `POST /api/pause`,
         `POST /api/program` and `POST /api/pebble`. See the Cockpit pages in the
@@ -396,6 +398,21 @@ def _reading_routes(app: App, live: _Live) -> None:
             described = circuit_view(cockpit.computer.gate.simulator, path)
         except KeyError:
             raise HTTPError(NOT_FOUND, f"No part called {path}") from None
+        return json(described)  # pyright: ignore[reportArgumentType]
+
+    @app.get("/api/part")
+    def part(request: HttpRequest) -> HttpResponse:  # pyright: ignore[reportUnusedFunction]
+        """Read the inputs and outputs of the CPU part named by `?path=`, off its real wires.
+
+        Unlike `/api/view`, this refuses with 409 while playing: a reading must be the
+        wires' value now, and the gates stand still while the fast engine plays.
+        """
+        path = request.query.get("path", "") or ""
+        try:
+            with _as_http():
+                described = part_picture(cockpit, path)
+        except KeyError:
+            raise HTTPError(NOT_FOUND, f"No part view for {path or 'an empty path'}") from None
         return json(described)  # pyright: ignore[reportArgumentType]
 
     @app.get("/api/events")

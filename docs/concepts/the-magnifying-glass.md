@@ -178,6 +178,91 @@ the computer. Going back up only changes how closely the glass looks.
 the current instruction: "ALU" for a `sub`, "memory address" for a `store`, and "CPU"
 when there is no instruction to name.
 
+## Looking at a Part
+
+At the part depth the glass can do more than step. It can show you what goes **into**
+the part and what comes **out**, like holding a meter to the cables of a machine in a
+factory. The meter clips onto cables that are already there. It never adds a cable and
+never changes what flows down one.
+
+| At the factory | In the Cockpit |
+|----------------|----------------|
+| A cable going into the machine | An input bus, such as the ALU's `a` and `b` |
+| A cable coming out | An output bus, such as the ALU's `result` |
+| The meter clipped onto a cable | A **tap**: a name for wires the CPU already has |
+| The list of where you may clip | `GateMachine.taps` in `src/pycpu/cpu.py` |
+| Reading the meter | `GET /api/part?path=cpu.alu` |
+
+Here we load the countdown and run it, one instruction at a time, until the next
+instruction is its `sub` and `n` (held in `r1`) is 2. Then we step one beat. That beat
+is the fetch: the CPU picks up the `sub`, and the execute beat comes next. Now the ALU's
+wires already carry the subtraction, so we read the part.
+
+```python
+from pynet.loop import run
+from pyweb.testing import TestClient
+
+from pycpu.cockpit.app import create_cockpit
+
+
+async def look_at_the_alu() -> None:
+    client = TestClient(create_cockpit(address_bits=8, start_example="countdown"))
+    machine = (await client.get("/api/machine")).json()
+    while not (machine["instruction"]["text"].startswith("sub") and machine["registers"][1] == 2):
+        machine = (await client.post("/api/step", json={"depth": "instruction"})).json()
+    print(f"waiting: '{machine['instruction']['text']}', r1 {machine['registers'][1]}")
+    machine = (await client.post("/api/step", json={"depth": "part"})).json()
+    print(f"after one beat the next beat is: {machine['phase']}")
+    part = (await client.get("/api/part?path=cpu.alu")).json()
+    print(f"looking at the {part['name']}")
+    for bus in part["inputs"]:
+        print(f"  in:  {bus['name']} = {bus['value']}")
+    for bus in part["outputs"]:
+        print(f"  out: {bus['name']} = {bus['value']}")
+
+
+run(look_at_the_alu())
+# Output:
+# waiting: 'sub r1, r1, r2', r1 2
+# after one beat the next beat is: execute
+# looking at the ALU
+#   in:  a = 2
+#   in:  b = 1
+#   out: result = 1
+#   out: flags = 4
+```
+
+The ALU is being asked to work out `2 - 1`, and its `result` wires already say 1. When
+the execute beat runs, that 1 is what goes into `r1`. `flags` is the ALU's four lamps
+read as one number: the zero lamp counts 1, negative 2, carry 4 and overflow 8. Only
+the carry lamp is lit, so it reads 4. (A subtraction that does not need to borrow
+lights carry, see [The ALU](the-alu.md).)
+
+**These numbers are read from the real wires.** A tap is only a name for a row of wires
+the CPU was already built with, the same wires the gate view reads. To show a value,
+the Cockpit asks the simulator for each wire, one bit at a time, and adds the bits up.
+Nothing works out `2 - 1` in Python; the gates did that.
+
+```text
+  register r1 --- a (16 wires) ---+
+                                  |      +-----+
+                                  +----->|     |--- result (16 wires) ---> write-back
+                                         | ALU |
+  register r2 --- b (16 wires) --------->|     |--- flags (4 wires) -----> flags register
+                                         +-----+
+       each tap is a name for one of these rows of wires;
+       the meter reads every wire with simulator.get
+```
+
+Every part the part button can name has taps, except the whole `cpu`, which is too big
+to have one set of inputs and outputs. Asking for a part with no taps answers 404.
+
+**While playing there is nothing to read.** When the computer plays, the fast engine
+runs it and the gates stand still, so their wires are not live. `/api/part` then
+answers 409 with "the computer is running: press pause first". That is stricter than
+`/api/view`, which while playing shows the gates as they were when last paused: a
+drawing of the gates can be old, but a meter reading must be the real value now.
+
 ## Why Does This Matter?
 
 A beginner should not have to learn four different buttons. One Step button that is
