@@ -503,8 +503,8 @@ class TestConditionsAndLoops:
         compiled = pebble.compile_source(source).compiled
         body = compiled.functions["f"].instructions
         jumps = [i.operand for i in body if i.opcode == pebble.OpCode.JUMP_IF_FALSE]
-        assert jumps == [len(body) - 2]
         assert body[-1].opcode == pebble.OpCode.RETURN
+        assert jumps == [len(body) - 2]
         assert run_and_compare(source).output == "2\n"
 
     def test_the_closing_return_null_of_a_function_gets_a_label_and_gives_null(self) -> None:
