@@ -276,8 +276,9 @@ def machine_picture(cockpit: Cockpit) -> dict[str, object]:
     a program's own `halt 1` to `halt 3` shares those codes. `pebble` is the
     `pebble_picture` when the program came from Pebble, and None for assembly.
     `variables` is the `variables_picture` of the current instruction (None while
-    playing). `steps` is the label of each Step depth, the part's name taken from `PART_NAMES`. `program` is the session's load count, so the page can tell whether its
-    listing is of the program on the machine.
+    playing). `steps` is the label of each Step depth, with the part's name taken from
+    `PART_NAMES`. `program` is the session's load count, so the page can tell whether
+    its listing is of the program on the machine.
 
     Args:
         cockpit: The session to describe.

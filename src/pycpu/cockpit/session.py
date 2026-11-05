@@ -163,8 +163,8 @@ class Cockpit:
         """Load a Pebble program as the Cockpit's starting program.
 
         This is for a Cockpit that has just been built: the program is loaded as
-        `load_pebble` would (which marks nothing changed), and `before` is set again to
-        be sure, because a visitor never saw the demo program it replaced.
+        `load_pebble` does, and a load marks nothing changed, because a visitor never
+        saw the demo program it replaced.
 
         Raises:
             CockpitRefusal: If the program does not fit this Cockpit's memory.
@@ -173,7 +173,6 @@ class Cockpit:
 
         """
         self.load_pebble(source)
-        self.before = self.computer.state()
 
     def start_playing(self) -> None:
         """Let the computer run on its own: resume it onto the fast engine and mark it playing.

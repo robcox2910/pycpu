@@ -1,5 +1,6 @@
 """Tests for the four depths and the one Step button that follows them."""
 
+from dataclasses import replace
 from typing import Any, cast
 
 from pynet.loop import run as run_loop
@@ -23,6 +24,14 @@ CONFLICT = 409
 SOME_GATES = 5
 COUNTDOWN = "let n = 2\nwhile n > 0 {\n    n = n - 1\n}\n"
 SUB_PROGRAM = "li r1, 2\nli r2, 1\nsub r1, r1, r2\nhalt\n"
+NOTHING_CHANGED: dict[str, object] = {
+    "registers": [],
+    "pc": False,
+    "sp": False,
+    "flags": [],
+    "memory": [],
+}
+OUTSIDE = 1 << 12  # a pc far outside a small memory
 STORE_PROGRAM = "li r1, 2\nstore r1, [r2]\nhalt\n"
 
 
@@ -95,6 +104,8 @@ class TestStepAt:
         cockpit.step_at(Depth.LINE)
         assert cockpit.computer.state() == start
         assert cockpit.note == NO_LINES_NOTE
+        assert cockpit.last_gate is None
+        assert machine_picture(cockpit)["changed"] == NOTHING_CHANGED
 
     def test_every_depth_on_a_halted_machine_changes_nothing(self) -> None:
         """Once halted, each depth gives the finished note and no movement."""
@@ -106,6 +117,8 @@ class TestStepAt:
                 cockpit.step_at(depth)
                 assert cockpit.computer.state() == halted
                 assert cockpit.note == FINISHED_NOTE
+                assert cockpit.last_gate is None
+                assert machine_picture(cockpit)["changed"] == NOTHING_CHANGED
 
     def test_a_step_while_playing_is_busy(self) -> None:
         """Step at any depth is refused while playing."""
@@ -144,6 +157,15 @@ class TestLabels:
         steps = cast("dict[str, str]", machine_picture(cockpit)["steps"])
         assert steps["part"] == "Step one memory address beat ▸"
 
+    def test_the_part_label_says_cpu_when_there_is_no_instruction(self) -> None:
+        """A pc outside memory has no word, so the part button names the whole CPU."""
+        cockpit = Cockpit(BITS)
+        cockpit.computer.resume()
+        cockpit.computer.fast.load_state(replace(cockpit.computer.fast.state(), pc=OUTSIDE))
+        cockpit.computer.pause()
+        steps = cast("dict[str, str]", machine_picture(cockpit)["steps"])
+        assert steps["part"] == "Step one CPU beat \u25b8"
+
     def test_every_zoom_part_has_a_name_and_is_a_real_scope(self) -> None:
         """Each part in the zoom table is named, and every name is a scope in the circuit."""
         assert set(_PART_FOR_OPCODE.values()) <= set(PART_NAMES)
@@ -160,8 +182,7 @@ class TestLoadsMarkNothing:
         cockpit = Cockpit(BITS)
         cockpit.step_at(Depth.INSTRUCTION)
         cockpit.load_pebble(COUNTDOWN)
-        changed = cast("dict[str, Any]", machine_picture(cockpit)["changed"])
-        assert changed == {"registers": [], "pc": False, "sp": False, "flags": [], "memory": []}
+        assert machine_picture(cockpit)["changed"] == NOTHING_CHANGED
 
     def test_load_assembly_marks_nothing_changed(self) -> None:
         """An assembly load after some steps leaves `changed` empty."""
@@ -197,9 +218,26 @@ class TestRoute:
             {"depth": "brick"},
             {"depth": 3},
             {"depth": "gate", "count": 2},
+            {"depth": "gate", "count": True},
+            {"depth": "gate", "count": 1.0},
         ]
         for body in bodies:
             assert self._post(client, body).status == BAD_REQUEST
+
+    def test_a_depth_while_playing_is_a_409(self) -> None:
+        """Step by depth is refused with 409 while the computer is playing."""
+        app = create_cockpit(address_bits=BITS)
+        client = TestClient(app)
+        assert run_loop(client.post("/api/play", json={"speed": 1})).status == OK  # pyright: ignore[reportArgumentType]
+        response = self._post(client, {"depth": "gate"})
+        assert response.status == CONFLICT
+        run_loop(client.post("/api/pause", json={}))  # pyright: ignore[reportArgumentType]
+
+    def test_a_depth_with_a_count_says_so_plainly(self) -> None:
+        """The 400 for a count names the rule in plain words."""
+        client = TestClient(create_cockpit(address_bits=BITS))
+        response = self._post(client, {"depth": "gate", "count": 2})
+        assert "takes no count" in _body(response)["message"]
 
     def test_size_still_works(self) -> None:
         """The Plan 4 body keeps working."""

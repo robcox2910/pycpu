@@ -143,8 +143,10 @@ def _step_request(request: HttpRequest) -> tuple[StepSize | LineSize | Depth, in
         depths = ", ".join(f'"{d}"' for d in Depth)
         if body["depth"] not in tuple(Depth):
             raise HTTPError(BAD_REQUEST, f"depth must be one of {depths}")
-        if body.get("count", 1) != 1:
-            raise HTTPError(BAD_REQUEST, "count is only for gate steps")
+        count = body.get("count", 1)
+        # Only the whole number 1 (or no count): `True` and `1.0` compare equal to 1 but are not it.
+        if isinstance(count, bool) or not isinstance(count, int) or count != 1:
+            raise HTTPError(BAD_REQUEST, "a depth step takes no count")
         return Depth(body["depth"]), 1
     size = _size(body.get("size"))
     if size is None:

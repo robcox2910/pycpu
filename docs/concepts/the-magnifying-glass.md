@@ -24,10 +24,11 @@ In code the depths are `Depth.LINE`, `Depth.INSTRUCTION`, `Depth.PART` and
 
 ## Try It
 
-We load the `countdown` example on a small machine (8 address bits) and send one step
-at each depth, from the top down. The Step label comes back in the picture's `steps`
-key, and the part button is named after the part that is working. Then we load machine
-code and ask for a line step, which it cannot do.
+We load the `countdown` example on a small machine (8 address bits) and print where it
+starts. Then we send one step at each depth, from the top down, and print `pc`, the
+instruction waiting to run, and the Step button's label from the picture's `steps` key.
+At the end we load an assembly program (machine code written as words) and ask for a
+line step. It has no Pebble lines, so it cannot do one.
 
 ```python
 from pynet.loop import run
@@ -38,9 +39,14 @@ from pycpu.cockpit.app import create_cockpit
 
 async def look() -> None:
     client = TestClient(create_cockpit(address_bits=8, start_example="countdown"))
+    machine = (await client.get("/api/machine")).json()
+    print(f"start: pc {machine['pc']}, next instruction '{machine['instruction']['text']}'")
     for depth in ("line", "instruction", "part", "gate"):
         machine = (await client.post("/api/step", json={"depth": depth})).json()
-        print(f"{depth}: now at pc {machine['pc']}, button says '{machine['steps'][depth]}'")
+        print(
+            f"{depth}: pc {machine['pc']}, next '{machine['instruction']['text']}', "
+            f"button '{machine['steps'][depth]}'"
+        )
     await client.post("/api/program", json={"source": "li r1, 1\nhalt\n"})
     machine = (await client.post("/api/step", json={"depth": "line"})).json()
     print(machine["note"])
@@ -48,18 +54,26 @@ async def look() -> None:
 
 run(look())
 # Output:
-# line: now at pc 15, button says 'Step one line ▸'
-# instruction: now at pc 16, button says 'Step one instruction ▸'
-# part: now at pc 17, button says 'Step one stack pointer beat ▸'
-# gate: now at pc 17, button says 'Step one gate ▸'
+# start: pc 0, next instruction 'getsp r1'
+# line: pc 15, next 'load r1, [r7-1]', button 'Step one line ▸'
+# instruction: pc 16, next 'push r1', button 'Step one instruction ▸'
+# part: pc 17, next 'push r1', button 'Step one stack pointer beat ▸'
+# gate: pc 17, next 'push r1', button 'Step one gate ▸'
 # This program is machine code, so it has no Pebble lines to step. Look closer to step an instruction.
 ```
 
-The line step ran several instructions at once and `pc` jumped. The instruction step
-moved it by one. The part step ran a clock beat, which started the next instruction
-(`pc` moved by one as the CPU fetched it), and the gate step worked out one gate
-inside it. The last message is not an error: the machine was left alone and the page
-says, in plain words, what to do instead.
+Read it line by line:
+
+- The line step ran the whole first line, many instructions, and `pc` jumped from 0 to 15.
+- The instruction step ran one instruction, so `pc` moved from 15 to 16.
+- The part step ran one clock beat of the `push` that was waiting. `pc` went to 17
+  because the beat that fetches an instruction also moves `pc` on to the next word.
+- The gate step worked out a single gate inside the next beat. A gate is only a tiny
+  piece of a beat, and `pc` changes only when a fetch beat finishes, so `pc` stayed at 17.
+- The part button says "stack pointer" because the waiting instruction is a `push`, and a
+  `push` works by moving the stack pointer (see [The Stack](the-stack.md)).
+- The last message is not an error. The machine was left alone, and the page says in
+  plain words what to do instead.
 
 ## How It Works
 
@@ -75,23 +89,40 @@ Each depth is one of the moves from the pages before this one. The mapping lives
 ```
 
 `POST /api/step` takes either `{"depth": ...}` or the older `{"size": ...}`, never
-both; a depth the Cockpit has never heard of is a 400.
+both. A depth the Cockpit has never heard of is a 400, and so is a count: a depth step
+always takes exactly one step.
 
-**A deeper step started mid-move finishes the smaller move first.** If you press Gate
-five times and then Line, the machine is half way through an instruction. The line
-step first finishes that instruction in the gates, then runs on to the next line, as
-[Stepping a Pebble Line](stepping-a-pebble-line.md) describes. Nothing is skipped.
+The depths nest inside each other, like boxes inside boxes:
 
-**A step that cannot move does not break.** A line step on machine code has no lines to
-step, and nothing can step once the program has halted. In both cases the machine stays
-exactly as it was and `note` holds one plain sentence.
+```text
+  one line      |  n = n - 1                                                   |
+                |                                                              |
+  instructions  |  [load] [push] [li] [push] [pop] [pop] [sub] [push] ...      |
+                |                                                              |
+  beats         |  one instruction = [fetch beat] [execute beat]               |
+                |                                                              |
+  gates         |  one beat = hundreds of NAND gates, worked out one by one    |
+```
+
+**A bigger step pressed part-way through a smaller one finishes the smaller one first.**
+Say you press Gate five times and then Line. The machine is part-way through an
+instruction: five gates of a beat are done and the rest are not. Look at the diagram.
+The line is made of instructions, so the line step first finishes that instruction in
+the gates and then runs on to the next line, as
+[Stepping a Pebble Line](stepping-a-pebble-line.md) describes. Nothing is skipped, and
+the machine is always left on a clean boundary.
+
+**A step that cannot move does not break.** A line step on an assembly program has no
+lines to step, and nothing can step once the program has halted. In both cases the
+machine stays exactly as it was and `note` holds one plain sentence.
 
 **Climbing never moves the machine.** The trail of depths is kept by the page, not by
 the computer. Going back up only changes how closely the glass looks.
 
 **The part button is named for the part at work.** The picture's `steps["part"]` uses
 `PART_NAMES` in `src/pycpu/cockpit/picture.py` to name the part that does the work of
-the current instruction: "ALU" for a `sub`, "memory address" for a `store`.
+the current instruction: "ALU" for a `sub`, "memory address" for a `store`, and "CPU"
+when there is no instruction to name.
 
 ## Why Does This Matter?
 
@@ -102,7 +133,7 @@ and "step one instruction" are the same idea at different depths.
 
 ## What's Next
 
-Next, see how the Cockpit's whole picture fits together in
-[A Tour of the Cockpit](a-tour-of-the-cockpit.md), following one line from Pebble all
-the way down to a gate. A later page, What Just Happened, will explain the sentence the
+To see the whole climb in one go, go back to
+[A Tour of the Cockpit](a-tour-of-the-cockpit.md), which follows one line from Pebble
+down to a single gate. A later page, What Just Happened, will explain the sentence the
 page shows after each step.
