@@ -6,182 +6,207 @@
 <title>The Cockpit - PyCPU</title>
 <link rel="icon" href="data:,">
 <style>
-  :root { --bg:#fafafa; --fg:#1d1d27; --card:#fff; --line:#d5d5e0; --accent:#5e35b1; --hot:#ffb300; --hotfg:#201600; --muted:#5d5d70; --here:#ede7f6; --shade:#f3f0f9; --picked:#00897b; --error:#c62828; }
+  :root { --bg:#f6f6fa; --fg:#1d1d27; --card:#fff; --line:#d5d5e0; --accent:#5e35b1; --hot:#ffb300; --hotfg:#201600; --muted:#5d5d70; --here:#ede7f6; --shade:#f3f0f9; --picked:#00897b; --error:#c62828; --look:#00897b; --cheer:#2e7d32; --one:#cfe3ff; --onefg:#0b2a55; }
   @media (prefers-color-scheme: dark) {
-    :root { --bg:#17171f; --fg:#ececf4; --card:#222230; --line:#3a3a4e; --accent:#b39ddb; --hot:#ffb300; --hotfg:#201600; --muted:#a4a4b8; --here:#33294d; --shade:#29243a; --picked:#4db6ac; --error:#ef9a9a; }
+    :root { --bg:#17171f; --fg:#ececf4; --card:#222230; --line:#3a3a4e; --accent:#b39ddb; --hot:#ffb300; --hotfg:#201600; --muted:#a4a4b8; --here:#33294d; --shade:#29243a; --picked:#4db6ac; --error:#ef9a9a; --look:#4db6ac; --cheer:#81c784; --one:#29466e; --onefg:#e3eeff; }
   }
   * { box-sizing:border-box; }
-  body { margin:0; font:16px/1.5 system-ui, sans-serif; background:var(--bg); color:var(--fg); }
-  main { max-width:80rem; margin:0 auto; padding:1rem; }
-  h1 { margin:.2rem 0; } h2 { margin:0 0 .4rem; font-size:1.05rem; } h3 { margin:.8rem 0 .3rem; font-size:.95rem; }
-  p { margin:.3rem 0; }
+  body { margin:0; overflow:hidden; font:15px/1.45 system-ui, sans-serif; background:var(--bg); color:var(--fg); }
+  /* Layout C: the bars on top, then your program on the left and the magnifying glass on the right. */
+  main { height:100vh; display:grid; grid-template-rows:auto auto auto minmax(0,1fr); gap:.45rem; padding:.5rem .75rem; }
+  h1 { margin:0 0 .4rem; font-size:1.4rem; } h2 { margin:0 0 .3rem; font-size:1rem; } h3 { margin:0 0 .2rem; font-size:.85rem; text-transform:uppercase; letter-spacing:.03em; color:var(--muted); }
+  p { margin:.2rem 0; }
   .muted { color:var(--muted); }
-  .card { background:var(--card); border:1px solid var(--line); border-radius:8px; padding:.7rem; min-width:0; }
   .row { display:flex; flex-wrap:wrap; gap:.4rem; align-items:center; }
-  .controls { position:sticky; top:0; z-index:1; display:flex; flex-wrap:wrap; gap:.4rem .9rem; align-items:center; margin-bottom:.5rem; }
-  label { display:flex; align-items:center; font-size:.9rem; gap:.3rem; }
-  input, select, textarea, button { font:inherit; padding:.3rem .5rem; border:1px solid var(--line); border-radius:6px; background:var(--bg); color:var(--fg); }
-  textarea { font-family:ui-monospace,monospace; font-size:.9rem; width:100%; min-height:8rem; }
+  .spacer { flex:1 1 auto; }
+  .bar { display:flex; flex-wrap:wrap; gap:.35rem .5rem; align-items:center; }
+  .brand { font-weight:700; margin-right:.3rem; }
+  input, select, textarea, button { font:inherit; padding:.25rem .55rem; border:1px solid var(--line); border-radius:6px; background:var(--bg); color:var(--fg); }
+  textarea { font-family:ui-monospace,monospace; font-size:.85rem; width:100%; min-height:9rem; }
   input[type=number] { width:5.5rem; }
   button { background:var(--accent); color:var(--bg); cursor:pointer; border-color:var(--accent); }
   button:disabled { opacity:.45; cursor:not-allowed; }
   button.quiet { background:transparent; color:var(--accent); border-color:var(--line); }
-  button.link { background:transparent; color:inherit; border:0; padding:0; text-align:left; cursor:pointer; text-decoration:underline dotted var(--accent); }
-  .lamp { border:1px solid var(--line); border-radius:999px; padding:.05rem .6rem; font-size:.85rem; }
-  .lamp.on, .wire.on { background:var(--hot); color:var(--hotfg); border-color:var(--hot); }
-  #error { color:var(--error); font-weight:600; min-height:1.4rem; }
-  #note { min-height:1.4rem; }
-  /* Layout A: Pebble and machine code on top, the dials in the middle, the zoom panel below. */
-  .layout { display:grid; grid-template-columns:1fr 1fr; grid-template-areas:"pebble code" "dials dials" "zoom zoom" "load load"; gap:.8rem; }
-  .pebble-pane { grid-area:pebble; } .code-pane { grid-area:code; } .dials { grid-area:dials; } #zoom { grid-area:zoom; } .load { grid-area:load; }
-  .dials { display:grid; grid-template-columns:repeat(auto-fit,minmax(15rem,1fr)); gap:.8rem; }
-  @media (max-width:44rem) {
-    .layout { grid-template-columns:1fr; grid-template-areas:"pebble" "code" "dials" "zoom" "load"; }
-    main { padding:.5rem; }
-  }
-  .scroll { max-height:22rem; overflow:auto; border:1px solid var(--line); border-radius:6px; }
+  button.go { font-weight:700; }
+  [hidden] { display:none !important; }
+  .lamp { border:1px solid var(--line); border-radius:999px; padding:.05rem .6rem; font-size:.8rem; }
+  /* A 1 on a wire or a lamp is blue; only a change glows in the hot colour. */
+  .lamp.on, .wire.on { background:var(--one); color:var(--onefg); border-color:var(--one); }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:8px; padding:.45rem .7rem; }
+  #walk-bar { border-left:4px solid var(--accent); }
+  #walk-say { font-size:1.05rem; }
+  #walk-say.dim, .dim { opacity:.55; }
+  .cheer { color:var(--cheer); font-weight:700; }
+  #said p { margin:0; }
+  #error { color:var(--error); font-weight:600; }
+  .panes { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); grid-template-areas:"program glass"; gap:.6rem; min-height:0; }
+  .pane { background:var(--card); border:1px solid var(--line); border-radius:8px; padding:.6rem .75rem; min-height:0; min-width:0; }
+  #program { grid-area:program; display:flex; flex-direction:column; gap:.5rem; }
+  #glass { grid-area:glass; }
+  #walks { grid-column:1 / -1; grid-row:1 / -1; }
+  #program, #glass, #walks, #expert { overflow:auto; }
+  #code { flex:1 1 auto; min-height:4rem; overflow:auto; border:1px solid var(--line); border-radius:6px; }
+  #boxes { flex:0 0 auto; display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:.5rem; max-height:40%; min-height:0; }
+  .box { overflow:auto; min-height:0; border:1px solid var(--line); border-radius:6px; padding:.3rem .45rem; }
+  #expert { position:fixed; z-index:5; top:.5rem; right:.75rem; bottom:.75rem; width:min(27rem, calc(100vw - 1.5rem)); box-shadow:0 6px 30px rgba(0,0,0,.25); }
+  #expert h3 { margin-top:.7rem; }
   table { border-collapse:collapse; width:100%; font-family:ui-monospace,monospace; font-size:.85rem; }
-  td, th { text-align:left; padding:.1rem .45rem; border-bottom:1px solid var(--line); vertical-align:top; white-space:nowrap; }
-  th { background:var(--card); font-family:system-ui, sans-serif; font-weight:600; }
-  .scroll th { position:sticky; top:0; }
-  td.code { white-space:pre; }
-  td.muted { white-space:normal; }
-  tr.clickable { cursor:pointer; }
-  tr.line td { background:var(--shade); }
-  tr.picked td { box-shadow:inset 0 2px 0 var(--picked), inset 0 -2px 0 var(--picked); }
+  td { text-align:left; padding:.05rem .4rem; vertical-align:top; white-space:pre; }
+  td.mark { width:1.4rem; color:var(--accent); font-weight:700; }
+  td.num { width:2.5rem; color:var(--muted); text-align:right; }
   tr.here td { background:var(--here); font-weight:700; }
-  tr.here td:first-child::before { content:"> "; color:var(--accent); }
-  .regs { display:grid; grid-template-columns:repeat(auto-fill,minmax(7.5rem,1fr)); gap:.3rem; }
-  .reg { width:100%; text-align:left; background:var(--bg); color:var(--fg); border-color:var(--line); font-family:ui-monospace,monospace; font-size:.85rem; padding:.25rem .45rem; }
-  .reg strong { font-family:system-ui, sans-serif; }
+  tr.sub td { background:var(--shade); font-size:.8rem; }
+  tr.sub.next td { font-weight:700; }
+  tr.clickable { cursor:pointer; }
   .changed { background:var(--hot) !important; color:var(--hotfg) !important; border-color:var(--hot) !important; }
   tr.changed td { background:var(--hot); color:var(--hotfg); }
-  .tag { font-family:system-ui, sans-serif; font-size:.7rem; font-weight:700; text-transform:uppercase; letter-spacing:.03em; margin-left:.35rem; }
-  .dim { opacity:.55; }
-  .load label { flex:1 1 12rem; min-width:0; max-width:100%; }
-  #examples { flex:1 1 auto; min-width:0; max-width:100%; }
-  #output { font-family:ui-monospace,monospace; white-space:pre-wrap; margin:0; min-height:1.5rem; max-height:12rem; overflow:auto; }
-  nav#crumbs { display:flex; flex-wrap:wrap; gap:.3rem; align-items:center; }
-  nav#crumbs button { background:transparent; color:var(--accent); border-color:var(--line); }
-  #level { background:var(--bg); border:1px solid var(--line); border-left:4px solid var(--accent); border-radius:6px; padding:.5rem .7rem; margin:.5rem 0; }
+  .tag { font-family:system-ui, sans-serif; font-size:.68rem; font-weight:700; text-transform:uppercase; letter-spacing:.03em; margin-left:.35rem; }
+  .look-here { outline:3px solid var(--look); outline-offset:2px; border-radius:6px; }
+  #output { font-family:ui-monospace,monospace; white-space:pre-wrap; margin:0; }
+  nav#trail { display:flex; flex-wrap:wrap; gap:.25rem; align-items:center; margin-bottom:.5rem; }
+  nav#trail button { background:transparent; color:var(--accent); border-color:var(--line); padding:.1rem .45rem; font-size:.85rem; }
+  nav#trail button[aria-current] { background:var(--here); color:var(--fg); font-weight:700; }
   #playing-note { font-weight:600; padding:1rem; text-align:center; border:2px dashed var(--line); border-radius:8px; }
-  ul#parts { list-style:none; padding:0; margin:0; display:grid; grid-template-columns:repeat(auto-fill,minmax(13rem,1fr)); gap:.4rem; }
-  ul#parts button { width:100%; text-align:left; background:var(--bg); color:var(--fg); border-color:var(--line); }
-  .gate { display:flex; flex-wrap:wrap; gap:.4rem; align-items:center; background:var(--bg); border:1px solid var(--line); border-radius:6px; padding:.35rem .6rem; margin:.3rem 0; }
+  .big { font-family:ui-monospace,monospace; font-size:1.5rem; font-weight:700; background:var(--here); color:var(--fg); border:1px solid var(--line); border-radius:8px; padding:.4rem .7rem; text-align:left; width:100%; }
+  .fields { display:grid; grid-auto-flow:column; justify-content:start; gap:0 1.1rem; font-family:ui-monospace,monospace; margin:.5rem 0; }
+  .fields .bits { font-size:1.15rem; letter-spacing:.06em; }
+  .fields .name, .fields .value { font-size:.8rem; }
+  .regs { display:flex; flex-wrap:wrap; gap:.3rem; margin:.4rem 0; }
+  .reg { background:var(--bg); color:var(--fg); border-color:var(--line); font-family:ui-monospace,monospace; font-size:.85rem; padding:.15rem .45rem; }
+  .flow { display:grid; grid-template-columns:minmax(0,1fr) auto minmax(0,1fr); gap:.6rem; align-items:center; margin:.5rem 0; }
+  .wires { display:flex; flex-direction:column; gap:.3rem; }
+  .wirebox { border:1px solid var(--line); border-radius:6px; padding:.25rem .45rem; font-size:.85rem; }
+  .wirebox strong { font-family:ui-monospace,monospace; }
+  .partbox { font-size:1.15rem; font-weight:700; padding:1rem .8rem; }
+  ul.parts { list-style:none; padding:0; margin:.2rem 0; display:grid; grid-template-columns:repeat(auto-fill,minmax(11rem,1fr)); gap:.35rem; }
+  ul.parts button { width:100%; text-align:left; background:var(--bg); color:var(--fg); border-color:var(--line); }
+  .gate { display:flex; flex-wrap:wrap; gap:.4rem; align-items:center; background:var(--bg); border:1px solid var(--line); border-radius:6px; padding:.3rem .55rem; margin:.3rem 0; }
   .gate.picked { outline:3px solid var(--picked); }
   .wire { border:1px solid var(--line); border-radius:4px; padding:0 .45rem; font-family:ui-monospace,monospace; font-size:.85rem; }
+  ol#walk-list { padding-left:1.4rem; }
+  ol#walk-list li { margin:.4rem 0; }
+  ol#walk-list button { font-size:1.05rem; text-align:left; }
+  #walks-note { color:var(--error); font-weight:600; }
+  @media (max-width:44rem) {
+    main { padding:.4rem; gap:.3rem; }
+    .brand { display:none; }
+    #examples { flex:1 1 7rem; min-width:0; }
+    .panes { grid-template-columns:minmax(0,1fr); grid-template-rows:minmax(0,3fr) minmax(0,2fr); grid-template-areas:"glass" "program"; }
+    #boxes { grid-template-columns:repeat(2,minmax(0,1fr)); }
+    .big { font-size:1.15rem; }
+    .flow { grid-template-columns:minmax(0,1fr); }
+  }
 </style>
 </head>
 <body>
 <main>
-  <h1>The Cockpit</h1>
-  <p class="muted">A whole computer made of NAND gates, with the lid off. Run a Pebble program, pause it, step it a gate, an instruction or a line at a time, and click any value to zoom down through the circuit to the single gates that hold it. Everything shown is read from the real machine; a wire carrying a 1 is highlighted.</p>
+  <header class="bar" role="group" aria-label="Controls">
+    <span class="brand">The Cockpit</span>
+    <button type="button" id="walks-button" class="quiet">Walks</button>
+    <button type="button" id="play">Play</button>
+    <button type="button" id="pause" class="quiet">Pause</button>
+    <button type="button" id="step" class="go step"></button>
+    <button type="button" id="step-into" hidden>Step into ▸</button>
+    <button type="button" id="rewind" class="quiet step">Rewind</button>
+    <select id="examples" aria-label="Load an example program">
+      <option value="">an example</option>
+    </select>
+    <button type="button" id="load-example" class="quiet">Load</button>
+    <button type="button" id="expert-button" class="quiet" aria-controls="expert" aria-expanded="false">Expert</button>
+    <span id="status" class="row" aria-live="polite"></span>
+  </header>
 
-  <div class="card controls" role="group" aria-label="Controls">
-    <span class="row">
-      <button type="button" id="play">Play</button>
-      <button type="button" id="pause" class="quiet">Pause</button>
-      <label>speed
-        <select id="speed" aria-label="Instructions a second while playing">
-          <option value="1">1 a second</option>
-          <option value="10">10 a second</option>
-          <option value="100" selected>100 a second</option>
-          <option value="1000">1,000 a second</option>
-          <option value="10000">10,000 a second</option>
-          <option value="100000">100,000 a second</option>
-        </select>
-      </label>
-    </span>
-    <span class="row" role="group" aria-label="Step">
-      <button type="button" class="step" data-size="gate" data-count="1">1 gate</button>
-      <button type="button" class="step" data-size="gate" data-count="100">100 gates</button>
-      <button type="button" class="step" data-size="cycle">1 cycle</button>
-      <button type="button" class="step" data-size="instruction">1 instruction</button>
-      <button type="button" class="step" data-size="line" title="Run to the next Pebble line, running any function it calls all the way through">Line</button>
-      <button type="button" class="step" data-size="line_into" title="Run to the next Pebble line, following a call into the function">Line into</button>
-    </span>
-    <span class="row">
-      <button type="button" id="rewind" class="quiet step">Rewind</button>
-      <input id="count" type="number" min="1" max="10000" value="10" aria-label="Instructions to run">
-      <button type="button" id="run" class="step">Run</button>
-    </span>
-  </div>
-  <div id="error" role="alert"></div>
-  <div class="row" id="status" aria-live="polite"></div>
-  <p id="note" class="muted"></p>
-
-  <div class="layout">
-    <section class="card pebble-pane" aria-label="Pebble program">
-      <h2>Pebble</h2>
-      <p class="muted" id="pebble-note"></p>
-      <div class="scroll" id="pebble-scroll">
-        <table><thead><tr><th>line</th><th>Pebble <span class="muted">(click a line to outline its machine code)</span></th></tr></thead><tbody id="pebble"></tbody></table>
-      </div>
-    </section>
-
-    <section class="card code-pane" aria-label="Machine code">
-      <h2>Machine code</h2>
-      <p id="current"></p>
-      <div class="scroll" id="listing-scroll">
-        <table><thead><tr><th>addr</th><th>word</th><th>line</th><th>from the source</th></tr></thead><tbody id="listing"></tbody></table>
-      </div>
-    </section>
-
-    <div class="dials">
-      <section class="card" aria-label="Registers and flags">
-        <h2>Registers and flags</h2>
-        <div class="regs" id="registers"></div>
-        <div class="row" id="flags" style="margin-top:.5rem"></div>
-      </section>
-      <section class="card" aria-label="The stack">
-        <h2>The stack</h2>
-        <table><thead><tr><th>address</th><th>word</th></tr></thead><tbody id="stack"></tbody></table>
-      </section>
-      <section class="card" aria-label="Variables">
-        <h2>Variables</h2>
-        <div id="variables"></div>
-      </section>
-      <section class="card" aria-label="Printed so far">
-        <h2>Printed so far</h2>
-        <pre id="output"></pre>
-      </section>
+  <section id="walk-bar" class="card" aria-label="The walk" hidden>
+    <div class="row">
+      <strong id="walk-title"></strong>
+      <span id="walk-place" class="muted"></span>
+      <span class="spacer"></span>
+      <button type="button" id="walk-back" class="quiet">◂ Back</button>
+      <button type="button" id="walk-next">Next ▸</button>
+      <button type="button" id="back-to-walk" hidden>Back to the walk</button>
+      <button type="button" id="walk-leave" class="quiet">Leave</button>
     </div>
+    <p id="walk-say"></p>
+    <div id="try" hidden>
+      <p><strong>Now you try:</strong> <span id="try-task"></span></p>
+      <p id="try-cheer" class="cheer" hidden>You did it! Pick another walk, or keep exploring.</p>
+    </div>
+  </section>
 
-    <section class="card" id="zoom" aria-label="Zoom panel">
-      <h2>Zoom panel</h2>
-      <p id="playing-note" hidden>Pause to look inside the gates. While the computer plays, the gates are not running, so there is nothing real to show here.</p>
-      <div id="inside">
-        <nav id="crumbs" aria-label="Breadcrumb trail"></nav>
-        <div id="level"></div>
-        <div id="show-gate"></div>
-        <h3>Parts inside</h3>
-        <ul id="parts"></ul>
-        <h3>Gates here</h3>
-        <div id="gates"></div>
+  <div id="said" aria-live="polite">
+    <p><strong>What just happened:</strong> <span id="happened"></span></p>
+    <p id="note" class="muted"></p>
+    <p id="error" role="alert"></p>
+  </div>
+
+  <div class="panes">
+    <section id="walks" class="pane" aria-label="Guided walks">
+      <h1>The Cockpit</h1>
+      <p>A whole computer made of NAND gates, with the lid off. Each walk shows you one idea on the real machine, one sentence at a time. Pick one to start.</p>
+      <p id="walks-note" role="alert"></p>
+      <ol id="walk-list"></ol>
+      <button type="button" id="explore" class="quiet">Explore on my own</button>
+    </section>
+
+    <section id="program" class="pane" aria-label="Your program">
+      <h2>Your program</h2>
+      <p id="pebble-note" class="muted"></p>
+      <div id="code"><table><tbody id="pebble"></tbody></table></div>
+      <div id="boxes">
+        <div class="box" id="variables-box"><h3>Variables</h3><div id="variables"></div></div>
+        <div class="box" id="stack-box" title="The top of the stack comes first"><h3>The stack</h3><div id="stack"></div></div>
+        <div class="box" id="output-box"><h3>Printed</h3><pre id="output"></pre></div>
       </div>
     </section>
 
-    <section class="card load" aria-label="Load a program">
-      <h2>Load</h2>
-      <div class="row">
-        <label>example <select id="examples"></select></label>
-        <button type="button" id="load-example">Load example</button>
-      </div>
-      <h3>Or your own program</h3>
-      <textarea id="source" spellcheck="false" aria-label="Your program, in Pebble or assembly">let n = 3
+    <section id="glass" class="pane" aria-label="The magnifying glass">
+      <nav id="trail" aria-label="Trail: how deep the glass is looking"></nav>
+      <p id="playing-note" hidden>Pause to look inside the gates. While the computer plays, the gates are not running, so there is nothing real to show here.</p>
+      <div id="lens"></div>
+    </section>
+  </div>
+</main>
+
+<aside id="expert" class="pane" aria-label="Expert drawer" hidden>
+  <div class="row"><h2>Expert</h2><span class="spacer"></span><button type="button" id="expert-close" class="quiet">Close</button></div>
+  <p class="muted">Every exact move, for when you know just what you want.</p>
+  <h3>Step by a size</h3>
+  <div class="row" role="group" aria-label="Step sizes">
+    <button type="button" class="step" data-size="gate" data-count="1">1 gate</button>
+    <button type="button" class="step" data-size="gate" data-count="100">100 gates</button>
+    <button type="button" class="step" data-size="cycle">1 cycle</button>
+    <button type="button" class="step" data-size="instruction">1 instruction</button>
+    <button type="button" class="step" data-size="line" title="Run to the next Pebble line, running any function it calls all the way through">Line</button>
+    <button type="button" class="step" data-size="line_into" title="Run to the next Pebble line, following a call into the function">Line into</button>
+  </div>
+  <h3>Run</h3>
+  <div class="row">
+    <input id="count" type="number" min="1" max="10000" value="10" aria-label="Instructions to run">
+    <button type="button" id="run" class="step">Run</button>
+    <label class="row">Play speed
+      <select id="speed" aria-label="Instructions a second while playing">
+        <option value="1">1 a second</option>
+        <option value="10">10 a second</option>
+        <option value="100" selected>100 a second</option>
+        <option value="1000">1,000 a second</option>
+        <option value="10000">10,000 a second</option>
+        <option value="100000">100,000 a second</option>
+      </select>
+    </label>
+  </div>
+  <h3>Your own program</h3>
+  <textarea id="source" spellcheck="false" aria-label="Your program, in Pebble or assembly">let n = 3
 while n > 0 {
     print(n)
     n = n - 1
 }
 </textarea>
-      <div class="row" style="margin-top:.4rem">
-        <button type="button" id="load-pebble">Load Pebble</button>
-        <button type="button" id="load" class="quiet">Load assembly</button>
-        <span class="muted">Translated (for Pebble) or assembled, put in memory, and paused at its start.</span>
-      </div>
-    </section>
+  <div class="row">
+    <button type="button" id="load-pebble">Load Pebble</button>
+    <button type="button" id="load" class="quiet">Load assembly</button>
   </div>
-</main>
+  <p class="muted">Translated (for Pebble) or assembled, put in memory, and paused at its start.</p>
+</aside>
 <script>
 "use strict";
 // What a part means, in plain words, and which concept page explains it.
@@ -242,35 +267,76 @@ const LEVELS = {
 };
 const GATE_LINE = ["One NAND gate: its output is 0 only when both inputs are 1. Every part above is built from these.", "Switches and NAND (switches-and-nand.md)"];
 const FALLBACK = ["A part of the circuit, made of smaller parts and gates.", "Looking Inside a Circuit (looking-inside.md)"];
+// Plain words for each part the glass can look at (the same names as PART_NAMES in picture.py).
+const PART_WORDS = {"cpu.alu": "ALU", "cpu.write_back": "write-back", "cpu.address_mux": "memory address", "cpu.next_pc": "next-instruction", "cpu.next_sp": "stack pointer", "cpu.halt": "halt", "cpu": "CPU"};
+// Plain words for every wire name a part view can show (the names in GateMachine.taps).
+const TAP_WORDS = {
+  "a": "number A",
+  "b": "number B",
+  "result": "answer",
+  "flags": "flag lamps",
+  "alu": "the ALU's answer",
+  "memory": "the word read from memory",
+  "imm8": "the number inside the instruction",
+  "register_a": "the first register's number",
+  "sp": "stack pointer",
+  "destination": "which register gets it",
+  "value": "the number to write",
+  "write": "write it? (1 means yes)",
+  "pc": "program counter",
+  "sp_minus_1": "stack pointer − 1",
+  "address": "the address sent to memory",
+  "pc_plus_1": "program counter + 1",
+  "branch_target": "where a branch would land",
+  "jump_to": "where a jump goes",
+  "next_pc": "the next program counter",
+  "load": "change it? (1 means yes)",
+  "sp_plus_1": "stack pointer + 1",
+  "register": "a register's number",
+  "next_sp": "the next stack pointer",
+  "bad_address": "bad address? (1 means yes)",
+  "halt_instruction": "is it a halt? (1 means yes)",
+  "halt_now": "stop now? (1 means yes)",
+  "code": "the halt code"
+};
+// Which fields each opcode's word holds, and which bits each field is (the Instruction Set page).
+const FIELDS = {"0": ["rd", "ra", "rb", "fn"], "1": ["ra", "rb"], "2": ["rd", "imm8"], "3": ["rd", "imm8"], "4": ["rd", "ra", "off6"], "5": ["rd", "ra", "off6"], "6": ["addr12"], "7": ["addr12"], "8": ["cond", "off9"], "9": [], "10": ["rd"], "11": ["rd"], "12": ["rd"], "13": ["rd"], "14": ["rd", "imm8"], "15": ["imm8"]};
+const FIELD_BITS = {"opcode": [15, 12], "rd": [11, 9], "cond": [11, 9], "ra": [8, 6], "rb": [5, 3], "fn": [2, 0], "imm8": [7, 0], "off6": [5, 0], "off9": [8, 0], "addr12": [11, 0]};
+const FIELD_TITLES = {
+  "opcode": "The job: which kind of instruction this is.",
+  "rd": "A register this instruction works on.",
+  "cond": "Which flags a branch checks.",
+  "ra": "The first register to read.",
+  "rb": "The second register to read.",
+  "fn": "Which sum the ALU does.",
+  "imm8": "A small number written inside the instruction itself.",
+  "off6": "How far from the address in the register, up or down.",
+  "off9": "How far to jump, forwards or back.",
+  "addr12": "The address to go to."
+};
+const SIGNED = { "off6": 6, "off9": 9 };
+const ADDI = 14;
+const DEPTHS = ["line", "instruction", "part", "gate"];
 const FLAGS = ["zero", "negative", "carry", "overflow"];
 const CHANGED = "changed";
 const NO_GATE = "so there is no gate to show.";
+const NOTHING_YET = "(nothing yet)";
+const WALK_NOT_FOUND = "Walk not found.";
+const UNREACHABLE = "Could not reach the Cockpit";
 const HIDDEN_TITLE = "A hidden helper: Pebble made this box for itself (a for loop keeps its end value here). Its name starts with $, which no program could write.";
 
-let path = "cpu";          // the part the zoom panel shows
 let busy = false;          // a button's request is on its way
 let latest = null;         // the last picture drawn
 let latestText = "";       // ... and its JSON, to skip drawing the same picture twice
-let pickedLine = null;     // the Pebble line whose machine code is outlined
-let pickedGate = null;     // {id, path}: the gate "show this gate" highlights, for its own picture only
-let zoomSeq = 0;           // counts zoom requests, so only the newest answer is drawn
 let listing = null;        // the last GET /api/listing
-let listingRows = [];      // one <tr> per word of machine code
-let lineRows = new Map();  // Pebble line -> its machine code rows
-let pebbleRows = [];       // one <tr> per Pebble line
-let marked = { here: null, line: [], picked: [] };
 let fetchingListing = false;
-
-function levelFor(p) {
-  if (p in PATHS) return PATHS[p];
-  let last = p.split(".").pop().replace(/#\d+$/, "");
-  if (/^bit\d+$/.test(last)) last = "bit";
-  else if (/^word\d+$/.test(last)) last = "word";
-  else if (/^r\d$/.test(last)) last = "register";
-  else if (/^(and|or|xor)_bus$/.test(last)) return ["A row of 16 identical gates, one per bit.", "Logic Gates from NAND (gates.md)"];
-  else if (last === "mux_bus") return ["A row of choosers: each picks one of two wires, steered by a select wire.", "Choosing and Decoding (choosing-and-decoding.md)"];
-  return LEVELS[last] || FALLBACK;
-}
+let look = "line";         // how deep the glass looks: one of DEPTHS
+let gatePath = "cpu";      // the part of the circuit the gates depth shows
+let pickedGate = null;     // {id, path}: the gate "show this gate" highlights, for its own picture only
+let lensSeq = 0;           // counts glass requests, so only the newest answer is drawn
+let glowing = new Set();   // what the latest picture changed, as data-glow keys
+let walkKey = null;        // "name:step" of the walk step the glass last followed
+let wandered = false;      // the glass was moved away from where the walk is looking
 
 function el(tag, text, cls) {
   const e = document.createElement(tag);
@@ -279,125 +345,207 @@ function el(tag, text, cls) {
   return e;
 }
 
+function button(text, cls, onclick) {
+  const b = el("button", text, cls);
+  b.type = "button";
+  b.onclick = onclick;
+  return b;
+}
+
 function hex(n) { return "0x" + n.toString(16).toUpperCase().padStart(4, "0"); }
 
 function showError(text) { document.getElementById("error").textContent = text; }
 
-// A highlight and the word "changed", so a change can be seen and read aloud.
-function markChanged(node, changed) {
-  if (!changed) return;
-  node.classList.add(CHANGED);
-  node.append(el("span", CHANGED, "tag"));
-}
-
-// Scroll a pane (not the whole page) so that `row` is in view.
-function keepVisible(box, row) {
-  if (!row) return;
-  const top = row.getBoundingClientRect().top - box.getBoundingClientRect().top + box.scrollTop;
-  if (top < box.scrollTop + 24 || top > box.scrollTop + box.clientHeight - 24) {
+// Scroll the box that holds `node` (never the whole page) so that `node` is in view.
+function keepVisible(node) {
+  if (!node) return;
+  let box = node.parentElement;
+  while (box && box.scrollHeight <= box.clientHeight + 1) box = box.parentElement;
+  if (!box || box === document.body || box === document.documentElement) return;
+  const top = node.getBoundingClientRect().top - box.getBoundingClientRect().top + box.scrollTop;
+  if (top < box.scrollTop + 16 || top + node.offsetHeight > box.scrollTop + box.clientHeight - 16) {
     box.scrollTop = Math.max(0, top - box.clientHeight / 3);
   }
 }
 
-// ---- the zoom panel -------------------------------------------------------
+// ---- talking to the Cockpit -------------------------------------------------
 
-async function zoomTo(next) {
-  if (latest && latest.running) return;
-  const mine = ++zoomSeq;
+function messageOf(text, status) {
+  try { return JSON.parse(text).message || "The Cockpit refused that (" + status + ")."; } catch (e) { return "The Cockpit refused that (" + status + ")."; }
+}
+
+// Send one button's request and draw its answer. A refusal shows its message, then asks
+// for the picture again, to catch up with what is really happening (a stream may have dropped).
+async function send(url, body, onRefused) {
+  if (busy) return;
+  busy = true;
+  setControls();
   try {
-    const response = await fetch("/api/view?path=" + encodeURIComponent(next));
-    if (mine !== zoomSeq) return;  // a newer request has been sent: its answer is the one to draw
-    if (!response.ok) { showError("Could not open " + (next || "the whole circuit") + " (" + response.status + ")"); return; }
-    const view = await response.json();
-    if (mine !== zoomSeq) return;
-    if (latest && latest.running) return;  // play started while we waited: never show stale gates
-    path = next;
-    drawView(view);
-  } catch (e) {
-    showError("Could not reach the Cockpit");
-  }
-}
-
-function zoomFromClick(part) {
-  pickedGate = null;
-  zoomTo(part).then(() => document.getElementById("zoom").scrollIntoView({ behavior: "smooth", block: "start" }));
-}
-
-function drawView(view) {
-  const crumbs = document.getElementById("crumbs");
-  crumbs.replaceChildren();
-  const names = path === "" ? [] : path.split(".");
-  const home = el("button", "whole circuit");
-  home.type = "button";
-  home.onclick = () => { pickedGate = null; zoomTo(""); };
-  crumbs.append(home);
-  names.forEach((name, i) => {
-    crumbs.append(el("span", ">", "muted"));
-    const b = el("button", name);
-    b.type = "button";
-    b.onclick = () => { pickedGate = null; zoomTo(names.slice(0, i + 1).join(".")); };
-    crumbs.append(b);
-  });
-
-  const [words, page] = levelFor(path);
-  const level = document.getElementById("level");
-  level.replaceChildren(el("div", words), el("div", "Read more: " + page, "muted"));
-  if (view.gates.length > 0) level.append(el("div", GATE_LINE[0] + " (" + GATE_LINE[1] + ")", "muted"));
-
-  const parts = document.getElementById("parts");
-  parts.replaceChildren();
-  view.children.forEach((child) => {
-    const li = el("li");
-    const b = el("button", child.name + " - " + child.gate_count + " gates");
-    b.type = "button";
-    b.onclick = () => { pickedGate = null; zoomTo(path ? path + "." + child.name : child.name); };
-    li.append(b);
-    parts.append(li);
-  });
-  if (view.children.length === 0) parts.append(el("li", "No smaller parts here.", "muted"));
-
-  const gates = document.getElementById("gates");
-  gates.replaceChildren();
-  let picked = null;
-  view.gates.forEach((g) => {
-    const row = el("div", undefined, "gate");
-    row.append(el("strong", "gate " + g.id));
-    const wire = (label, id, value) => el("span", label + " w" + id + " = " + value, "wire" + (value ? " on" : ""));
-    row.append(wire("in", g.a, g.value_a), wire("in", g.b, g.value_b), el("span", "NAND ->"), wire("out", g.out, g.value_out));
-    if (pickedGate && g.id === pickedGate.id && path === pickedGate.path) {
-      row.classList.add("picked");
-      row.append(el("span", "the gate that just changed", "tag"));
-      picked = row;
+    const response = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    const text = await response.text();
+    if (!response.ok) {
+      const message = messageOf(text, response.status);
+      if (onRefused) { onRefused(response.status, message); return; }
+      showError(message);
+      refresh();
+      return;
     }
-    gates.append(row);
-  });
-  if (view.gates.length === 0) gates.append(el("div", "No gates directly here, look in the parts above.", "muted"));
-  if (picked) picked.scrollIntoView({ block: "nearest" });
-}
-
-function drawZoom(m) {
-  document.getElementById("playing-note").hidden = !m.running;
-  document.getElementById("inside").hidden = m.running;
-  const showGate = document.getElementById("show-gate");
-  showGate.replaceChildren();
-  // The "just changed" label belongs to the picture that offered the button: any later
-  // move that did not change that same gate takes it away, so it can never go stale.
-  const g = m.last_gate;
-  if (!g || !pickedGate || g.id !== pickedGate.id || g.path !== pickedGate.path) pickedGate = null;
-  if (m.running) return;
-  if (g) {
-    const b = el("button", "show this gate (gate " + g.id + ", now " + g.value + ", in " + g.path + ")", "quiet");
-    b.type = "button";
-    b.onclick = () => { pickedGate = { id: g.id, path: g.path }; zoomTo(g.path); };
-    showGate.append(b);
-  } else if (m.note && m.note.endsWith(NO_GATE)) {
-    // A gate step that ended on a clock wire (or an instruction's end): say why there is no button.
-    showGate.append(el("p", m.note, "muted"));
+    showError("");
+    drawText(text);
+  } catch (e) {
+    showError(UNREACHABLE);
+  } finally {
+    busy = false;
+    setControls();
   }
-  zoomTo(path);
 }
 
-// ---- the machine code and the Pebble program -------------------------------
+// Read the picture without moving anything; used at the start and after the stream reconnects.
+async function refresh() {
+  try {
+    const response = await fetch("/api/machine");
+    if (response.ok) drawText(await response.text());
+  } catch (e) {
+    showError(UNREACHABLE);
+  }
+}
+
+function listen() {
+  if (!window.EventSource) return;
+  const events = new EventSource("/api/events");
+  events.addEventListener("machine", (e) => drawText(e.data));
+  // After a dropped stream reconnects, catch up with anything missed in between.
+  events.addEventListener("open", refresh);
+}
+
+// ---- walks ----------------------------------------------------------------
+
+function openWalk(name, step, fromLink) {
+  send("/api/walk", { name: name, step: step }, fromLink ? () => { showWalks(WALK_NOT_FOUND); refresh(); } : undefined);
+}
+
+function showWalks(note) {
+  document.getElementById("walks-note").textContent = note || "";
+  document.getElementById("walks").hidden = false;
+  document.getElementById("program").hidden = true;
+  document.getElementById("glass").hidden = true;
+}
+
+function hideWalks() {
+  document.getElementById("walks").hidden = true;
+  document.getElementById("program").hidden = false;
+  document.getElementById("glass").hidden = false;
+}
+
+async function loadWalks() {
+  try {
+    const response = await fetch("/api/walks");
+    if (!response.ok) return;
+    const list = document.getElementById("walk-list");
+    (await response.json()).forEach((w) => {
+      const li = el("li");
+      li.append(button(w.title, "", () => openWalk(w.name, 0, false)));
+      list.append(li);
+    });
+  } catch (e) {
+    showError(UNREACHABLE);
+  }
+}
+
+// A new walk step moves the glass to the walk's depth; other pictures leave the glass alone.
+function followWalk(m) {
+  const w = m.walk;
+  if (!w) {
+    if (walkKey !== null && location.hash) history.replaceState(null, "", location.pathname + location.search);
+    walkKey = null;
+    wandered = false;
+    return;
+  }
+  const key = w.name + ":" + w.step;
+  if (key === walkKey) return;
+  walkKey = key;
+  wandered = false;
+  look = w.look;
+  pickedGate = null;
+  gatePath = m.parts.instruction;
+  if (w.show === "last_gate" && m.last_gate) {
+    gatePath = m.last_gate.path;
+    pickedGate = { id: m.last_gate.id, path: m.last_gate.path };
+  }
+  history.replaceState(null, "", "#walk=" + encodeURIComponent(w.name));
+  hideWalks();
+}
+
+function drawWalk(m) {
+  const w = m.walk;
+  document.getElementById("walk-bar").hidden = !w;
+  if (!w) return;
+  const away = w.off_script || (wandered && !w.trying);
+  document.getElementById("walk-title").textContent = w.title;
+  document.getElementById("walk-place").textContent = w.trying ? "Now you try" : "Step " + (w.step + 1) + " of " + w.count;
+  const say = document.getElementById("walk-say");
+  say.textContent = w.trying ? "" : (w.say || "");
+  say.hidden = w.trying;
+  say.classList.toggle("dim", away);
+  document.getElementById("try").hidden = !w.trying;
+  document.getElementById("try-task").textContent = w.task || "";
+  document.getElementById("try-cheer").hidden = !w.done;
+  document.getElementById("walk-next").hidden = w.trying;
+  document.getElementById("back-to-walk").hidden = !away;
+}
+
+// Outline the one thing a walk step points at, and scroll its own box to it.
+function outline(show, m) {
+  let target = null;
+  if (show === "pebble.line") target = document.querySelector("#pebble tr.here");
+  else if (show === "variables" || show === "memory") target = document.getElementById("variables-box");
+  else if (show === "stack") target = document.getElementById("stack-box");
+  else if (show === "output") target = document.getElementById("output-box");
+  else if (show === "registers") target = document.getElementById("regs");
+  else if (show === "flags") target = document.getElementById("flag-lamps");
+  else if (show === "happened") target = document.getElementById("said");
+  else if (show === "instruction") target = document.getElementById("the-instruction") || document.querySelector("#pebble tr.next");
+  else if (show === "last_gate" && m.last_gate) target = document.querySelector(".gate.picked");
+  if (!target) return;
+  target.classList.add("look-here");
+  keepVisible(target);
+}
+
+function outlineShow(m) {
+  document.querySelectorAll(".look-here").forEach((n) => n.classList.remove("look-here"));
+  const w = m.walk;
+  if (w && w.show && !w.off_script && !wandered) outline(w.show, m);
+}
+
+// ---- the glow: only the latest picture's changes ----------------------------------
+
+function markChanged(node) {
+  node.classList.add(CHANGED);
+  node.append(el("span", CHANGED, "tag"));
+}
+
+function glowIn(root) {
+  root.querySelectorAll("[data-glow]").forEach((node) => {
+    if (glowing.has(node.dataset.glow) && !node.classList.contains(CHANGED)) markChanged(node);
+  });
+}
+
+function drawChanged(m) {
+  document.querySelectorAll("." + CHANGED).forEach((node) => {
+    node.classList.remove(CHANGED);
+    node.querySelectorAll(":scope > .tag").forEach((t) => t.remove());
+  });
+  const c = m.changed;
+  glowing = new Set();
+  c.registers.forEach((i) => glowing.add("r" + i));
+  c.flags.forEach((f) => glowing.add("flag:" + f));
+  c.memory.forEach((a) => glowing.add("mem:" + a));
+  if (c.pc) glowing.add("pc");
+  if (c.sp) glowing.add("sp");
+  glowIn(document);
+}
+
+// ---- the program pane -------------------------------------------------------
 
 // Fetch the listing for picture m. While one fetch is out, later calls are dropped, and
 // the check when it lands catches anything they would have done.
@@ -407,12 +555,9 @@ async function fetchListing(m) {
   const askedFor = m.program;
   try {
     const response = await fetch("/api/listing");
-    if (response.ok) {
-      listing = await response.json();
-      drawListing();
-    }
+    if (response.ok) listing = await response.json();
   } catch (e) {
-    showError("Could not reach the Cockpit");
+    showError(UNREACHABLE);
   } finally {
     fetchingListing = false;
   }
@@ -421,113 +566,69 @@ async function fetchListing(m) {
   if (listingIsStale(latest)) {
     if (latest.program !== askedFor) fetchListing(latest);
   } else {
-    moveMarks(latest);
+    drawProgram(latest);
+    if (look === "line") drawLens(latest);
   }
 }
 
-// The listing is drawn once per program; later pictures only move its marks. Each load
-// gives the program a new number, and the listing says which number it was made for.
+// The listing is fetched once per program. Each load gives the program a new number,
+// and the listing says which number it was made for.
 function listingIsStale(m) {
   return !listing || listing.program !== m.program;
 }
 
-function drawListing() {
-  const body = document.getElementById("listing");
-  body.replaceChildren();
-  listingRows = [];
-  lineRows = new Map();
-  marked = { here: null, line: [], picked: [] };
-  listing.rows.forEach((r) => {
-    const row = el("tr", undefined, "clickable");
-    row.title = "Click to look at word " + r.address + " in the RAM";
-    const text = (r.labels.length ? r.labels.join(": ") + ": " : "") + (r.first ? r.text : "");
-    row.append(el("td", String(r.address)), el("td", hex(r.word)), el("td", r.pebble_line === null ? "" : String(r.pebble_line)), el("td", text, "code"));
-    row.onclick = () => zoomFromClick("ram.word" + r.address);
-    body.append(row);
-    listingRows.push(row);
-    if (r.pebble_line !== null) {
-      if (!lineRows.has(r.pebble_line)) lineRows.set(r.pebble_line, []);
-      lineRows.get(r.pebble_line).push(row);
-    }
-  });
-  drawPebbleLines();
+function rowsOfLine(line) {
+  return listing && !listingIsStale(latest) ? listing.rows.filter((r) => r.pebble_line === line) : [];
 }
 
-function drawPebbleLines() {
+function codeText(r) {
+  return (r.labels.length ? r.labels.join(": ") + ": " : "") + r.text;
+}
+
+function instructionRow(r, m, sub) {
+  const next = !m.halted && r.address === m.instruction.address;
+  const row = el("tr", undefined, (sub ? "sub" : "") + (next ? " next" : ""));
+  row.append(el("td", sub ? "" : (next ? ">" : ""), "mark"), el("td", (sub && next ? "> " : "") + r.address, "num"), el("td", codeText(r)));
+  return row;
+}
+
+function drawProgram(m) {
   const body = document.getElementById("pebble");
   body.replaceChildren();
-  pebbleRows = [];
-  if (pickedLine !== null && !lineRows.has(pickedLine)) pickedLine = null;
-  const lines = listing && listing.pebble ? listing.pebble : [];
-  lines.forEach((text, i) => {
-    const n = i + 1;
-    const row = el("tr", undefined, "clickable");
-    const number = el("button", String(n), "link");
-    number.type = "button";
-    number.setAttribute("aria-label", "Outline the machine code of line " + n);
-    row.append(el("td"), el("td", text, "code"));
-    row.firstChild.append(number);
-    row.onclick = () => pickLine(n);
-    body.append(row);
-    pebbleRows.push(row);
-  });
-}
-
-function pickLine(n) {
-  pickedLine = pickedLine === n ? null : n;
-  if (latest) moveMarks(latest);
-  const rows = pickedLine === null ? [] : (lineRows.get(pickedLine) || []);
-  keepVisible(document.getElementById("listing-scroll"), rows[0]);
-}
-
-function moveMarks(m) {
-  marked.line.forEach((r) => r.classList.remove("line"));
-  marked.picked.forEach((r) => r.classList.remove("picked"));
-  if (marked.here) marked.here.classList.remove("here");
-  pebbleRows.forEach((r) => r.classList.remove("here", "picked"));
-
-  const running = m.pebble && !m.halted ? m.pebble.line : null;
-  marked.line = running === null ? [] : (lineRows.get(running) || []);
-  marked.line.forEach((r) => r.classList.add("line"));
-  marked.picked = pickedLine === null ? [] : (lineRows.get(pickedLine) || []);
-  marked.picked.forEach((r) => r.classList.add("picked"));
-  // Once halted nothing runs next, so no word is marked.
-  marked.here = m.halted ? null : (listingRows[m.instruction.address] || null);
-  if (marked.here) marked.here.classList.add("here");
-  keepVisible(document.getElementById("listing-scroll"), marked.here);
-
-  const blamed = m.pebble ? m.pebble.line : null;
-  if (blamed !== null && pebbleRows[blamed - 1]) {
-    pebbleRows[blamed - 1].classList.add("here");
-    keepVisible(document.getElementById("pebble-scroll"), pebbleRows[blamed - 1]);
+  const p = m.pebble;
+  let mark = null;
+  if (p) {
+    p.source.forEach((text, i) => {
+      const n = i + 1;
+      const row = el("tr");
+      const here = n === p.line;
+      row.append(el("td", here ? "▶" : "", "mark"), el("td", String(n), "num"), el("td", text));
+      if (here) { row.classList.add("here"); mark = row; }
+      body.append(row);
+      if (here && !m.halted) {
+        rowsOfLine(n).forEach((r) => {
+          const sub = instructionRow(r, m, true);
+          if (sub.classList.contains("next")) mark = sub;
+          body.append(sub);
+        });
+      }
+    });
+  } else if (listing && !listingIsStale(m)) {
+    listing.rows.forEach((r) => {
+      const row = instructionRow(r, m, false);
+      if (row.classList.contains("next")) mark = row;
+      body.append(row);
+    });
   }
-  if (pickedLine !== null && pebbleRows[pickedLine - 1]) pebbleRows[pickedLine - 1].classList.add("picked");
-}
-
-function drawCode(m) {
-  const current = document.getElementById("current");
-  current.replaceChildren();
-  const i = m.instruction;
-  if (m.halted) {
-    current.append("The machine has halted, so no instruction is next. pc is " + m.pc + ".");
-  } else if (i.word === null) {
-    current.append("Current instruction: address " + i.address + " is outside memory.");
-  } else {
-    current.append("Current instruction: ");
-    const b = el("button", i.text + " at address " + i.address, "link");
-    b.type = "button";
-    b.title = "Zoom to " + m.parts.instruction + ", the part that does its main work";
-    b.onclick = () => zoomFromClick(m.parts.instruction);
-    current.append(b);
-  }
-  if (listingIsStale(m)) fetchListing(m); else moveMarks(m);
+  keepVisible(mark);
+  drawPebbleNote(m);
 }
 
 function drawPebbleNote(m) {
   const note = document.getElementById("pebble-note");
   const p = m.pebble;
   if (!p) {
-    note.textContent = "This program is written in assembly, so there is no Pebble to show. Pick an example, or write some Pebble in the box below and press Load Pebble.";
+    note.textContent = "This program is written in assembly, so there are no Pebble lines: here is its machine code, with > on the next instruction.";
   } else if (m.halted) {
     note.textContent = p.message + "." + (p.line ? " The marked line is the one to blame." : "");
   } else if (m.running) {
@@ -535,87 +636,31 @@ function drawPebbleNote(m) {
   } else if (p.line === null) {
     note.textContent = "Inside a ready-made routine (multiply, divide or print). It has no Pebble line of its own.";
   } else {
-    note.textContent = "Running line " + p.line + ". One line is many instructions: its machine code is shaded.";
+    note.textContent = "Running line " + p.line + ". One line is many instructions: they are listed under it, and > marks the next one.";
   }
 }
 
-// ---- the dials ------------------------------------------------------------
-
-function drawStatus(m) {
-  const status = document.getElementById("status");
-  status.replaceChildren(el("span", m.running ? "playing" : "paused", "lamp" + (m.running ? " on" : "")));
-  if (!m.running) {
-    status.append(
-      el("span", "next beat: " + m.phase, "lamp"),
-      el("span", m.at_boundary ? "between instructions" : "part-way through an instruction", "lamp" + (m.at_boundary ? "" : " on")),
-    );
-  }
-  if (m.halted) {
-    const why = m.fault ? m.fault.toLowerCase().replaceAll("_", " ") : (m.halt_code === 0 ? "finished" : "stopped");
-    status.append(el("span", "halted: " + why + " (code " + m.halt_code + ")", "lamp on"));
-  }
-  // A no-gate note is shown once, in the zoom panel where the gate button would be.
-  const noGate = m.note && m.note.endsWith(NO_GATE);
-  document.getElementById("note").textContent = noGate ? "" : (m.note || "");
-}
-
-function drawRegisters(m) {
-  const registers = document.getElementById("registers");
-  registers.replaceChildren();
-  const box = (name, value, part, changed) => {
-    const b = el("button", undefined, "reg");
-    b.type = "button";
-    b.title = "Zoom to " + part;
-    b.append(el("strong", name + " "), document.createTextNode(value + " (" + hex(value) + ")"));
-    markChanged(b, changed);
-    b.onclick = () => zoomFromClick(part);
-    registers.append(b);
-  };
-  m.registers.forEach((value, i) => box("r" + i, value, m.parts.registers[i], m.changed.registers.includes(i)));
-  box("pc", m.pc, m.parts.pc, m.changed.pc);
-  box("sp", m.sp, m.parts.sp, m.changed.sp);
-
-  const flags = document.getElementById("flags");
-  flags.replaceChildren();
-  const name = el("button", "flags:", "link");
-  name.type = "button";
-  name.title = "Zoom to " + m.parts.flags;
-  name.onclick = () => zoomFromClick(m.parts.flags);
-  flags.append(name);
-  FLAGS.forEach((flag) => {
-    const lamp = el("span", flag + " " + m.flags[flag], "lamp" + (m.flags[flag] ? " on" : ""));
-    markChanged(lamp, m.changed.flags.includes(flag));
-    flags.append(lamp);
-  });
-}
-
-function cellRow(cells, part, changed) {
+function cellRow(cells, part, glowKey) {
   const row = el("tr", undefined, "clickable");
-  row.title = "Click to look at this word in the RAM (" + part + ")";
+  row.title = "Click to look at the gates of this word of memory (" + part + ")";
   cells.forEach((c) => row.append(typeof c === "string" ? el("td", c) : c));
-  if (changed) {
-    row.classList.add(CHANGED);
-    row.lastChild.append(el("span", CHANGED, "tag"));
-  }
-  row.onclick = () => zoomFromClick(part);
+  row.dataset.glow = glowKey;
+  row.onclick = () => gates(part);
   return row;
 }
 
 function drawStack(m) {
-  const stack = document.getElementById("stack");
-  stack.replaceChildren();
+  const box = document.getElementById("stack");
+  box.replaceChildren();
   if (m.stack.length === 0) {
-    const row = el("tr");
-    const td = el("td", "Empty: sp is at the very end of memory, where it starts.", "muted");
-    td.colSpan = 2;
-    row.append(td);
-    stack.append(row);
+    box.append(el("p", "Empty: sp is at the very end of memory, where it starts.", "muted"));
     return;
   }
-  m.stack.forEach((cell, i) => {
-    const where = (i === 0 ? "sp > " : "") + cell.address;
-    stack.append(cellRow([where, cell.word + " (" + hex(cell.word) + ")"], cell.part, m.changed.memory.includes(cell.address)));
-  });
+  const table = el("table");
+  const body = el("tbody");
+  m.stack.forEach((cell) => body.append(cellRow([cell.address + ": " + cell.word], cell.part, "mem:" + cell.address)));
+  table.append(body);
+  box.append(table);
 }
 
 function drawVariables(m) {
@@ -632,78 +677,386 @@ function drawVariables(m) {
   }
   box.append(el("p", (v.function === null ? "The top level" : "Inside " + v.function) + ", frame pointer r7 = " + v.frame_pointer + ".", "muted"));
   const table = el("table");
-  const head = el("thead");
-  const hr = el("tr");
-  ["name", "value", "address"].forEach((h) => hr.append(el("th", h)));
-  head.append(hr);
   const body = el("tbody");
   v.names.forEach((n) => {
     const name = el("td", n.name + (n.kind === "parameter" ? " (parameter)" : ""));
-    const row = cellRow([name, String(n.value), String(n.address)], n.part, m.changed.memory.includes(n.address));
+    const row = cellRow([name, String(n.value), "at " + n.address], n.part, "mem:" + n.address);
     if (n.hidden) {
       row.classList.add("dim");
       row.title = HIDDEN_TITLE;
     }
     body.append(row);
   });
-  if (v.names.length === 0) {
-    const row = el("tr");
-    row.append(el("td", "No variables here.", "muted"));
-    body.append(row);
-  }
-  table.append(head, body);
+  if (v.names.length === 0) body.append(el("tr", "No variables here.", "muted"));
+  table.append(body);
   box.append(table);
 }
 
-// ---- drawing a picture, and the controls ------------------------------------
+// ---- the magnifying glass -----------------------------------------------------
+
+function partWords(path) { return PART_WORDS[path] || path.split(".").pop(); }
+
+// Move the glass (never the machine). During a walk's steps, looking somewhere else is wandering off.
+function setLook(depth, path) {
+  look = depth;
+  if (path !== undefined) gatePath = path;
+  const w = latest && latest.walk;
+  wandered = Boolean(w && !w.trying && look !== w.look);
+  if (latest) { drawWalk(latest); drawGlass(latest); drawStep(latest); setControls(); }
+}
+
+function goDeeper() {
+  const next = DEPTHS[DEPTHS.indexOf(look) + 1];
+  if (!next) return;
+  pickedGate = null;
+  setLook(next, next === "gate" ? latest.parts.instruction : undefined);
+}
+
+function gates(path) {
+  pickedGate = null;
+  setLook("gate", path);
+}
+
+function lookCloser() {
+  return button("Look closer ▾", "quiet", goDeeper);
+}
+
+function drawTrail(m) {
+  const trail = document.getElementById("trail");
+  trail.replaceChildren();
+  const p = m.pebble;
+  const names = {
+    line: p ? (p.line === null ? "Ready-made routine" : "Line " + p.line) : "Machine code",
+    instruction: m.halted ? "halted" : m.instruction.text,
+    part: partWords(m.parts.instruction),
+    gate: "gates",
+  };
+  const deepest = DEPTHS.indexOf(look);
+  DEPTHS.slice(0, deepest + 1).forEach((depth, i) => {
+    if (i > 0) trail.append(el("span", "›", "muted"));
+    const crumb = button(names[depth], "", () => { pickedGate = null; setLook(depth, depth === "gate" ? m.parts.instruction : undefined); });
+    if (depth === look && look !== "gate") crumb.setAttribute("aria-current", "step");
+    trail.append(crumb);
+  });
+  if (look !== "gate") return;
+  // Inside the gates, every part on the way down is a crumb too.
+  const base = m.parts.instruction;
+  const under = gatePath === base || gatePath.startsWith(base + ".");
+  const start = under ? base : "";
+  const rest = (under ? gatePath.slice(base.length) : gatePath).split(".").filter((s) => s);
+  let at = start;
+  rest.forEach((name) => {
+    at = at ? at + "." + name : name;
+    const to = at;
+    trail.append(el("span", "›", "muted"));
+    trail.append(button(name, "", () => { pickedGate = null; setLook("gate", to); }));
+  });
+  trail.lastChild.setAttribute("aria-current", "step");
+}
+
+function drawGlass(m) {
+  document.getElementById("playing-note").hidden = !m.running;
+  document.getElementById("lens").hidden = m.running;
+  // The "just changed" label belongs to the picture that offered the button: any later
+  // move that did not change that same gate takes it away, so it can never go stale.
+  const g = m.last_gate;
+  if (!g || !pickedGate || g.id !== pickedGate.id || g.path !== pickedGate.path) pickedGate = null;
+  drawTrail(m);
+  if (m.running) { lensSeq++; return; }
+  drawLens(m);
+}
+
+function drawLens(m) {
+  const lens = document.getElementById("lens");
+  lens.replaceChildren();
+  drawShowGate(m, lens);
+  if (look === "line") lensLine(m, lens);
+  else if (look === "instruction") lensInstruction(m, lens);
+  else if (look === "part") lensPart(m, lens);
+  else lensGates(m, lens);
+  glowIn(lens);
+  outlineShow(m);
+}
+
+function drawShowGate(m, lens) {
+  const g = m.last_gate;
+  const slot = el("div");
+  const showGate = slot;
+  if (g) {
+    showGate.append(button("show this gate (gate " + g.id + ", now " + g.value + ", in " + g.path + ")", "quiet", () => {
+      pickedGate = { id: g.id, path: g.path };
+      setLook("gate", g.path);
+    }));
+  } else if (look === "gate" && m.note && m.note.endsWith(NO_GATE) && m.note !== m.happened) {
+    // A gate step that ended on a clock wire (or an instruction's end): say why there is no button.
+    showGate.append(el("p", m.note, "muted"));
+  }
+  if (slot.childNodes.length) lens.append(slot);
+}
+
+function lensLine(m, lens) {
+  lensSeq++;
+  const p = m.pebble;
+  if (!p) {
+    lens.append(el("div", "Machine code", "big"), el("p", "This program is machine code, so it has no Pebble lines. Look closer to see its next instruction."), lookCloser());
+    return;
+  }
+  if (m.halted) {
+    lens.append(el("div", p.message + ".", "big"));
+    return;
+  }
+  if (p.line === null) {
+    lens.append(el("div", "A ready-made routine", "big"), el("p", "Inside a ready-made routine (multiply, divide or print). It has no Pebble line of its own. Look closer to see its next instruction."), lookCloser());
+    return;
+  }
+  const big = button("Line " + p.line + ":  " + p.source[p.line - 1].trim(), "big", goDeeper);
+  big.title = "Look closer";
+  const rows = rowsOfLine(p.line);
+  lens.append(big);
+  if (rows.length) {
+    lens.append(el("p", "This one line is " + rows.length + " tiny instruction" + (rows.length === 1 ? "" : "s") + ". The next one to run is marked >."));
+    const table = el("table");
+    const body = el("tbody");
+    rows.forEach((r) => {
+      const row = instructionRow(r, m, false);
+      row.classList.add("clickable");
+      row.onclick = goDeeper;
+      body.append(row);
+    });
+    table.append(body);
+    lens.append(table);
+  }
+  lens.append(lookCloser());
+}
+
+function fieldValue(name, value, op, i) {
+  if (name === "opcode") return i.text.split(/\s+/)[0];
+  if (name === "rd" || name === "ra" || name === "rb") return "r" + value;
+  const width = SIGNED[name] || (name === "imm8" && op === ADDI ? 8 : 0);
+  if (width && value >= 1 << (width - 1)) return String(value - (1 << width));
+  return String(value);
+}
+
+function drawFields(i, lens) {
+  const op = i.word >> 12;
+  const bits = i.word.toString(2).padStart(16, "0");
+  const groups = [];
+  let next = 15;
+  ["opcode", ...FIELDS[String(op)]].forEach((name) => {
+    const [hi, lo] = FIELD_BITS[name];
+    if (hi < next) groups.push([null, next, hi + 1]);
+    groups.push([name, hi, lo]);
+    next = lo - 1;
+  });
+  if (next >= 0) groups.push([null, next, 0]);
+  const box = el("div", undefined, "fields");
+  groups.forEach(([name, hi, lo]) => {
+    const column = el("div");
+    column.style.display = "grid";
+    const value = parseInt(bits.slice(15 - hi, 16 - lo), 2);
+    column.append(
+      el("span", bits.slice(15 - hi, 16 - lo), "bits"),
+      el("span", name === null ? "not used" : (name === "opcode" ? "job" : name), "name muted"),
+      el("span", name === null ? "" : fieldValue(name, value, op, i), "value"),
+    );
+    if (name) column.title = FIELD_TITLES[name];
+    box.append(column);
+  });
+  lens.append(box);
+}
+
+function drawRegisters(m, lens) {
+  const regs = el("div", undefined, "regs");
+  regs.id = "regs";
+  const box = (name, value, part, key) => {
+    const b = button(name + " " + value, "reg", () => gates(part));
+    b.title = "Look at the gates of " + name + " (" + hex(value) + ")";
+    b.dataset.glow = key;
+    regs.append(b);
+  };
+  m.registers.forEach((value, i) => box("r" + i, value, m.parts.registers[i], "r" + i));
+  box("pc", m.pc, m.parts.pc, "pc");
+  box("sp", m.sp, m.parts.sp, "sp");
+  const flags = el("div", undefined, "regs");
+  flags.id = "flag-lamps";
+  FLAGS.forEach((flag) => {
+    const lamp = el("span", flag + " " + m.flags[flag], "lamp" + (m.flags[flag] ? " on" : ""));
+    lamp.dataset.glow = "flag:" + flag;
+    flags.append(lamp);
+  });
+  lens.append(regs, flags);
+}
+
+function lensInstruction(m, lens) {
+  lensSeq++;
+  const i = m.instruction;
+  if (m.halted) {
+    lens.append(el("div", "Halted", "big"), el("p", "The machine has halted, so no instruction is next. pc is " + m.pc + "."));
+  } else if (i.word === null) {
+    lens.append(el("div", "Outside memory", "big"), el("p", "The next instruction's address, " + i.address + ", is outside memory."));
+  } else {
+    const big = button(i.text, "big", goDeeper);
+    big.id = "the-instruction";
+    big.title = "Look closer: the part of the CPU that does this instruction's main work";
+    lens.append(big, el("p", "the instruction at address " + i.address + (m.at_boundary ? ", next to run" : ", part-way through"), "muted"));
+    drawFields(i, lens);
+  }
+  drawRegisters(m, lens);
+  if (!m.halted) lens.append(lookCloser());
+}
+
+async function lensPart(m, lens) {
+  const path = m.parts.instruction;
+  lens.append(el("p", "Next beat: " + m.phase + ". Every instruction takes two beats: a fetch, then an execute.", "muted"));
+  const holder = el("div");
+  lens.append(holder);
+  const mine = ++lensSeq;
+  try {
+    const response = await fetch("/api/part?path=" + encodeURIComponent(path));
+    if (mine !== lensSeq) return;
+    if (!response.ok) {
+      holder.append(el("p", "No one part of the CPU does this. Look closer to see all of the CPU's gates."), lookCloser());
+      return;
+    }
+    const part = await response.json();
+    if (mine !== lensSeq) return;
+    const side = (wires) => {
+      const column = el("div", undefined, "wires");
+      wires.forEach((w) => {
+        const box = el("div", undefined, "wirebox");
+        box.title = w.name;
+        box.append(el("span", (TAP_WORDS[w.name] || w.name) + " "), el("strong", String(w.value)));
+        column.append(box);
+      });
+      return column;
+    };
+    const middle = button(part.name, "partbox", goDeeper);
+    middle.title = "Look closer: the gates inside the " + part.name;
+    const flow = el("div", undefined, "flow");
+    flow.append(side(part.inputs), middle, side(part.outputs));
+    holder.append(el("p", "What goes into the " + part.name + " and what comes out, read off its real wires:"), flow, lookCloser());
+    outlineShow(latest);
+  } catch (e) {
+    showError(UNREACHABLE);
+  }
+}
+
+function levelFor(p) {
+  if (p in PATHS) return PATHS[p];
+  let last = p.split(".").pop().replace(/#\d+$/, "");
+  if (/^bit\d+$/.test(last)) last = "bit";
+  else if (/^word\d+$/.test(last)) last = "word";
+  else if (/^r\d$/.test(last)) last = "register";
+  else if (/^(and|or|xor)_bus$/.test(last)) return ["A row of 16 identical gates, one per bit.", "Logic Gates from NAND (gates.md)"];
+  else if (last === "mux_bus") return ["A row of choosers: each picks one of two wires, steered by a select wire.", "Choosing and Decoding (choosing-and-decoding.md)"];
+  return LEVELS[last] || FALLBACK;
+}
+
+async function lensGates(m, lens) {
+  const path = gatePath;
+  const holder = el("div");
+  lens.append(holder);
+  const mine = ++lensSeq;
+  try {
+    const response = await fetch("/api/view?path=" + encodeURIComponent(path));
+    if (mine !== lensSeq) return;
+    if (!response.ok) { holder.append(el("p", "There is no part called " + path + ".", "muted")); return; }
+    const view = await response.json();
+    if (mine !== lensSeq) return;
+    const [words, page] = levelFor(path);
+    holder.append(el("p", words), el("p", "Read more: " + page, "muted"));
+    if (view.gates.length > 0) holder.append(el("p", GATE_LINE[0] + " (" + GATE_LINE[1] + ")", "muted"));
+    holder.append(el("h3", "Parts inside"));
+    const parts = el("ul", undefined, "parts");
+    view.children.forEach((child) => {
+      const li = el("li");
+      li.append(button(child.name + " - " + child.gate_count + " gates", "", () => { pickedGate = null; setLook("gate", path ? path + "." + child.name : child.name); }));
+      parts.append(li);
+    });
+    if (view.children.length === 0) parts.append(el("li", "No smaller parts here.", "muted"));
+    holder.append(parts, el("h3", "Gates here"));
+    view.gates.forEach((g) => {
+      const row = el("div", undefined, "gate");
+      row.append(el("strong", "gate " + g.id));
+      const wire = (label, id, value) => el("span", label + " w" + id + " = " + value, "wire" + (value ? " on" : ""));
+      row.append(wire("in", g.a, g.value_a), wire("in", g.b, g.value_b), el("span", "NAND ->"), wire("out", g.out, g.value_out));
+      if (pickedGate && g.id === pickedGate.id && path === pickedGate.path) {
+        row.classList.add("picked");
+        row.append(el("span", "the gate that just changed", "tag"));
+      }
+      holder.append(row);
+    });
+    if (view.gates.length === 0) holder.append(el("p", "No gates directly here, look in the parts above.", "muted"));
+    outlineShow(latest);
+    keepVisible(holder.querySelector(".gate.picked"));
+  } catch (e) {
+    showError(UNREACHABLE);
+  }
+}
+
+// ---- drawing a picture, and the controls ---------------------------------------
+
+function drawStatus(m) {
+  const status = document.getElementById("status");
+  status.replaceChildren(el("span", m.running ? "playing" : "paused", "lamp" + (m.running ? " on" : "")));
+  if (m.halted) {
+    const why = m.fault ? m.fault.toLowerCase().replaceAll("_", " ") : (m.halt_code === 0 ? "finished" : "stopped");
+    status.append(el("span", "halted: " + why + " (code " + m.halt_code + ")", "lamp on"));
+  }
+}
+
+function drawSaid(m) {
+  document.getElementById("happened").textContent = m.happened || NOTHING_YET;
+  // A no-gate note is the same sentence as `happened`, and the glass has its own spot for one.
+  const noGate = m.note && m.note.endsWith(NO_GATE);
+  const extra = m.note && m.note !== m.happened && !noGate ? m.note : "";
+  document.getElementById("note").textContent = extra;
+}
+
+function drawStep(m) {
+  const step = document.getElementById("step");
+  step.textContent = m.steps[look];
+}
 
 function setControls() {
   const running = latest ? latest.running : false;
   document.querySelectorAll("button.step").forEach((b) => { b.disabled = busy || running; });
+  document.getElementById("step-into").disabled = busy || running;
   document.getElementById("play").disabled = busy || running;
   document.getElementById("pause").disabled = busy || !running;
   document.getElementById("count").disabled = busy || running;
-  ["load-example", "load-pebble", "load"].forEach((id) => { document.getElementById(id).disabled = busy; });
+  ["load-example", "load-pebble", "load", "walk-next", "walk-back", "back-to-walk", "walk-leave", "explore"].forEach((id) => { document.getElementById(id).disabled = busy; });
+  const w = latest && latest.walk;
+  if (w && w.step === 0) document.getElementById("walk-back").disabled = true;
+  document.getElementById("step-into").hidden = !(w && w.trying && w.step_kind === "into" && look === "line");
+}
+
+// A new program starts the glass at its top depth; a walk sets its own.
+function startLook(m) {
+  look = m.pebble ? "line" : "instruction";
+  gatePath = m.parts.instruction;
+  pickedGate = null;
 }
 
 function drawText(text) {
   if (text === latestText) return;  // a button's answer and its event carry the same picture
   latestText = text;
   const m = JSON.parse(text);
+  const before = latest;
   latest = m;
+  if (!m.walk && (!before || before.program !== m.program)) startLook(m);
+  followWalk(m);
   drawStatus(m);
-  drawRegisters(m);
-  drawStack(m);
+  drawSaid(m);
+  drawWalk(m);
   drawVariables(m);
-  document.getElementById("output").textContent = m.output || "(nothing yet)";
-  drawPebbleNote(m);
-  drawCode(m);
-  drawZoom(m);
+  drawStack(m);
+  document.getElementById("output").textContent = m.output || NOTHING_YET;
+  if (listingIsStale(m)) fetchListing(m); else drawProgram(m);
+  drawGlass(m);
+  drawStep(m);
+  drawChanged(m);
   setControls();
-}
-
-async function send(url, body) {
-  if (busy) return;
-  busy = true;
-  setControls();
-  try {
-    const response = await fetch(url, { method: body === undefined ? "GET" : "POST", headers: { "Content-Type": "application/json" }, body: body === undefined ? undefined : JSON.stringify(body) });
-    const text = await response.text();
-    if (!response.ok) {
-      let message = "The Cockpit refused that (" + response.status + ").";
-      try { message = JSON.parse(text).message || message; } catch (e) { /* keep default */ }
-      showError(message);
-      refresh();  // e.g. a 409 while the stream had dropped: catch up with what is really happening
-      return;
-    }
-    showError("");
-    drawText(text);
-  } catch (e) {
-    showError("Could not reach the Cockpit");
-  } finally {
-    busy = false;
-    setControls();
-  }
 }
 
 async function loadExamples() {
@@ -717,31 +1070,27 @@ async function loadExamples() {
       option.value = x.name;
       select.append(option);
     });
+    const own = el("option", "Write your own...");
+    own.value = "*own";
+    select.append(own);
+    select.onchange = () => {
+      if (select.value !== "*own") return;
+      select.value = "";
+      openExpert(true);
+    };
     document.getElementById("load-example").onclick = () => {
       const chosen = examples.find((x) => x.name === select.value);
-      if (chosen) { pickedLine = null; send("/api/pebble", { source: chosen.source }); }
+      if (chosen) send("/api/pebble", { source: chosen.source });
     };
   } catch (e) {
-    showError("Could not reach the Cockpit");
+    showError(UNREACHABLE);
   }
 }
 
-// Read the picture without moving anything; used at the start and after the stream reconnects.
-async function refresh() {
-  try {
-    const response = await fetch("/api/machine");
-    if (response.ok) drawText(await response.text());
-  } catch (e) {
-    showError("Could not reach the Cockpit");
-  }
-}
-
-function listen() {
-  if (!window.EventSource) return;
-  const events = new EventSource("/api/events");
-  events.addEventListener("machine", (e) => drawText(e.data));
-  // After a dropped stream reconnects, catch up with anything missed in between.
-  events.addEventListener("open", refresh);
+function openExpert(open, focusSource) {
+  document.getElementById("expert").hidden = !open;
+  document.getElementById("expert-button").setAttribute("aria-expanded", String(open));
+  if (open && focusSource !== false) document.getElementById("source").focus();
 }
 
 document.querySelectorAll("button[data-size]").forEach((b) => {
@@ -751,15 +1100,40 @@ document.querySelectorAll("button[data-size]").forEach((b) => {
     send("/api/step", body);
   });
 });
+document.getElementById("step").addEventListener("click", () => send("/api/step", { depth: look }));
+document.getElementById("step-into").addEventListener("click", () => send("/api/step", { size: "line_into" }));
 document.getElementById("rewind").addEventListener("click", () => send("/api/rewind", {}));
 document.getElementById("run").addEventListener("click", () => send("/api/run", { instructions: Number(document.getElementById("count").value) }));
 document.getElementById("play").addEventListener("click", () => send("/api/play", { speed: Number(document.getElementById("speed").value) }));
 document.getElementById("pause").addEventListener("click", () => send("/api/pause", {}));
-document.getElementById("load").addEventListener("click", () => { pickedLine = null; send("/api/program", { source: document.getElementById("source").value }); });
-document.getElementById("load-pebble").addEventListener("click", () => { pickedLine = null; send("/api/pebble", { source: document.getElementById("source").value }); });
-loadExamples();
-refresh();
-listen();
+document.getElementById("load").addEventListener("click", () => send("/api/program", { source: document.getElementById("source").value }));
+document.getElementById("load-pebble").addEventListener("click", () => send("/api/pebble", { source: document.getElementById("source").value }));
+document.getElementById("expert-button").addEventListener("click", () => openExpert(document.getElementById("expert").hidden, false));
+document.getElementById("expert-close").addEventListener("click", () => openExpert(false));
+document.getElementById("walks-button").addEventListener("click", () => showWalks());
+document.getElementById("explore").addEventListener("click", () => {
+  hideWalks();
+  if (latest && latest.walk) send("/api/walk/leave", {});
+});
+document.getElementById("walk-leave").addEventListener("click", () => send("/api/walk/leave", {}));
+document.getElementById("walk-next").addEventListener("click", () => { const w = latest && latest.walk; if (w) openWalk(w.name, w.step + 1); });
+document.getElementById("walk-back").addEventListener("click", () => { const w = latest && latest.walk; if (w) openWalk(w.name, w.step - 1); });
+document.getElementById("back-to-walk").addEventListener("click", () => { const w = latest && latest.walk; if (w) { walkKey = null; latestText = ""; openWalk(w.name, w.step); } });
+window.addEventListener("hashchange", () => {
+  if (location.hash.startsWith("#walk=")) openWalk(decodeURIComponent(location.hash.slice(6)), 0, true);
+});
+
+async function start() {
+  // Read the address first: drawing a picture of a walk already open rewrites it.
+  const link = location.hash.startsWith("#walk=") ? decodeURIComponent(location.hash.slice(6)) : "";
+  await refresh();
+  loadExamples();
+  loadWalks();
+  listen();
+  if (link) openWalk(link, 0, true);
+  else showWalks();
+}
+start();
 </script>
 </body>
 </html>

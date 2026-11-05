@@ -1,5 +1,6 @@
 """Tests for the Cockpit: the local page for watching the running computer."""
 
+import json
 import re
 import time
 from collections.abc import Coroutine
@@ -20,6 +21,7 @@ from pycpu.circuit import Circuit
 from pycpu.cockpit import picture as picture_module
 from pycpu.cockpit.app import create_cockpit
 from pycpu.cockpit.picture import (
+    PART_NAMES,
     listing,
     machine_picture,
     part_for_instruction,
@@ -1291,20 +1293,20 @@ COUNTDOWN_TITLE = "Count down to lift off"
 COUNTDOWN_FIRST_LINE = 2  # line 1 is the title comment
 TOUR_BITS = 9  # 512 words: the tour needs 456
 PAGE_IDS = (
-    "pebble",
-    "listing",
-    "registers",
-    "flags",
-    "stack",
-    "variables",
-    "output",
-    "zoom",
-    "crumbs",
-    "parts",
-    "gates",
+    "walks",
+    "walk-say",
+    "walk-next",
+    "walk-back",
+    "try-task",
+    "back-to-walk",
+    "program",
+    "glass",
+    "trail",
+    "step",
+    "happened",
+    "expert",
     "play",
     "pause",
-    "speed",
     "examples",
     "source",
 )
@@ -1368,8 +1370,78 @@ class TestExamples:
         assert asked == ["tour"]
 
 
+PANES = ("program", "glass", "walks", "expert")
+DEFINED_AND_CALLED_ONCE = 2  # drawChanged: its definition and its one call
+GLASS_VIEWS = 2  # the part view and the gate view each number their requests
+TRAIL_SIGN = "\u203a"  # the small arrow between the trail's crumbs
+EXPERT_SIZES = [
+    ("gate", "1"),
+    ("gate", "100"),
+    ("cycle", None),
+    ("instruction", None),
+    ("line", None),
+    ("line_into", None),
+]
+WALK_NOT_FOUND = "Walk not found."
+CHEER = "You did it! Pick another walk, or keep exploring."
+EXPLORE = "Explore on my own"
+WRITE_YOUR_OWN = "Write your own..."
+STEP_INTO = "Step into ▸"
+LAPTOP = "1280 by 720 dots"
+REFERENCE = Path(__file__).parent.parent / "docs" / "reference" / "instruction-set.md"
+
+
+def _script() -> str:
+    """Return the page's own script, between its <script> tags."""
+    match = re.search(r"<script>(.*?)</script>", _page(), flags=re.DOTALL)
+    assert match is not None
+    return match.group(1)
+
+
+def _style() -> str:
+    """Return the page's style sheet, between its <style> tags."""
+    match = re.search(r"<style>(.*?)</style>", _page(), flags=re.DOTALL)
+    assert match is not None
+    return match.group(1)
+
+
+def _media_block(style: str, query: str) -> str:
+    """Return the body of the `@media` block with `query`, matching its braces."""
+    start = style.index(f"@media {query}")
+    opening = style.index("{", start)
+    depth = 0
+    for at in range(opening, len(style)):
+        depth += {"{": 1, "}": -1}.get(style[at], 0)
+        if depth == 0:
+            return style[opening + 1 : at]
+    msg = f"the @media {query} block never closes"
+    raise AssertionError(msg)
+
+
+def _top_rules(style: str) -> list[tuple[list[str], str]]:
+    """List the style sheet's rules outside any @media block, as (selectors, body)."""
+    flat = re.sub(r"/\*.*?\*/", "", style, flags=re.DOTALL)
+    flat = re.sub(r"@media[^{]*\{(?:[^{}]*\{[^{}]*\})*[^{}]*\}", "", flat)
+    return [
+        ([s.strip() for s in selectors.split(",")], body)
+        for selectors, body in re.findall(r"([^{}]+)\{([^{}]*)\}", flat)
+    ]
+
+
+def _js_json(name: str) -> Any:
+    """Read the page's `const name = {...};`, written as JSON so a test can load it."""
+    match = re.search(rf"const {name} = (\{{.*?\}});\n", _script(), flags=re.DOTALL)
+    assert match is not None, name
+    return json.loads(match.group(1))
+
+
+def _flat(text: str) -> str:
+    """Join a page's words onto one line, dropping the drawing's box edges."""
+    return " ".join(text.replace("|", " ").split())
+
+
 class TestThePage:
-    """GET / serves layout A: every id its script uses, nothing from outside."""
+    """GET / serves layout C: every id its script uses, nothing from outside."""
 
     def test_it_has_every_id_the_script_uses(self) -> None:
         """Each pane and control the script looks up is on the page."""
@@ -1380,6 +1452,7 @@ class TestThePage:
     def test_it_loads_nothing_from_the_internet(self) -> None:
         """No src= or href= points at an http address, so the page works offline."""
         assert not re.search(r"""(src|href)\s*=\s*["']?\s*http""", _page(), flags=re.IGNORECASE)
+        assert "innerHTML" not in _page()
 
     def test_it_has_a_dark_mode(self) -> None:
         """The colours change when the computer is in dark mode."""
@@ -1391,11 +1464,11 @@ class TestThePage:
         for words in ("EventSource", "/api/events", "/api/play", "/api/pause", "/api/listing"):
             assert words in text
 
-    def test_its_zoom_panel_waits_for_pause_while_playing(self) -> None:
-        """The playing message sits inside the zoom panel, and is the one the docs quote."""
-        zoom = re.search(r'<section[^>]*id="zoom".*?</section>', _page(), flags=re.DOTALL)
-        assert zoom is not None
-        assert PLAYING_MESSAGE in zoom.group(0)
+    def test_its_glass_waits_for_pause_while_playing(self) -> None:
+        """The playing message sits inside the glass, and is the one the docs quote."""
+        glass = re.search(r'<section[^>]*id="glass".*?</section>', _page(), flags=re.DOTALL)
+        assert glass is not None
+        assert PLAYING_MESSAGE in glass.group(0)
         for page in ("the-cockpit.md", "watching-it-run.md"):
             assert PLAYING_MESSAGE in (DOCS / page).read_text(encoding="utf-8")
 
@@ -1409,6 +1482,19 @@ class TestThePage:
         assert "row.title = HIDDEN_TITLE;" in text
         assert "Pebble made this box for itself" in text
 
+    def test_only_the_latest_pictures_changes_glow(self) -> None:
+        """The page runs drawChanged once per picture; it clears old marks and reads `changed`."""
+        script = _script()
+        assert script.count("drawChanged(") == DEFINED_AND_CALLED_ONCE
+        draw_text = script[script.index("function drawText(") :]
+        draw_text = draw_text[: draw_text.index("\n}\n")]
+        assert "drawChanged(m);" in draw_text
+        body = script[script.index("function drawChanged(") :]
+        body = body[: body.index("\n}\n")]
+        assert 'querySelectorAll("." + CHANGED)' in body
+        assert "m.changed" in body
+        assert "latest" not in body
+
     def test_show_this_gate_is_offered_only_for_the_picture_that_named_it(self) -> None:
         """The button names last_gate, and a later picture without that gate drops the pick."""
         text = _page()
@@ -1416,20 +1502,32 @@ class TestThePage:
         assert "g.id !== pickedGate.id || g.path !== pickedGate.path) pickedGate = null;" in text
 
     def test_a_gate_step_with_no_gate_shows_why(self) -> None:
-        """The page shows the session's no-gate note in the zoom panel's gate spot."""
+        """The glass keeps the session's no-gate note for its gate spot."""
         text = _page()
         assert f'const NO_GATE = "{NO_GATE_ENDING}";' in text
         assert "m.note.endsWith(NO_GATE)" in text
 
-    def test_a_no_gate_note_is_shown_only_once(self) -> None:
-        """The general note line stays empty for a no-gate note, which the zoom panel shows."""
+    def test_no_sentence_is_shown_twice(self) -> None:
+        """What just happened shows `happened`; `note` shows only when it says something else."""
         text = _page()
-        assert "const noGate = m.note && m.note.endsWith(NO_GATE);" in text
-        assert 'document.getElementById("note").textContent = noGate ? "" : (m.note || "");' in text
+        assert (
+            'document.getElementById("happened").textContent = m.happened || NOTHING_YET;' in text
+        )
+        assert 'const extra = m.note && m.note !== m.happened && !noGate ? m.note : "";' in text
+        assert "&& m.note !== m.happened" in text.split('showGate.append(el("p", m.note')[0]
         assert text.count('showGate.append(el("p", m.note, "muted"));') == 1
 
+    def test_the_expert_drawer_keeps_every_plan_4_step_size(self) -> None:
+        """Gate, 100 gates, Cycle, Instruction, Line, Line into and Run sit in the drawer."""
+        drawer = re.search(r'<aside[^>]*id="expert".*?</aside>', _page(), flags=re.DOTALL)
+        assert drawer is not None
+        found = re.findall(r'data-size="(\w+)"(?: data-count="(\d+)")?', drawer.group(0))
+        assert [(size, count or None) for size, count in found] == EXPERT_SIZES
+        for name in ("run", "count", "speed", "source", "load-pebble", "load"):
+            assert f'id="{name}"' in drawer.group(0), name
+
     def test_the_line_buttons_have_the_names_the_docs_use(self) -> None:
-        """The two line-step buttons say Line and Line into, as every page that names them does."""
+        """The drawer's line buttons say Line and Line into, as every page that names them does."""
         labels = dict(re.findall(r'data-size="(line|line_into)"[^>]*>([^<]+)</button>', _page()))
         assert labels == {"line": "Line", "line_into": "Line into"}
         for page in ("the-cockpit.md", "stepping-a-pebble-line.md", "a-tour-of-the-cockpit.md"):
@@ -1438,21 +1536,325 @@ class TestThePage:
         for page in ("the-cockpit.md", "stepping-a-pebble-line.md"):
             assert f"**{labels['line_into']}**" in (DOCS / page).read_text(encoding="utf-8")
         for page in DOCS.glob("*.md"):
-            text = page.read_text(encoding="utf-8")
-            assert "**Next line**" not in text, page.name
-            assert "**Step into**" not in text, page.name
+            assert "**Next line**" not in page.read_text(encoding="utf-8"), page.name
+
+    def test_the_step_into_button_follows_a_call_and_is_named_as_the_docs_say(self) -> None:
+        """The try stage's second button sends line_into, and its label is the docs' one."""
+        text = _page()
+        assert f'id="step-into" hidden>{STEP_INTO}</button>' in text
+        assert 'send("/api/step", { size: "line_into" })' in text
+        assert 'w.step_kind === "into"' in text
+        assert STEP_INTO in (DOCS / "the-cockpit.md").read_text(encoding="utf-8")
 
     def test_it_refetches_the_listing_whenever_the_program_number_changes(self) -> None:
         """The listing is stale when its `program` is not the picture's, and is re-checked."""
         text = _page()
         assert "return !listing || listing.program !== m.program;" in text
-        assert "if (listingIsStale(m)) fetchListing(m); else moveMarks(m);" in text
+        assert "if (listingIsStale(m)) fetchListing(m); else drawProgram(m);" in text
         assert "if (latest.program !== askedFor) fetchListing(latest);" in text
-        assert "listing.rows[i.address].word" not in text  # the old word-by-word guess is gone
+
+    def test_only_the_newest_glass_answer_is_drawn(self) -> None:
+        """Each glass request takes a number, and an answer that is not the newest is dropped."""
+        script = _script()
+        assert script.count("const mine = ++lensSeq;") == GLASS_VIEWS
+        assert script.count("if (mine !== lensSeq) return;") >= GLASS_VIEWS
+
+    def test_a_refused_button_catches_up_with_the_machine(self) -> None:
+        """A refusal shows its message, then asks for the picture again."""
+        script = _script()
+        refused = script[script.index("if (!response.ok) {") :]
+        assert refused.index("showError(message);") < refused.index("refresh();")
 
     def test_the_first_tour_quotes_the_demo_program_exactly(self) -> None:
         """The Cockpit page's first guided tour pastes DEMO_PROGRAM, word for word."""
         assert DEMO_PROGRAM in (DOCS / "the-cockpit.md").read_text(encoding="utf-8")
+
+
+class TestOneScreen:
+    """The page fits one screen: a grid as tall as the window, and panes that scroll."""
+
+    def test_the_main_grid_is_as_tall_as_the_window(self) -> None:
+        """`main` is `height: 100vh`, so the panes share the window and nothing hangs below."""
+        rules = _top_rules(_style())
+        assert any("main" in selectors and "height:100vh" in body for selectors, body in rules)
+
+    def test_the_body_never_scrolls(self) -> None:
+        """The page's body has `overflow: hidden`."""
+        rules = _top_rules(_style())
+        assert any("body" in selectors and "overflow:hidden" in body for selectors, body in rules)
+
+    def test_every_pane_scrolls_inside_itself(self) -> None:
+        """The program, the glass, the walks list and the Expert drawer each scroll on their own."""
+        rules = _top_rules(_style())
+        for pane in PANES:
+            assert any(
+                f"#{pane}" in selectors and "overflow:auto" in body for selectors, body in rules
+            ), pane
+
+    def test_on_a_phone_the_glass_sits_above_the_program(self) -> None:
+        """Under 44rem the panes stack in one column, the glass first."""
+        block = _media_block(_style(), "(max-width:44rem)")
+        assert 'grid-template-areas:"glass" "program"' in block
+
+    def test_the_docs_give_the_screen_the_page_is_built_for(self) -> None:
+        """The Cockpit page names the laptop screen size the owner checks the page at."""
+        assert LAPTOP in _flat((DOCS / "the-cockpit.md").read_text(encoding="utf-8"))
+
+
+class TestTheStepButton:
+    """The one Step button follows the glass's depth, and its words come from the picture."""
+
+    def test_its_label_is_drawn_from_the_pictures_steps(self) -> None:
+        """The label is `steps[look]`, and the script holds no label of its own."""
+        script = _script()
+        assert "step.textContent = m.steps[look];" in script
+        assert "Step one" not in script
+
+    def test_it_steps_at_the_glasss_depth(self) -> None:
+        """Pressing it sends the glass's depth to /api/step."""
+        assert 'send("/api/step", { depth: look })' in _script()
+
+
+class TestWalksOnThePage:
+    """The page opens on the walks, follows a walk's picture, and survives a stale link."""
+
+    def test_it_opens_on_the_walks_unless_the_address_names_one(self) -> None:
+        """The page reads `#walk=` and asks /api/walk; otherwise it shows the walks list."""
+        script = _script()
+        assert 'location.hash.startsWith("#walk=")' in script
+        assert '"/api/walk"' in script
+        assert '"/api/walks"' in script
+        assert "else showWalks();" in script
+
+    def test_a_walk_that_is_not_found_falls_back_to_the_list(self) -> None:
+        """A failed /api/walk from a link shows the list with "Walk not found."."""
+        script = _script()
+        assert f'const WALK_NOT_FOUND = "{WALK_NOT_FOUND}";' in script
+        assert "showWalks(WALK_NOT_FOUND);" in script
+        assert WALK_NOT_FOUND in _cockpit_text()
+
+    def test_the_server_answers_a_stale_link_with_a_404(self) -> None:
+        """The answer the page falls back on: 404 with a plain sentence."""
+        response = Cockpit().post("/api/walk", {"name": "nonsense", "step": 0})
+        assert response.status == NOT_FOUND
+        assert _json(response)["message"] == "There is no walk called nonsense."
+
+    def test_next_and_back_move_one_step_and_back_to_the_walk_replays(self) -> None:
+        """Next sends step + 1, Back step - 1, and Back to the walk the same step again."""
+        script = _script()
+        assert "openWalk(w.name, w.step + 1)" in script
+        assert "openWalk(w.name, w.step - 1)" in script
+        assert "openWalk(w.name, w.step)" in script
+        assert '"/api/walk/leave"' in script
+
+    def test_the_glass_follows_the_walks_look(self) -> None:
+        """A new walk step sets the glass to its `look` and outlines its `show`."""
+        script = _script()
+        assert "look = w.look;" in script
+        assert "outline(w.show" in script
+
+    def test_the_page_words_the_docs_quote_are_the_pages_own(self) -> None:
+        """The cheer, the explore button and the write-your-own choice match the docs."""
+        text = _page()
+        docs = _flat((DOCS / "the-cockpit.md").read_text(encoding="utf-8"))
+        for words in (CHEER, EXPLORE, WRITE_YOUR_OWN, "Back to the walk", "Next ▸", "◂ Back"):
+            assert words in text, words
+            assert words in docs, words
+
+
+def _tap_names() -> set[str]:
+    """Collect every input and output name the CPU's parts have taps for."""
+    gate = Session(SMALL).computer.gate
+    return {name for taps in gate.taps.values() for name in taps}
+
+
+class TestFriendlyLabels:
+    """The glass shows plain words for wire names and instruction fields."""
+
+    def test_every_tap_name_has_plain_words(self) -> None:
+        """TAP_WORDS covers every name in GateMachine.taps, with no underscores left."""
+        words = cast("dict[str, str]", _js_json("TAP_WORDS"))
+        assert set(words) == _tap_names()
+        for name, label in words.items():
+            assert label, name
+            assert "_" not in label, name
+
+    def test_the_docs_quote_a_tap_label_as_the_page_writes_it(self) -> None:
+        """The Cockpit page names sp_minus_1 by the page's own words for it."""
+        label = cast("dict[str, str]", _js_json("TAP_WORDS"))["sp_minus_1"]
+        assert f'"{label}" for `sp_minus_1`' in _flat(
+            (DOCS / "the-cockpit.md").read_text(encoding="utf-8")
+        )
+
+    def test_every_part_has_the_name_the_step_button_uses(self) -> None:
+        """PART_WORDS names each part exactly as PART_NAMES does for the Step button."""
+        assert _js_json("PART_WORDS") == PART_NAMES
+
+    def test_the_instruction_fields_match_the_instruction_set_page(self) -> None:
+        """Each opcode's fields and each field's bits are the ones the reference page gives."""
+        reference = REFERENCE.read_text(encoding="utf-8")
+        bits = {
+            name.strip("`"): [int(b) for b in span.split("-")]
+            for name, span in re.findall(
+                r"^\| (`\w+`)[^|]*\| (\d+-\d+) \|", reference, re.MULTILINE
+            )
+        }
+        bits["cond"] = bits["rd"]  # the reference writes `rd` (or `cond`) on one row
+        assert _js_json("FIELD_BITS") == bits
+        fields: dict[str, list[str]] = {
+            op: [] if listed == "none" else str(listed).split()
+            for op, listed in re.findall(
+                r"^\| (\d+) \| `\w+` \| ([\w ]+) \|", reference, re.MULTILINE
+            )
+        }
+        assert _js_json("FIELDS") == fields
+        assert sorted(int(op) for op in fields) == [int(op) for op in Opcode]
+
+
+DRAWN_WALK = "many-instructions"
+DRAWN_STEP = 2  # the drawing shows the walk just after its third step
+WALK_BITS = 9  # 512 words: room for the countdown and its runtime routines
+DRAWN_LINE = 5
+DRAWN_ROWS = 3  # the drawing lists the first three of line 5's instructions
+LINE_FIVE = (34, 43, 10)  # first address, last address, instructions
+OPCODE_BITS = 4
+RD_BITS = 3
+REST_BITS = 9
+
+
+def _cockpit_text() -> str:
+    """Read the Cockpit concept page, its words joined onto one line."""
+    return _flat((DOCS / "the-cockpit.md").read_text(encoding="utf-8"))
+
+
+def _drawn_moment(address_bits: int) -> tuple[dict[str, Any], dict[str, Any]]:
+    """Open the drawn walk at the drawn step; return its picture and the program's listing."""
+    client = TestClient(create_cockpit(address_bits))
+    body = {"name": DRAWN_WALK, "step": DRAWN_STEP}
+    machine = _json(_run(client.post("/api/walk", json=body)))  # pyright: ignore[reportArgumentType]
+    return machine, _json(_run(client.get("/api/listing")))
+
+
+class TestTheDrawing:
+    """Every figure in the Cockpit page's drawing of layout C, read from the real moment."""
+
+    def test_the_walk_bar_step_button_and_trail(self) -> None:
+        """The walk's title, place, sentence, the Step label and the trail are the drawn ones."""
+        machine, _listing = _drawn_moment(WALK_BITS)
+        walk = machine["walk"]
+        text = _cockpit_text()
+        assert f"{walk['title']} Step {walk['step'] + 1} of {walk['count']}" in text
+        assert walk["say"] in text
+        assert f"[{machine['steps'][walk['look']]}]" in text
+        trail = f"Line {machine['pebble']['line']} {TRAIL_SIGN} {machine['instruction']['text']}"
+        assert trail in text
+
+    def test_the_program_pane_shows_line_five_and_its_instructions(self) -> None:
+        """Line 5 is 10 instructions at 34 to 43; the first three are drawn, 35 marked next."""
+        machine, listing = _drawn_moment(WALK_BITS)
+        rows = [r for r in listing["rows"] if r["pebble_line"] == DRAWN_LINE]
+        assert (rows[0]["address"], rows[-1]["address"], len(rows)) == LINE_FIVE
+        text = _cockpit_text()
+        assert "is 10 instructions, at addresses 34 to 43" in text
+        for row in rows[:DRAWN_ROWS]:
+            mark = "> " if row["address"] == machine["instruction"]["address"] else ""
+            assert f"{mark}{row['address']} {' '.join(row['text'].split())}" in text
+        assert machine["pebble"]["source"][DRAWN_LINE - 1].strip() == "n = n - 1"
+        assert machine["output"] == "5\n"
+
+    def test_only_r1_and_pc_glow(self) -> None:
+        """The last move ran the line's first instruction, so only r1 (5) and pc (35) changed."""
+        machine, listing = _drawn_moment(WALK_BITS)
+        assert machine["changed"] == {
+            "registers": [1],
+            "pc": True,
+            "sp": False,
+            "flags": [],
+            "memory": [],
+        }
+        before = listing["rows"][machine["pc"] - 1]["text"]
+        assert before.startswith("load r1, [r7-1]")
+        text = _cockpit_text()
+        assert f"`r1` (now {machine['registers'][1]}) and `pc` (now {machine['pc']}) glow" in text
+        assert f"[r1 {machine['registers'][1]} changed]" in text
+        assert f"[pc {machine['pc']} changed]" in text
+
+    def test_the_instruction_is_drawn_as_its_real_bits(self) -> None:
+        """The word for push r1 is 1010 001 000000000: the job, rd, and nine bits it does not use."""
+        machine, _listing = _drawn_moment(WALK_BITS)
+        word = machine["instruction"]["word"]
+        job = format(word >> (RD_BITS + REST_BITS), f"0{OPCODE_BITS}b")
+        rd = format((word >> REST_BITS) & ((1 << RD_BITS) - 1), f"0{RD_BITS}b")
+        rest = format(word & ((1 << REST_BITS) - 1), f"0{REST_BITS}b")
+        raw = (DOCS / "the-cockpit.md").read_text(encoding="utf-8")
+        for row in ((job, rd, rest), ("job", "rd", "not used"), ("push", "r1")):
+            assert re.search(r"\|\s+" + r"\s+".join(row) + r"\s+\|", raw), row
+        address = machine["instruction"]["address"]
+        assert f"the instruction at address {address}, next to run" in _cockpit_text()
+
+    @pytest.mark.slow
+    def test_the_full_size_numbers(self) -> None:
+        """On the real 4K Cockpit, the sentence, registers, variable and stack are as drawn."""
+        machine, _listing = _drawn_moment(RAM_ADDRESS_BITS)
+        text = _cockpit_text()
+        assert f"What just happened: {machine['happened']}" in text
+        r = machine["registers"]
+        assert f"r0 {r[0]} [r1 {r[1]} changed] r2 {r[2]} r3 {r[3]} r4 {r[4]}" in text
+        assert f"r5 {r[5]} r6 {r[6]} r7 {r[7]}" in text
+        assert f"[pc {machine['pc']} changed] sp {machine['sp']}" in text
+        f = machine["flags"]
+        flags = f"zero {f['zero']} negative {f['negative']} carry {f['carry']}"
+        assert f"{flags} overflow {f['overflow']}" in text
+        (n,) = machine["variables"]["names"]
+        stack = machine["stack"]
+        assert f"{n['name']} {n['value']} at {n['address']} {stack[0]['address']}: " in text
+        assert f"{stack[1]['address']}: {stack[1]['word']}" in text
+
+
+class TestTheButtonTours:
+    """The figures the Cockpit page's two button tours quote, read from a real Cockpit."""
+
+    def test_the_first_tour_looks_at_the_alu_one_beat_into_the_add(self) -> None:
+        """One ALU beat fetches the add; the ALU's inputs are 48 and 3 and its answer 51."""
+        cockpit = Cockpit()
+        cockpit.step("instruction")
+        machine = cockpit.run(RUN_TO_ADD - 1)
+        assert machine["steps"]["part"] == "Step one ALU beat ▸"
+        machine = _json(cockpit.post("/api/step", {"depth": "part"}))
+        text = _cockpit_text()
+        assert f'What just happened says so: "{machine["happened"]}"' in text
+        part = _json(_run(cockpit.client.get("/api/part", query={"path": "cpu.alu"})))
+        a, b = (wire["value"] for wire in part["inputs"])
+        result = part["outputs"][0]["value"]
+        words = cast("dict[str, str]", _js_json("TAP_WORDS"))
+        said = f"{words['a']} is {a}, {words['b']} is {b}, and the {words['result']} coming out"
+        assert f"{said} is {result}." in text
+
+    def test_the_first_tour_finishes_the_add_after_a_rewind(self) -> None:
+        """Gates, a hundred gates, Rewind, then one instruction: r3 is 51, said in words."""
+        cockpit = Cockpit()
+        cockpit.run(RUN_TO_ADD)
+        _json(cockpit.post("/api/step", {"depth": "part"}))
+        _json(cockpit.post("/api/step", {"depth": "gate"}))
+        cockpit.step("gate", HUNDRED)
+        assert cockpit.post("/api/rewind", {}).status == OK
+        machine = _json(cockpit.post("/api/step", {"depth": "instruction"}))
+        assert machine["registers"][3] == ord("3")
+        assert f'What just happened says "{machine["happened"]}"' in _cockpit_text()
+
+    def test_the_second_tours_line_step_after_the_run(self) -> None:
+        """After Run 180 the line step runs line 4's last instruction, the store into n."""
+        cockpit = Cockpit(PEBBLE_BITS)
+        machine = _json(cockpit.pebble(TOUR_COUNTDOWN))
+        assert machine["instruction"] == {"address": 0, "word": 0xC200, "text": "getsp r1"}
+        while machine["pebble"]["line"] is not None:
+            machine = cockpit.step("instruction")
+        machine = cockpit.run(TOUR_RUN)
+        assert machine["instruction"]["text"] == "store r1, [r7-1]"
+        machine = _json(cockpit.post("/api/step", {"depth": "line"}))
+        text = _cockpit_text()
+        assert f'What just happened says "{machine["happened"]}":' in text
+        assert "the last instruction of line 4, `store r1, [r7-1]`" in text
 
 
 CLOCK_NOTE = "That step moved the write clock wire, not a gate, so there is no gate to show."
@@ -1464,7 +1866,7 @@ TOUR_FIRST_LINE = 18
 class TestFreshTour:
     """The figures the Cockpit page's drawing and tour quote, read from a tour Cockpit."""
 
-    def test_the_first_words_are_the_ones_the_drawing_shows(self) -> None:
+    def test_the_first_words_are_main_s_frame_on_line_18(self) -> None:
         """Words 0 to 2 are 0xC200, 0x24B8 and 0x3401, all on line 18; 1 and 2 share a `set`."""
         client = TestClient(create_cockpit(TOUR_BITS, start_example="tour"))
         rows = _json(_run(client.get("/api/listing")))["rows"][: len(TOUR_FIRST_WORDS)]
@@ -1472,9 +1874,7 @@ class TestFreshTour:
         assert {row["pebble_line"] for row in rows} == {TOUR_FIRST_LINE}
         assert rows[0]["text"].startswith("getsp r1")
         assert rows[1]["text"].startswith("set  r2, __end")
-        text = (DOCS / "the-cockpit.md").read_text(encoding="utf-8")
-        for word, _first in TOUR_FIRST_WORDS:
-            assert f"0x{word:04X}" in text
+        assert f"the first line that runs is line {TOUR_FIRST_LINE}" in _cockpit_text()
 
     def test_the_first_gate_step_moves_a_clock_wire_and_says_so(self) -> None:
         """The very first 1 gate has no gate to show, and the note the docs quote says why."""
