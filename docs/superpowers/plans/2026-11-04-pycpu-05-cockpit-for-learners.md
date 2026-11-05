@@ -138,6 +138,7 @@ solution = ["step line", "step line", "..."]   # actions a test runs to prove th
   - `run to line <n>`, using the fast engine and pause, like a line step but to a fixed line, capped at `MAX_LINE_INSTRUCTIONS`;
   - `step gate until <scope prefix>`, gate steps until `last_gate.path` starts with the prefix, capped at `MAX_GATE_STEPS`.
   - `run <n> instructions` (fast engine, then pause; added by ruling during Task 5).
+  - `step line into` (`step_line(into=True)`), and a `[try]` may set `step = "into"` so the page offers a "Step into" button at line depth for that task (added by ruling during Task 5).
 - **Checks** (one per walk):
   - `variable <name> == <int>`;
   - `line == <int>`;
