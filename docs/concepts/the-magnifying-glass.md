@@ -178,7 +178,7 @@ the computer. Going back up only changes how closely the glass looks.
 the current instruction: "ALU" for a `sub`, "memory address" for a `store`, and "CPU"
 when there is no instruction to name.
 
-## Looking at a Part
+### Looking at a Part
 
 At the part depth the glass can do more than step. It can show you what goes **into**
 the part and what comes **out**, like holding a meter to the cables of a machine in a

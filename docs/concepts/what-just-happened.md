@@ -185,7 +185,8 @@ The other depths build on the instruction sentence:
   different frame, so it compares nothing and says where it went instead, with the
   variables it finds there: for the `factorial` example, "Line 8 ran 21 instructions
   and went into fact, where n is 5." (the tests in `tests/test_explain.py` pin this
-  sentence and the others like it).
+  sentence and the others like it). A step that starts while a function is still making
+  its frame says the frame's new boxes are set up, rather than changed.
 - **a step that cannot move**, such as a line step on a machine-code program or any step
   once the program has finished, leaves `happened` as `None`. Nothing happened, so the
   commentator stays quiet, and `note` says why in one sentence.

@@ -265,7 +265,10 @@ def parse_check(text: str) -> Check:
     match text.split(maxsplit=2):
         case ["halted"]:
             return Halted()
-        case ["output", "contains", quoted] if len(quoted) >= 2 and quoted[0] == quoted[-1] == '"':  # noqa: PLR2004
+        case ["output", "contains", quoted] if (
+            len(quoted) >= 2  # noqa: PLR2004
+            and quoted[0] == quoted[-1] == '"'
+        ):
             return OutputContains(quoted[1:-1])
         case _:
             pass

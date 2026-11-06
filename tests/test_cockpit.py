@@ -1659,6 +1659,16 @@ class TestWalksOnThePage:
         assert "showWalks(WALK_NOT_FOUND);" in script
         assert WALK_NOT_FOUND in _cockpit_text()
 
+    def test_a_malformed_link_falls_back_to_walk_not_found(self) -> None:
+        """A bad escape in `#walk=` is caught, and the list says "Walk not found."."""
+        script = _script()
+        assert "function walkInHash()" in script
+        assert "try { return decodeURIComponent(location.hash.slice(6)); }" in script
+        assert "catch (e) { return null; }" in script
+        assert "if (name === null) showWalks(WALK_NOT_FOUND);" in script
+        assert "else if (linked) showWalks(WALK_NOT_FOUND);" in script
+        assert script.count("decodeURIComponent") == 1
+
     def test_the_server_answers_a_stale_link_with_a_404(self) -> None:
         """The answer the page falls back on: 404 with a plain sentence."""
         response = Cockpit().post("/api/walk", {"name": "nonsense", "step": 0})

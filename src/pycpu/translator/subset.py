@@ -395,9 +395,6 @@ class _CodeChecker:
         while todo:
             index = min(todo)
             todo.remove(index)
-            if index == len(instructions):
-                self._fall_off_the_end(seen[index])
-                continue
             instruction = instructions[index]
             # A refused instruction's effect on the stack is not followed (most are
             # refused precisely because PyCPU has no idea what they would do).
@@ -408,22 +405,13 @@ class _CodeChecker:
                 if self._arrive(target, stack, seen):
                     todo.add(target)
 
-    def _fall_off_the_end(self, stack: _Stack) -> None:
-        """Play a jump to just past the last instruction: Pebble returns null there.
-
-        When a function body ends in `return`, Pebble leaves out the usual closing
-        `LOAD_CONST None; RETURN`, but an `if` inside can still jump to where it would
-        have been. The Pebble VM returns null when it runs off the end, so we do too.
-        """
-        place = self.places[-1]
-        self.stack = list(stack)
-        self._push(Kind.NULL, place)
-        self._play(len(self.code.instructions), Instruction(OpCode.RETURN), place)
-
     def _arrive(self, target: int, stack: _Stack, seen: dict[int, _Stack]) -> bool:
         """Bring a stack to instruction `target`; return True if what it sees changed."""
-        if not 0 <= target <= len(self.code.instructions):
-            msg = f"translator bug: a jump in {self.name} goes to instruction {target}, outside it"
+        if not 0 <= target < len(self.code.instructions):
+            msg = (
+                f"translator bug: a jump in {self.name} goes to instruction {target}, "
+                "past its last instruction (Pebble >=0.4.1 never does this)"
+            )
             raise PebbleCPUError(msg)
         before = seen.get(target)
         if before is None:

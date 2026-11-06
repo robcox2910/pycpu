@@ -1140,17 +1140,27 @@ document.getElementById("walk-back").addEventListener("click", () => { const w =
 document.getElementById("back-to-walk").addEventListener("click", replayWalk);
 document.getElementById("try-again").addEventListener("click", replayWalk);
 window.addEventListener("hashchange", () => {
-  if (location.hash.startsWith("#walk=")) openWalk(decodeURIComponent(location.hash.slice(6)), 0, true);
+  if (!location.hash.startsWith("#walk=")) return;
+  const name = walkInHash();
+  if (name === null) showWalks(WALK_NOT_FOUND);
+  else openWalk(name, 0, true);
 });
+
+// The walk named in the address, or null when its escapes are malformed.
+function walkInHash() {
+  try { return decodeURIComponent(location.hash.slice(6)); } catch (e) { return null; }
+}
 
 async function start() {
   // Read the address first: drawing a picture of a walk already open rewrites it.
-  const link = location.hash.startsWith("#walk=") ? decodeURIComponent(location.hash.slice(6)) : "";
+  const linked = location.hash.startsWith("#walk=");
+  const link = linked ? walkInHash() : "";
   await refresh();
   loadExamples();
   loadWalks();
   listen();
   if (link) openWalk(link, 0, true);
+  else if (linked) showWalks(WALK_NOT_FOUND);
   else showWalks();
 }
 start();

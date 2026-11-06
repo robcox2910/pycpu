@@ -336,6 +336,100 @@ laptop (macOS 26.5, Python 3.14.3), a throwaway script (not in the repo), full s
 - `GET /api/part` answered in under a millisecond (176 bytes for `cpu.alu`, 234 for
   `cpu.halt`): it only reads wires that are already settled.
 
+### Minors from the Plan 5 ledger
+
+- Fixed in Plan 5's final wave: the prologue "changed from" bug (a slot below `start.sp`
+  is now new, "finished setting up"), `subset.py`'s jump past the last instruction,
+  `gate_place`'s substring test, the long lines, the Looking at a Part heading level, a
+  malformed `#walk=` link, and the docs link check.
+- Still open: Task 6, no JavaScript runtime in the tests, so the page's field-splitting JS
+  is checked by its text and in a real browser, not run.
+- Deferred to Plan 6 (Ruling 14): registers and RAM get no `/api/part` view. The glass
+  already shows registers and the stack at instruction depth, and the gate depth reaches
+  their gates. The spec lists them, so the owner may ask for two part views.
+
+### Owner items still open
+
+- **Pebble v0.4.1 release** (pending on the owner). It ships the fix for a function that
+  falls off its end after a `return` inside an `if`. Once it is out: raise the floor to
+  `fromscratch-pebble>=0.4.1` and remove the `# Pebble v0.4.1:` workarounds in the tests
+  (today in `tests/test_conformance.py` and `tests/test_functions.py`).
+- **Pebble VM `KeyError`** when a variable is called as a function (`let x = 1` then
+  `x()`). Not yet reported upstream. PyCPU refuses the program ("functions used as
+  values"), so nothing is wrong on this side.
+
+### Minors parked in the Plan 4 ledger
+
+- Task 1: the size test in `tests/test_translator.py` (around lines 413-419) does not
+  prove the `memory_needed` (frame) branch fires separately from the assembler's own size
+  check; the boundary-search loop there is duplicated; a bare `max()` can raise
+  `ValueError` in the label test; the handler-table `id()` test is weak (the brief asked
+  for it).
+- Task 2: inline `# noqa: N818` on `CockpitRefusal`/`CockpitBusy` (consistent with Plan 3's
+  ruling for `UnsupportedFeature`); resetting `last_gate` relies on `Computer.step`
+  returning None for cycle and instruction steps; `_ConflictError` always answers JSON
+  (PyWeb's base answers HTML to a browser that asks for it); a test loop compares bound
+  methods.
+- Task 3: `session.py` has a 101-column docstring line (older than Plan 4).
+- Task 4: the `## How It Works` code blocks in `the-cockpit.md` are not run by
+  `tests/test_docs.py` (true of every page: only Try It is run).
+- Task 5: `Cockpit.run` pauses without `try`/`finally` (the shape `step_line` used to have);
+  the `/api/listing` handler is named `rows` only to fit 100 columns.
+- Task 6: the live-test fixture patches `app.EventHub`/`Cockpit` by import path; the
+  `MAX_SPEED` tick bound is only pinned constant to constant.
+- Task 7: `_start_with` reads all six example files to load one; the page's listing
+  refetch could loop if a program overwrites its own code; `page.html` is about 650 lines
+  (organized, but large); the no-gate note shows twice (the top note and the zoom panel's
+  show-gate slot); the "clk clock wire" wording.
+- Rulings that shape the code: a line step that starts on a word whose frame is not ready
+  (a prologue word, a return's `ret`) takes its start frame pointer from the first ready
+  word it reaches, then applies the contract's rule, so step over never stops inside a
+  callee; `variables` and `last_gate` are null while playing, and the zoom panel says to
+  pause; the tour's "`for` over `range`" is checked from the source plus the lowered
+  opcodes, because Pebble lowers `for` to jumps.
+- Found in Task 8: `pyweb.testing.TestClient.stream(path, count=n)` waits for ever if
+  fewer than `n` events ever come (for example, a play that halts in its first tick sends
+  one event). Tests and measurements must only ask for events that are sure to arrive.
+
+## Notes for Plan 6, after Plan 5
+
+Plan 5 rebuilt the Cockpit for learners (spec
+`docs/superpowers/specs/2026-11-04-pycpu-cockpit-for-learners-design.md`): the program on
+the left, a magnifying glass on the right, one Step button at four depths, a "what just
+happened" sentence, and five guided walks as the front door. The notes above still hold.
+This is what is left, and what Plan 5 learned.
+
+### Definition of done (spec section 9), again
+
+| Spec item | Status | Evidence |
+|---|---|---|
+| A Pebble program using every subset feature runs on PyCPU in the Cockpit | Done | As in the table above; the `tour` example is still loaded behind the walks |
+| It can be paused at any moment | Done | As above, and the walks stop play before they load (`tests/test_walks.py`) |
+| ...and zoomed from Pebble line to individual gate, the gate view showing the real circuit's real values | Done | [The Magnifying Glass](../../concepts/the-magnifying-glass.md) (four depths, `tests/test_depths.py`), [What Just Happened](../../concepts/what-just-happened.md), `/api/part` (`tests/test_parts_view.py`), and [A Tour of the Cockpit](../../concepts/a-tour-of-the-cockpit.md) |
+| Both engines pass lockstep equivalence | Done | `tests/test_lockstep.py` |
+| Conformance against the Pebble VM passes | Done | `tests/test_conformance.py`, now on the `fromscratch-pebble>=0.4.1` floor |
+| Every layer has concept docs | Done | Every page under `docs/concepts/`, with [Guided Walks](../../concepts/guided-walks.md), and each walk's concept page links back to its walk (`tests/test_docs.py`) |
+| PyStack launches it and `import "cpu"` works | **Left for Plan 6** | No `pycpu` plugin in `pystack/src/pystack/plugins/` yet |
+
+Only PyStack's launcher and the `import "cpu"` Pebble module are left, with the release
+steps in the table at the top.
+
+### Measured on this machine, 2026-11-05
+
+These are timings, not pinned figures: no test depends on them. Same Intel Core i7-9750H
+laptop (macOS 26.5, Python 3.14.3), a throwaway script (not in the repo), full size
+(4K words), through `TestClient`, five runs each.
+
+- `create_cockpit()` built in 3.8 s.
+- `POST /api/walk` replays a walk on the real machine. Opening a walk at its first step
+  took 0.108 to 0.117 s. Opening it at the "Now you try" stage (the longest replay):
+  `many-instructions` 0.544 to 0.554 s, `where-n-lives` 0.565 to 0.571 s,
+  `subtracting-with-gates` 0.382 to 0.399 s, `a-call-and-the-stack` 0.503 to 0.520 s,
+  `why-the-clock-ticks` 0.447 to 0.456 s. So the slowest walk takes about 0.6 s to reach
+  its task. If that ever feels slow, the replay is the place to look.
+- `GET /api/part` answered in under a millisecond (176 bytes for `cpu.alu`, 234 for
+  `cpu.halt`): it only reads wires that are already settled.
+
 ### Minors parked in the Plan 5 ledger
 
 - Task 1: `subset.py` still models a jump to `len(instructions)` (`_arrive`,

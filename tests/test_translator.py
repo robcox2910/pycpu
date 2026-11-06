@@ -620,13 +620,14 @@ class TestConditionRefusals:
         assert (error.feature, error.line, error.column) == (RANGE_STEP, 2, 1)
         assert str(error).startswith("range with a step is not supported")
 
-    def test_a_jump_outside_the_code_is_a_loud_bug(self) -> None:
-        """A jump further than one past the end can only be a bug."""
+    @pytest.mark.parametrize("target", [1, 5])
+    def test_a_jump_outside_the_code_is_a_loud_bug(self, target: int) -> None:
+        """A jump to exactly one past the end, or further, can only be a bug."""
         place = pebble.SourceLocation(1, 1)
         code = pebble.CodeObject(
-            "main", instructions=[pebble.Instruction(pebble.OpCode.JUMP, 5, place)]
+            "main", instructions=[pebble.Instruction(pebble.OpCode.JUMP, target, place)]
         )
-        with pytest.raises(PebbleCPUError, match="outside it"):
+        with pytest.raises(PebbleCPUError, match="past its last instruction"):
             check_program(pebble.CompiledProgram(main=code, functions={}))
 
     def test_the_message_names_true_and_false(self) -> None:

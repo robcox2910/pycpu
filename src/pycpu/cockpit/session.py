@@ -246,6 +246,9 @@ class Cockpit:
     def start_with_pebble(self, source: str) -> None:
         """Load a Pebble program as the Cockpit's starting program.
 
+        Kept for older callers: it does what `load_pebble` does, and a load marks
+        nothing changed.
+
         This is for a Cockpit that has just been built: the program is loaded as
         `load_pebble` does, and a load marks nothing changed, because a visitor never
         saw the demo program it replaced.

@@ -350,8 +350,10 @@ def test_every_walks_concept_page_links_to_that_walk_in_the_cockpit() -> None:
         text = (DOCS / "concepts" / f"{page}.md").read_text(encoding="utf-8")
         link = f"http://127.0.0.1:8765/#walk={name}"
         assert text.count(link) == 1, f"{page} must link to {link} exactly once"
-        assert "uv run python -m pycpu" in text
-        assert text.count("http://127.0.0.1:8765/#walk=") == 1
+        para = next(p for p in text.split("\n\n") if link in p)
+        assert "uv run python -m pycpu" in para
+        assert para.startswith("**See it in the Cockpit.**")
+        assert text.count("http://127.0.0.1:8765/#walk=") == 1, "only one walk link per page"
 
 
 def test_no_page_links_to_the_cockpit_anywhere_but_the_local_address() -> None:

@@ -107,6 +107,7 @@ CHANGED_TEMPLATE = " {name} changed from {old} to {new}."
 # A line step that ends in another frame (a call or a return) says where it went,
 # never "changed from": the old number would belong to some other frame's box.
 INTO_TEMPLATE = " and went into {function}{where}."
+SET_UP_TEMPLATE = " and finished setting up {function}{where}."
 INTO_AGAIN_TEMPLATE = " and went into a new copy of {function}{where}."
 BACK_TEMPLATE = " and came back to {function}{where}."
 BACK_AGAIN_TEMPLATE = " and came back to the copy of {function} that called it{where}."
@@ -296,7 +297,7 @@ def gate_place(path: str) -> str:
     small = gate_words(path)
     # A gate straight inside the big part, or a small part named like it (a chooser in
     # the operand chooser), names only the big part.
-    if _COPY_NUMBER.sub("", path) == top_path or small in top:
+    if _COPY_NUMBER.sub("", path) == top_path or top == f"the {small}" or top.endswith(f" {small}"):
         return top
     if _NUMBERED.match(_COPY_NUMBER.sub("", path.rpartition(".")[2])):
         return small
@@ -497,6 +498,11 @@ def describe_line(
     says where the step went instead, such as "Line 9 ran 12 instructions and went
     into fact, where n is 7.".
 
+    A slot below `start.sp` was not on the stack when the step began, so in a function
+    (not main, whose memory is zeroed at load) it is new, never "changed": a step that
+    began while the function was still making its frame says "and finished setting up
+    sq, where t is 16." rather than comparing t with a dead call's leftover word.
+
     Args:
         translated: The Pebble program, with its source map and frames.
         start: The state at the start of the instruction the step began in.
@@ -523,12 +529,21 @@ def describe_line(
     elif before is not None and now is not None and before != now:
         sentence = sentence.removesuffix(".") + _went(translated, before, now, start, after)
         return sentence + _screen_showed(start, after)
-    names = _frame_names(translated, after) or _frame_names(translated, start) or []
-    for name, address in names:
+    function = None if now is None else now[0]
+    made: list[str] = []
+    changed = ""
+    for name, address in _frame_names(translated, after) or _frame_names(translated, start) or []:
         old, new = _signed(start.memory[address]), _signed(after.memory[address])
-        if old != new:
-            sentence += CHANGED_TEMPLATE.format(name=name, old=old, new=new)
-    return sentence + _screen_showed(start, after)
+        if function is not None and address < start.sp:
+            made.append(f"{name} is {new}")  # its box was not on the stack yet at the start
+        elif old != new:
+            changed += CHANGED_TEMPLATE.format(name=name, old=old, new=new)
+    if made:
+        where = WHERE_TEMPLATE.format(names=_and_list(made))
+        sentence = sentence.removesuffix(".") + SET_UP_TEMPLATE.format(
+            function=function, where=where
+        )
+    return sentence + changed + _screen_showed(start, after)
 
 
 def _screen_showed(start: MachineState, after: MachineState) -> str:

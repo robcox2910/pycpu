@@ -118,8 +118,8 @@ middle of the first walk, just after its third step:
 carries the word "changed", so it can be read aloud too. In the drawing, the last move
 ran `load r1, [r7-1]`, so `r1` (now 5) and `pc` (now 35) glow, and nothing else. The
 next move takes those marks away and marks only what *it* changed. A flag lamp or a
-wire that holds a 1 is shaded blue, which means "this is on", not "this changed". When a walk wants you
-to look at one thing, that thing gets an outline as well, and its pane scrolls to it.
+wire that holds a 1 is shaded blue, which means "this is on", not "this changed". When a
+walk wants you to look at one thing, that thing gets an outline as well, and its pane scrolls to it.
 
 **Clicking goes deeper; the trail climbs back.** Click inside the glass and it looks one
 depth closer: from the line to the instruction, from the instruction to its CPU part,
@@ -554,8 +554,8 @@ picture every route answers with:
   fetches the listing again, so it never shows a program that is not loaded. Every
   picture then redraws the program pane from that one listing, with `▶` on
   `pebble.line`, that line's instructions (every row whose `pebble_line` is the running
-  line) under it, and `>` on the current instruction (none once the machine has halted, because nothing runs next). Above the
-  program, a sentence says what is happening ("Running line 18", "Inside a ready-made
+  line) under it, and `>` on the current instruction (none once the machine has halted, because nothing runs
+  next). Above the program, a sentence says what is happening ("Running line 18", "Inside a ready-made
   routine", or, once halted, how the run ended). Under it come `variables` (a name whose
   `hidden` is true is dim, with a title saying the compiler made it), the `stack` cells
   and the `output`.

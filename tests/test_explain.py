@@ -2,6 +2,7 @@
 
 import re
 from dataclasses import replace
+from pathlib import Path
 
 import pytest
 from hypothesis import given
@@ -560,6 +561,8 @@ class TestHelpers:
             ("cpu.registers.read_a.mux_bus", "a chooser in the registers"),
             ("cpu.operand.mux_bus.choose", "the operand chooser"),
             ("cpu.pc", "the program counter"),
+            ("cpu.memory_store.or", "an OR in the memory store"),  # "or" is inside "memory"
+            ("cpu.memory_store.store", "the memory store"),  # a whole last word collapses
             ("ram.word12.bit3", "bit 3 of memory word 12"),
             ("cpu.decode.decoder.not_bus", "a row of NOT gates in the instruction decoder"),
             ("cpu", "the CPU"),
@@ -598,6 +601,11 @@ class TestHelpers:
         assert describe_move(Depth.GATE, state, state, micro, None, 0) == "Gate 7 worked out a 1."
 
 
+WHAT_JUST_HAPPENED = Path(__file__).parent.parent / "docs" / "concepts" / "what-just-happened.md"
+SQUARE_TWICE = (
+    "fn sq(e) {\n    let t = e * e\n    return t\n}\nlet a = sq(6)\nlet b = sq(4)\nprint(b)\n"
+)
+SECOND_CALL_LINE = 6
 FACTORIAL = next(e["source"] for e in example_programs() if e["name"] == "factorial")
 TWO_FUNCTION = (
     "fn add(a, b) {\n    let s = a + b\n    return s\n}\nlet x = 5\nlet y = add(x, 2)\nprint(y)\n"
@@ -651,6 +659,34 @@ class TestLinesThatChangeFrame:
             "Line 3 ran 6 instructions and came back to the main program, where x is 5 and y is 0.",
             "Line 6 ran 6 instructions. y changed from 0 to 7.",
         ]
+
+    def test_a_line_step_from_a_prologue_never_reads_an_old_calls_box(self) -> None:
+        """A line step begun while sq makes its frame says t is new, not changed from 36."""
+        cockpit = Cockpit(BITS)
+        cockpit.load_pebble(SQUARE_TWICE)
+        translated = cockpit.translated
+        assert translated is not None
+        while True:  # one instruction at a time, through the call on line 6 into sq
+            pc = cockpit.computer.state().pc
+            word = cockpit.program.words[pc]
+            calling = decode(word).opcode == Opcode.CALL
+            leaving = calling and translated.line_at(pc) == SECOND_CALL_LINE
+            cockpit.step_at(Depth.INSTRUCTION)
+            if leaving:
+                break
+        assert translated.frames[cockpit.computer.state().pc] is None  # mid-prologue
+        cockpit.step_at(Depth.LINE)
+        assert cockpit.happened == (
+            "Line 2 ran 48 instructions and finished setting up sq, where t is 16."
+        )
+
+    def test_the_docs_say_a_prologue_step_sets_boxes_up(self) -> None:
+        """The what-just-happened page states the rule the sentence above follows."""
+        text = " ".join(WHAT_JUST_HAPPENED.read_text(encoding="utf-8").split())
+        assert (
+            "A step that starts while a function is still making its frame says the "
+            "frame's new boxes are set up, rather than changed."
+        ) in text
 
     def test_stepping_over_a_call_stays_in_the_same_frame(self) -> None:
         """A step over runs the whole call and keeps the plain "changed from" sentence."""
