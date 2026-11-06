@@ -223,8 +223,9 @@ def walk_picture(cockpit: Cockpit) -> dict[str, object] | None:
         has), and for that step `say`, `look` and `show`. At the "Now you try" stage
         (`step == count`) `trying` is true, `say` is None, and `look` and `show` are
         the try's, and `step_kind` is the try's `step` (`"into"` when the page should
-        offer Step into; None otherwise, and always None before the try). `task` is always the try's task, and `done` and `off_script`
-        come from the session's `WalkProgress`.
+        offer Step into; None otherwise, and always None before the try). `task` is
+        always the try's task, and `done` and `off_script` come from the session's
+        `WalkProgress`.
 
     """
     progress = cockpit.walk
