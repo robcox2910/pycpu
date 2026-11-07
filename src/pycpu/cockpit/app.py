@@ -7,7 +7,10 @@ pilot, and the answer read back. Visitors can freeze the flight, nudge it forwar
 it (`/api/play`, `/api/pause`), load a new program (`/api/program`, or `/api/pebble`
 for one that comes with its lyric sheet), pick from the flight plans kept on board
 (`/api/examples`), read its dials (`/api/machine`) and ask what any part is carrying
-(`/api/view`). `/api/events` is the radio left switched on: after
+(`/api/view`), or meter a CPU part's real inputs and outputs (`/api/part`). The
+guided tours are here too: `/api/walks` lists them, `/api/walk` opens one at a step,
+and `/api/walk/leave` puts the guide away.
+`/api/events` is the radio left switched on: after
 every move, and every slice of play, the new picture goes out to every open page. These
 routes only parse the request, call the session and answer; every rule lives in
 `session.py` and every dial in `picture.py`.
@@ -25,7 +28,7 @@ from pyweb.app import App
 from pyweb.messages import HTTPError, HttpRequest, HttpResponse, JsonValue, html, json
 from pyweb.sse import EventHub, EventStream, ServerEvent
 
-from pycpu.cockpit.picture import listing, machine_picture
+from pycpu.cockpit.picture import listing, machine_picture, part_picture
 from pycpu.cockpit.session import (
     MAX_GATE_STEPS,
     MAX_RUN,
@@ -34,7 +37,10 @@ from pycpu.cockpit.session import (
     Cockpit,
     CockpitBusy,
     CockpitRefusal,
+    Depth,
+    NoSuchWalk,
 )
+from pycpu.cockpit.walks import example_source, load_walks
 from pycpu.computer import StepSize
 from pycpu.memory import RAM_ADDRESS_BITS
 from pycpu.translator import UnsupportedFeature
@@ -130,9 +136,23 @@ def _size(value: object) -> StepSize | LineSize | None:
             return None
 
 
-def _step_request(request: HttpRequest) -> tuple[StepSize | LineSize, int]:
-    """Read a `POST /api/step` body as a step size (or a line size) and a count, or raise a 400."""
+def _step_request(request: HttpRequest) -> tuple[StepSize | LineSize | Depth, int]:
+    """Read a `POST /api/step` body as a depth, or a step size (or line size) and a count.
+
+    A body has `depth` or `size`, never both; a `depth` takes no count.
+    """
     body = _object(request, "a size")
+    if "depth" in body:
+        if "size" in body:
+            raise HTTPError(BAD_REQUEST, "give a depth or a size, not both")
+        depths = ", ".join(f'"{d}"' for d in Depth)
+        if body["depth"] not in tuple(Depth):
+            raise HTTPError(BAD_REQUEST, f"depth must be one of {depths}")
+        count = body.get("count", 1)
+        # Only the whole number 1 (or no count): `True` and `1.0` compare equal to 1 but are not it.
+        if isinstance(count, bool) or not isinstance(count, int) or count != 1:
+            raise HTTPError(BAD_REQUEST, "a depth step takes no count")
+        return Depth(body["depth"]), 1
     size = _size(body.get("size"))
     if size is None:
         sizes = ", ".join(f'"{s}"' for s in (*StepSize, *LINE_SIZES))
@@ -143,9 +163,11 @@ def _step_request(request: HttpRequest) -> tuple[StepSize | LineSize, int]:
     return size, count
 
 
-def _step(cockpit: Cockpit, size: StepSize | LineSize, count: int) -> None:
-    """Make one step request's move: a gate, beat or instruction step, or a line step."""
-    if isinstance(size, StepSize):
+def _step(cockpit: Cockpit, size: StepSize | LineSize | Depth, count: int) -> None:
+    """Make one step request's move: a depth's step, a gate, beat or instruction, or a line."""
+    if isinstance(size, Depth):
+        cockpit.step_at(size)
+    elif isinstance(size, StepSize):
         cockpit.step(size, count)
     else:
         cockpit.step_line(into=LINE_SIZES[size])
@@ -228,6 +250,17 @@ class _Live:
         self.player = spawn(self._loop(_Slicer(speed, self.tick_seconds)), name="cockpit play")
         return self.moved()
 
+    def walk(self, name: str, step: int) -> HttpResponse:
+        """Open a walk at `step` (stopping any play loop first), and publish the picture.
+
+        The name and step are checked before the play loop is touched, so a refused
+        request leaves play running.
+        """
+        self.cockpit.check_walk(name, step)
+        self._cancel_player()
+        self.cockpit.go_to_walk(name, step)
+        return self.moved()
+
     def pause(self) -> HttpResponse:
         """Stop play at the next instruction boundary; if not playing, change nothing."""
         if not self.cockpit.playing:
@@ -254,6 +287,15 @@ class _Live:
                 self.player = None
 
 
+def _example_source(name: str) -> str:
+    """Read just the one example file called `name`, which must be one of `EXAMPLE_NAMES`."""
+    source = example_source(name)
+    if source is None:  # pragma: no cover - every name in EXAMPLE_NAMES has a file
+        msg = f"no example file called {name}"
+        raise ValueError(msg)
+    return source
+
+
 def example_programs() -> list[dict[str, str]]:
     """Read the example Pebble programs, in the order the page lists them.
 
@@ -265,10 +307,9 @@ def example_programs() -> list[dict[str, str]]:
         `.pebble`, the words of its first-line comment, and the whole program.
 
     """
-    folder = resources.files("pycpu.cockpit").joinpath("examples")
     examples: list[dict[str, str]] = []
     for name in EXAMPLE_NAMES:
-        source = folder.joinpath(f"{name}.pebble").read_text(encoding="utf-8")
+        source = _example_source(name)
         title = source.splitlines()[0].removeprefix("#").strip()
         examples.append({"name": name, "title": title, "source": source})
     return examples
@@ -294,10 +335,12 @@ def create_cockpit(
 
     Returns:
         A PyWeb `App` with the routes `GET /` (the page), `GET /api/machine`,
-        `GET /api/listing`, `GET /api/examples`, `GET /api/view`, `GET /api/events`,
+        `GET /api/listing`, `GET /api/examples`, `GET /api/view`, `GET /api/part`,
+        `GET /api/events`,
         `POST /api/step`,
         `POST /api/rewind`, `POST /api/run`, `POST /api/play`, `POST /api/pause`,
-        `POST /api/program` and `POST /api/pebble`. See the Cockpit pages in the
+        `POST /api/program`, `POST /api/pebble`, `GET /api/walks`, `POST /api/walk`
+        and `POST /api/walk/leave`. See the Cockpit pages in the
         docs for each one.
 
     Raises:
@@ -313,6 +356,7 @@ def create_cockpit(
     _reading_routes(app, live)
     _moving_routes(app, live)
     _play_routes(app, live)
+    _walk_routes(app, live)
     return app
 
 
@@ -327,7 +371,7 @@ def _start_with(cockpit: Cockpit, name: str) -> None:
     if name not in EXAMPLE_NAMES:
         msg = f"no example called {name}; the examples are {', '.join(EXAMPLE_NAMES)}"
         raise ValueError(msg)
-    source = next(e["source"] for e in example_programs() if e["name"] == name)
+    source = _example_source(name)
     try:
         cockpit.start_with_pebble(source)
     except CockpitRefusal as error:
@@ -351,7 +395,9 @@ def _reading_routes(app: App, live: _Live) -> None:
         return live.answer()
 
     @app.get("/api/listing")
-    def rows(_request: HttpRequest) -> HttpResponse:  # pyright: ignore[reportUnusedFunction]
+    def program_listing(  # pyright: ignore[reportUnusedFunction]
+        _request: HttpRequest,
+    ) -> HttpResponse:
         """List every word of the loaded program, with its source line and labels."""
         return json(listing(cockpit))  # pyright: ignore[reportArgumentType]
 
@@ -372,6 +418,21 @@ def _reading_routes(app: App, live: _Live) -> None:
             described = circuit_view(cockpit.computer.gate.simulator, path)
         except KeyError:
             raise HTTPError(NOT_FOUND, f"No part called {path}") from None
+        return json(described)  # pyright: ignore[reportArgumentType]
+
+    @app.get("/api/part")
+    def part(request: HttpRequest) -> HttpResponse:  # pyright: ignore[reportUnusedFunction]
+        """Read the inputs and outputs of the CPU part named by `?path=`, off its real wires.
+
+        Unlike `/api/view`, this refuses with 409 while playing: a reading must be the
+        wires' value now, and the gates stand still while the fast engine plays.
+        """
+        path = request.query.get("path", "") or ""
+        try:
+            with _as_http():
+                described = part_picture(cockpit, path)
+        except KeyError:
+            raise HTTPError(NOT_FOUND, f"No part view for {path or 'an empty path'}") from None
         return json(described)  # pyright: ignore[reportArgumentType]
 
     @app.get("/api/events")
@@ -443,3 +504,42 @@ def _play_routes(app: App, live: _Live) -> None:
     def pause(_request: HttpRequest) -> HttpResponse:  # pyright: ignore[reportUnusedFunction]
         """Stop play just before the next instruction; if not playing, change nothing."""
         return live.pause()
+
+
+def _walk_request(request: HttpRequest) -> tuple[str, int]:
+    """Read a `POST /api/walk` body: the walk's `name` and the `step` to open it at."""
+    body = _object(request, "a walk name and a step")
+    name, step = body.get("name"), body.get("step")
+    if not isinstance(name, str):
+        raise HTTPError(BAD_REQUEST, "name must be the name of a walk")
+    if isinstance(step, bool) or not isinstance(step, int):
+        raise HTTPError(BAD_REQUEST, "step must be a whole number")
+    return name, step
+
+
+def _walk_routes(app: App, live: _Live) -> None:
+    """Add the guided walks: list them, open one at a step, and leave."""
+
+    @app.get("/api/walks")
+    def walks(_request: HttpRequest) -> HttpResponse:  # pyright: ignore[reportUnusedFunction]
+        """List the walks in the order the page offers them."""
+        listed: list[JsonValue] = [
+            {"name": w.name, "title": w.title, "see_also": w.see_also} for w in load_walks()
+        ]
+        return json(listed)
+
+    @app.post("/api/walk")
+    def walk(request: HttpRequest) -> HttpResponse:  # pyright: ignore[reportUnusedFunction]
+        """Open a walk at a step by replaying it from its start; play stops first."""
+        name, step = _walk_request(request)
+        with _as_http():
+            try:
+                return live.walk(name, step)
+            except NoSuchWalk as error:  # a refusal too, but one that answers 404
+                raise HTTPError(NOT_FOUND, str(error)) from None
+
+    @app.post("/api/walk/leave")
+    def leave(_request: HttpRequest) -> HttpResponse:  # pyright: ignore[reportUnusedFunction]
+        """Leave the walk; the machine stays where it is."""
+        live.cockpit.leave_walk()
+        return live.moved()

@@ -34,12 +34,13 @@ and the Assembler turns readable instructions into the numbers the CPU understan
 
 The destination is the **Cockpit**, a screen where you can watch a program written in
 Pebble (a small programming language from the same series) run on this computer, pause at any moment, and zoom all the way down to individual gates.
-The Cockpit is built: a local page (`uv run python -m pycpu`) that opens with the **tour**
-loaded, a Pebble program using every piece of Pebble PyCPU can run. It shows the Pebble
-program and its machine code side by side, the registers, the stack, the variables and
-the output, and lets you step by a gate, a clock beat, an instruction or a whole Pebble
-line, rewind, run, or play the program while the page updates live, then pause and zoom
-from the CPU down to a single gate. Pebble programs run on PyCPU: whole numbers, variables, `if`,
+The Cockpit is built: a local page (`uv run python -m pycpu`) that opens on **guided
+walks**, short tours of the real machine that end with a small task for you. It shows the
+Pebble program on the left and a magnifying glass on the right. One Step button moves by a
+whole Pebble line, an instruction, a part of the CPU or a single gate, a sentence says
+what just happened, and you can rewind, run, or play the program while the page updates
+live, then pause and look from the CPU down to a single gate. The Expert drawer keeps
+every exact control. Pebble programs run on PyCPU: whole numbers, variables, `if`,
 `while`, `for` over a range, functions and `print`, translated into machine code, with
 multiplying, dividing and printing done by small assembly routines. The rest of Pebble
 (decimals, lists, text in variables, ...) is refused with a friendly message. What is
@@ -61,7 +62,7 @@ and the first release.
 - **Two engines** -- a fast engine in plain Python, checked in lockstep against the gates
 - **Pause and rewind** -- run fast, pause into the gates, step by a gate, a beat or an instruction, rewind, resume
 - **Pebble on the CPU** -- a translator from Pebble's compiled programs to PyCPU assembly, with frames, jumps, calls, fault lines and a source map
-- **The Cockpit** -- a local web page (served by [PyWeb](https://github.com/robcox2910/pyweb)) showing the running Pebble line, machine code, registers, stack and variables, with line steps, live play and pause, and a zoom down to single gates
+- **The Cockpit** -- a local web page (served by [PyWeb](https://github.com/robcox2910/pyweb)) opening on guided walks, with the Pebble program on the left and a magnifying glass on the right, one Step button at four depths (line, instruction, part, gate), a "what just happened" sentence, live play and pause
 
 ## Example
 
@@ -139,6 +140,9 @@ Every idea gets its own page, with an everyday analogy:
 | Stepping a Pebble line | [stepping-a-pebble-line.md](docs/concepts/stepping-a-pebble-line.md) | Reading aloud with a bookmark |
 | Watching it run | [watching-it-run.md](docs/concepts/watching-it-run.md) | Live radio commentary of a match |
 | A tour of the Cockpit | [a-tour-of-the-cockpit.md](docs/concepts/a-tour-of-the-cockpit.md) | Following one letter through the post |
+| The magnifying glass | [the-magnifying-glass.md](docs/concepts/the-magnifying-glass.md) | A magnifying glass over a map |
+| What just happened | [what-just-happened.md](docs/concepts/what-just-happened.md) | A commentator who only says what really happened |
+| Guided walks | [guided-walks.md](docs/concepts/guided-walks.md) | A museum audio guide |
 
 ## Read the docs
 

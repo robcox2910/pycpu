@@ -228,6 +228,8 @@ reading the current frame, and a program that calls itself too deeply runs out o
 for frames, which is the famous **stack overflow** error that a well-known programming
 question-and-answer website is named after.
 
+**See it in the Cockpit.** The Cockpit has a guided walk about this page's idea, where the variable `n` lives in memory. Start the Cockpit first with `uv run python -m pycpu`, then open [the walk](http://127.0.0.1:8765/#walk=where-n-lives).
+
 ## What's Next
 
 Each slot holds one 16-bit word, so a variable can only count so high. Find out what

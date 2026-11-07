@@ -16,6 +16,13 @@ subtraction, then the part of the CPU that does the work, then one column of the
 and finally a **single NAND gate**, with the real 0s and 1s on its wires. Then we come
 back up and see the letter arrive: the variable `n` has changed from 2 to 1.
 
+A note on the buttons. The Cockpit page has one **Step** button, and how far it steps
+depends on how closely the magnifying glass is looking (see
+[The Magnifying Glass](the-magnifying-glass.md)). On this page, "press **Line**",
+"press **Instruction**" and "press **Gate**" mean one press of Step with the glass at that
+depth, and each one is a `POST /api/step` with that size. The old buttons with those names
+live on in the Expert drawer.
+
 Every earlier page climbed **up**, one layer at a time. This **tour** goes the other way,
 down through all of them in one go, so you can see the whole climb at once.
 
@@ -226,9 +233,12 @@ in simulators, before a chip is ever made.
 
 ## What's Next
 
+The Cockpit's one Step button follows how closely you look. Read
+[The Magnifying Glass](the-magnifying-glass.md) for the four depths it can step.
+
 That is the whole climb, from one NAND gate to a Pebble program you can pause and look
 inside. Go back to [What Is a Computer, Really?](../index.md) to see the whole ladder
-again, or open the Cockpit yourself with `uv run python -m pycpu`. It opens with the
-`tour` example loaded, the program that uses every piece of Pebble PyCPU can run
-([The Cockpit](the-cockpit.md) shows its first lines), so you can follow any line of it
-down to a gate in just the same way.
+again, or open the Cockpit yourself with `uv run python -m pycpu`. It opens on
+guided walks; the `tour` example, the program that uses every piece of Pebble PyCPU can
+run ([The Cockpit](the-cockpit.md) shows its first lines), is loaded behind them, so you
+can follow any line of it down to a gate in just the same way.

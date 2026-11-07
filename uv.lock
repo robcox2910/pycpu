@@ -356,11 +356,11 @@ wheels = [
 
 [[package]]
 name = "fromscratch-pebble"
-version = "0.4.0"
+version = "0.4.1"
 source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/c7/4e/311666ed9ff3dfcf3ca02e9bd8aaab446e2066a9b0083b012c0fcfd33a2a/fromscratch_pebble-0.4.0.tar.gz", hash = "sha256:2c9954e22811bf58b25ab5ff4bc988f1924dbed43691459aeac591187f0550ed", size = 410293, upload-time = "2026-11-03T00:53:53.833Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/6b/8f/9fb26286dfd67607f706ff0a984f2354acb2b977d380aafa20830e29d722/fromscratch_pebble-0.4.1.tar.gz", hash = "sha256:d653200bce570b2c0a11fb37490a85d800316cda38b1acb4a98f55eea664524a", size = 411433, upload-time = "2026-11-04T23:31:46.234Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/ee/60/1f9e04d27fb5676a5977d2d61168385007d19049732601b98449108798bd/fromscratch_pebble-0.4.0-py3-none-any.whl", hash = "sha256:2f30f244388f20646abcf84b78f407f1b47096e42b33782a4aa94df66009e14e", size = 110837, upload-time = "2026-11-03T00:53:52.518Z" },
+    { url = "https://files.pythonhosted.org/packages/c0/43/54d25560ee50d0765a3676c8174a6b6ebaf9924020a31aa845594ed43a39/fromscratch_pebble-0.4.1-py3-none-any.whl", hash = "sha256:2703d4072bb15d83d562b1e6791aa9810d652b98319478b6004535ccef3fe37c", size = 111123, upload-time = "2026-11-04T23:31:44.527Z" },
 ]
 
 [[package]]
@@ -391,7 +391,7 @@ docs = [
 [package.metadata]
 requires-dist = [
     { name = "commitizen", marker = "extra == 'dev'", specifier = ">=4.4.0" },
-    { name = "fromscratch-pebble", specifier = ">=0.4.0" },
+    { name = "fromscratch-pebble", specifier = ">=0.4.1" },
     { name = "fromscratch-pynet", specifier = ">=0.2.0" },
     { name = "fromscratch-pyweb", specifier = ">=0.4.0" },
     { name = "hypothesis", marker = "extra == 'dev'", specifier = ">=6.100" },

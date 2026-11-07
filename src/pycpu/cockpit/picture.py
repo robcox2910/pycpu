@@ -9,7 +9,8 @@ line out as a dictionary the page can draw. Everything is read, nothing is chang
 from typing import cast
 
 from pycpu.assembler import disassemble
-from pycpu.cockpit.session import Cockpit
+from pycpu.cockpit.session import BUSY_MESSAGE, Cockpit, CockpitBusy
+from pycpu.cockpit.walks import walk_named
 from pycpu.computer import Computer
 from pycpu.isa import Fault, Opcode, decode
 from pycpu.state import WORD_BITS, MachineState
@@ -39,6 +40,53 @@ _PART_FOR_OPCODE = {
     Opcode.SETSP: "cpu.next_sp",
     Opcode.HALT: "cpu.halt",
 }
+
+# What the page calls each part in its Step button, for every part above and the whole CPU.
+PART_NAMES = {
+    "cpu.alu": "ALU",
+    "cpu.write_back": "write-back",
+    "cpu.address_mux": "memory address",
+    "cpu.next_pc": "next-instruction",
+    "cpu.next_sp": "stack pointer",
+    "cpu.halt": "halt",
+    "cpu": "CPU",
+}
+
+
+def part_picture(cockpit: Cockpit, path: str) -> dict[str, object]:
+    """Describe one part of the CPU by what goes into it and what comes out, right now.
+
+    Like a meter clipped onto the cables of a machine: each value is a row of the
+    part's real wires (its tap in `GateMachine.taps`), read one wire at a time with
+    `simulator.get` and added up, lowest bit first. Nothing is worked out here.
+
+    Args:
+        cockpit: The paused session to read.
+        path: The part's scope path, such as `"cpu.alu"`.
+
+    Returns:
+        `path`, `name` (from `PART_NAMES`), and `inputs` and `outputs`, each a list
+        of `{"name", "value"}` in the order the CPU's builder recorded them.
+
+    Raises:
+        KeyError: If the part has no taps (an unknown path, or the whole `cpu`).
+        CockpitBusy: If the session is playing: the gates stand still then, so
+            there are no live wires to read.
+
+    """
+    gate = cockpit.computer.gate
+    if path not in gate.taps:
+        raise KeyError(path)
+    if cockpit.playing:
+        raise CockpitBusy(BUSY_MESSAGE)
+    sim = gate.simulator
+    outputs = gate.tap_outputs[path]
+    inputs_seen: list[dict[str, object]] = []
+    outputs_seen: list[dict[str, object]] = []
+    for name, bus in gate.taps[path].items():
+        value = sum(sim.get(wire) << bit for bit, wire in enumerate(bus))
+        (outputs_seen if name in outputs else inputs_seen).append({"name": name, "value": value})
+    return {"path": path, "name": PART_NAMES[path], "inputs": inputs_seen, "outputs": outputs_seen}
 
 
 def _cell(state: MachineState, address: int) -> dict[str, object]:
@@ -167,6 +215,46 @@ def _last_gate(cockpit: Cockpit) -> dict[str, object] | None:
     return {"id": micro.gate, "path": circuit.scope_of(micro.gate), "value": micro.value}
 
 
+def walk_picture(cockpit: Cockpit) -> dict[str, object] | None:
+    """Describe the walk the learner is on, for the page to drive the glass and say its words.
+
+    Returns:
+        None with no walk, else `name`, `title`, `step`, `count` (how many steps it
+        has), and for that step `say`, `look` and `show`. At the "Now you try" stage
+        (`step == count`) `trying` is true, `say` is None, and `look` and `show` are
+        the try's, and `step_kind` is the try's `step` (`"into"` when the page should
+        offer Step into; None otherwise, and always None before the try). `task` is
+        always the try's task, and `done` and `off_script` come from the session's
+        `WalkProgress`.
+
+    """
+    progress = cockpit.walk
+    walk = None if progress is None else walk_named(progress.name)
+    if progress is None or walk is None:
+        return None
+    count = len(walk.steps)
+    trying = progress.step >= count
+    if trying:
+        say, look, show, kind = None, walk.trial.look, walk.trial.show, walk.trial.step
+    else:
+        here = walk.steps[progress.step]
+        say, look, show, kind = here.say, here.look, here.show, None
+    return {
+        "name": walk.name,
+        "title": walk.title,
+        "step": progress.step,
+        "count": count,
+        "say": say,
+        "look": str(look),
+        "show": show,
+        "step_kind": kind,
+        "trying": trying,
+        "task": walk.trial.task,
+        "done": progress.done,
+        "off_script": progress.off_script,
+    }
+
+
 def listing(cockpit: Cockpit) -> dict[str, object]:
     """Describe the whole loaded program, one row for each word of machine code.
 
@@ -265,8 +353,11 @@ def machine_picture(cockpit: Cockpit) -> dict[str, object]:
     a program's own `halt 1` to `halt 3` shares those codes. `pebble` is the
     `pebble_picture` when the program came from Pebble, and None for assembly.
     `variables` is the `variables_picture` of the current instruction (None while
-    playing). `program` is the session's load count, so the page can tell whether its
-    listing is of the program on the machine.
+    playing). `steps` is the label of each Step depth, with the part's name taken from
+    `PART_NAMES`. `happened` is the "What just happened" sentence for the last move
+    (None before any move and after a load). `walk` is the `walk_picture` of the walk the
+    learner is on, or None. `program` is the session's load count, so
+    the page can tell whether its listing is of the program on the machine.
 
     Args:
         cockpit: The session to describe.
@@ -295,6 +386,7 @@ def machine_picture(cockpit: Cockpit) -> dict[str, object]:
     pebble = None
     if translated is not None:
         pebble = pebble_picture(computer, translated, state=state, start_pc=start_pc)
+    instruction_part = "cpu" if word is None else part_for_instruction(word)
     return {
         "paused": computer.paused,
         "running": playing,
@@ -316,12 +408,20 @@ def machine_picture(cockpit: Cockpit) -> dict[str, object]:
         "variables": None if playing else variables_picture(translated, start, state),
         "last_gate": None if playing else _last_gate(cockpit),
         "note": cockpit.note,
+        "happened": cockpit.happened,
         "program": cockpit.loads,
+        "walk": walk_picture(cockpit),
         "parts": {
             "registers": [f"cpu.registers.r{i}" for i in range(len(state.registers))],
             "pc": "cpu.pc",
             "sp": "cpu.sp",
             "flags": "cpu.flags",
-            "instruction": "cpu" if word is None else part_for_instruction(word),
+            "instruction": instruction_part,
+        },
+        "steps": {
+            "line": "Step one line \u25b8",
+            "instruction": "Step one instruction \u25b8",
+            "part": f"Step one {PART_NAMES[instruction_part]} beat \u25b8",
+            "gate": "Step one gate \u25b8",
         },
     }

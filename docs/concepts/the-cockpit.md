@@ -9,106 +9,141 @@ one does. That is what this page does for the computer we have built.
 
 The **Cockpit** is a web page on your own computer that shows the whole computer on one
 screen. It began life as the Bench, a workbench with the lid off a radio, and it has
-grown into the Cockpit. When it opens, a real **Pebble** program called the **tour** is
-already loaded and paused before its very first instruction. Pebble is the small
-programming language from [From Pebble to Machine Code](from-pebble-to-machine-code.md),
-and the tour uses every piece of it that PyCPU can run. You can see the Pebble program
-next to the machine code it was translated into, the eight **registers** (the
-computer's small named boxes for numbers, from [What Is a CPU?](what-is-a-cpu.md)), the
-program counter, the stack pointer, the flags, the top of the stack, the program's
-variables, and whatever it has printed. Buttons move the machine forward by one
-**gate**, one clock beat, one whole **instruction** or one whole Pebble line, or let it
-run on its own. And the zoom panel lets you **zoom** (move from a big part into the
-smaller parts it is made of) from the whole CPU down to a single NAND gate, with the
-real 0s and 1s on its wires. Nothing on it is faked: every value comes from the
-machine itself, never made up by the page.
+grown into the Cockpit. It runs **Pebble** programs: Pebble is the small programming
+language from [From Pebble to Machine Code](from-pebble-to-machine-code.md). Nothing on
+it is faked: every value comes from the machine itself, never made up by the page.
+
+When the Cockpit opens, the first thing you see is a short list of **guided walks**.
+A walk is like a museum audio guide: it loads a program, moves the real machine one
+step at a time, and tells you in one sentence what to look at (see
+[Guided Walks](guided-walks.md)). Pick one, or press **Explore on my own** to look
+around by yourself. When the Cockpit starts, the program waiting behind the list is the
+**tour**, an example program that uses every piece of Pebble that PyCPU can run, paused
+before its very first instruction. Leaving a walk keeps that walk's program instead.
 
 One line of Pebble is many machine instructions. Step one instruction at a time and you
 can watch the Pebble line's mark sit still for a while, then jump, and the Cockpit lets
 you count the instructions in between.
 
-### One screen, four bands
+### One screen: your program and a magnifying glass
 
-Under the row of controls, the page is laid out in four bands, top to bottom. This is
-**layout A**:
+The page always fits one screen, so whatever a button changes is in view: at the size
+of a laptop screen (1280 by 720 dots) the page itself never scrolls. A pane with more
+in it than fits, such as a long program, scrolls inside its own box. Your program is
+on the left and a **magnifying glass** is on the right. Here is the whole screen in the
+middle of the first walk, just after its third step:
 
 ```text
- [Play] [Pause] speed [100 a second]   [1 gate] [100 gates] [1 cycle] [1 instruction]
- [Line] [Line into]   [Rewind]   [10] [Run]
-+--------------------------------------+---------------------------------------------+
-| PEBBLE                               | MACHINE CODE                                |
-|    17  }                             |     addr  word    line  from the source     |
-| >  18  print("Hello from Pebble!")   | >   0     0xC200  18    getsp r1            |
-|    19  let total = 0                 | ░   1     0x24B8  18    set r2, __end       |
-|    20  for i in range(1, 5) {        | ░   2     0x3401  18                        |
-+--------------------------------------+---------------------------------------------+
-| REGISTERS AND FLAGS | THE STACK     | VARIABLES            | PRINTED SO FAR         |
-|  r0 .. r7, pc, sp   |  sp and the   |  each name, its      |  everything the        |
-|  zero negative      |  words above  |  address and value   |  program has printed   |
-|  carry overflow     |  it           |  (helpers dimmed)    |                        |
-+---------------------+---------------+----------------------+------------------------+
-| ZOOM PANEL    whole circuit > cpu > alu                                            |
-|   what this part is, in one sentence, and the page that explains it                |
-|   parts inside: [control] [operand] [adder] ...   gates here: each NAND and wires  |
-+-------------------------------------------------------------------------------------+
-| LOAD   [A tour of everything Pebble can do on PyCPU v] [Load example]               |
-|        or your own: [ text box ]   [Load Pebble] [Load assembly]                    |
-+-------------------------------------------------------------------------------------+
+ [Walks] [Play] [Pause] [Step one instruction ▸] [Rewind] [an example v] [Load] [Expert] (paused)
++-------------------------------------------------------------------------------------------+
+| A line of Pebble is many tiny instructions   Step 3 of 5     [◂ Back] [Next ▸] [Leave]    |
+| Look closer: the CPU runs a line as tiny instructions, and this first one only copied n,  |
+| which is 5, into r1.                                                                      |
++-------------------------------------------------------------------------------------------+
+ What just happened: The CPU copied 5 from memory address 4094 into r1.
++--------------------------------------------+----------------------------------------------+
+| YOUR PROGRAM                               | Line 5 › push r1                             |
+| Running line 5. One line is many           |                                              |
+| instructions: they are listed under it,    |   push r1                                    |
+| and > marks the next one.                  |   the instruction at address 35, next to run |
+|    1  # Count down to lift off             |                                              |
+|    2  let n = 5                            |   1010   001   000000000                     |
+|    3  while n > 0 {                        |   job    rd    not used                      |
+|    4      print(n)                         |   push   r1                                  |
+| ▶  5      n = n - 1                        |                                              |
+|          34  load r1, [r7-1]   ; r1 = n    |   r0 0  [r1 5 changed]  r2 53  r3 10  r4 5   |
+|        > 35  push r1  ; onto the stack     |   r5 0  r6 65535  r7 4095                    |
+|          36  li   r1, 1        ; r1 = 1    |   [pc 35 changed]  sp 4094                   |
+|          ...                               |   zero 1  negative 0  carry 1  overflow 0    |
+|    6  }                                    |                                              |
+|    7  print("Lift off!")                   |   [Look closer ▾]                            |
+| VARIABLES      THE STACK     PRINTED       |                                              |
+| The top level, 4094: 5       5             |                                              |
+| frame pointer  4095: 0                     |                                              |
+| r7 = 4095.                                 |                                              |
+| n  5  at 4094                              |                                              |
++--------------------------------------------+----------------------------------------------+
 ```
 
-- **Top left, Pebble.** The program, one numbered line per row. The line that is running
-  is marked with `>`.
-- **Top right, machine code.** Every word of the program, read from `GET /api/listing`:
-  its address, the word as a number, the Pebble line that made it, and the line of
-  assembly it came from (shown once, on the first word that line made). The current
-  word is marked with `>`, and every word of the running Pebble line is shaded (`░` in
-  the drawing), so you can see the whole line's machine code at once. The tour's first
-  three words, 0xC200, 0x24B8 and 0x3401, all belong to line 18; the second and third
-  are the two halves of one `set`.
-- **Middle, the dials.** The registers and flags, the top of the stack, the variables
-  of the code that is running, and the output. Whatever the last move changed is
-  highlighted and carries the word "changed", so it can be read aloud too. Variables the
-  compiler made for itself (see Variables below) are shown in dim text, and holding the
-  pointer over one explains it.
-- **Below them, the zoom panel.** Where you are in the circuit, a sentence saying what that
-  part is, the smaller parts inside it, and the gates directly in it.
-- **Last, Load.** The examples, listed by their titles, and a box for your own program.
+- **The top bar.** **Walks** brings back the list of walks. **Play** and **Pause** let
+  the computer run on its own and stop it again. Next comes the **one Step button**: it
+  steps as far as the glass is deep, and its label says exactly what it will do, such
+  as "Step one instruction ▸" (see [The Magnifying Glass](the-magnifying-glass.md)).
+  **Rewind** goes back to the start of the current instruction. The example list loads
+  one of the example programs, or, with **Write your own...**, opens a box for your own
+  program. **Expert** opens the Expert drawer. The lamp at the end says whether the
+  computer is `paused` or `playing`.
+- **The walk bar** shows the walk you are on, how far along it is, and its one sentence
+  for this step. **Next ▸** and **◂ Back** move through the walk, and **Leave** puts the
+  guide away. After the last step comes **Now you try**: one small task, such as "Press
+  Step until n is 0.", which the Cockpit checks on the real machine. When you have done
+  it the bar cheers: "You did it! Pick another walk, or keep exploring." If you wander
+  off during a walk's steps, by pressing a button of your own or by moving the glass,
+  the walk waits for you and a **Back to the walk** button takes you back to the
+  step you were on. Going past the task is fine too. Say the task asks for
+  **Step into ▸**, but you press the big Step button instead: it steps *over* a
+  function call, and the program can run to its end without ever doing the task. Until
+  the task is done, the bar has a **Start the task again** button. It replays the walk
+  on the real machine to the moment the task began, so you can try again.
+- **What just happened** is one sentence, in plain words, about the last move (see
+  [What Just Happened](what-just-happened.md)). Sometimes the Cockpit has a second
+  sentence about that move, such as where a line step stopped; it appears under the
+  first, but only when it says something different.
+- **Your program, on the left.** The Pebble program, one numbered line per row, with the
+  running line marked `▶`. Just under that line are its machine instructions, read from
+  `GET /api/listing`: each one's address and its line of assembly. The instruction that
+  runs next is marked `>`. Line 5 of the countdown, `n = n - 1`, is 10 instructions,
+  at addresses 34 to 43. For a program written in assembly, the pane shows its whole
+  machine code instead. Under the program sit the **variables** of the code that is
+  running, the top of **the stack**, and everything the program has printed.
+- **The magnifying glass, on the right.** The one thing being studied, large. Along its
+  top is the **trail**, which says how deep you are looking, such as `Line 5 › push r1`.
+  The glass can look at four depths:
 
-The controls, from left to right:
+| Depth | What the glass shows | What Step does |
+|-------|----------------------|----------------|
+| Line | The running Pebble line, large, with all of its instructions | Runs one Pebble line |
+| Instruction | The next instruction: its 16 bits split into their fields, and the registers, `pc`, `sp` and the flags | Runs one instruction |
+| Part | The part of the CPU that does this instruction's main work, with its inputs going in and its outputs coming out | Runs one clock beat |
+| Gates | The NAND gates inside a part, each with the 0s and 1s on its wires | Works one gate |
 
-| Control | What it does |
-|---------|--------------|
-| **Play** and **Pause**, with a **speed** | Let the computer run on its own, so many instructions a second, and stop it again (see [Watching It Run](watching-it-run.md)) |
-| **1 gate** and **100 gates** | Step a gate (or a hundred) at a time |
-| **1 cycle** | Step one clock beat: a fetch or an execute |
-| **1 instruction** | Step one whole instruction |
-| **Line** and **Line into** | Step one Pebble line, over a function call or into it (see [Stepping a Pebble Line](stepping-a-pebble-line.md)) |
-| **Rewind** | Go back to the start of the current instruction |
-| **Run**, with a number | Run that many instructions, then pause |
-| **Load example** | Load one of the example programs from the list |
-| **Load Pebble** and **Load assembly** | Load your own program from the box |
+- **The Expert drawer** keeps every control from before the walks, for when you want
+  an exact move: **1 gate**, **100 gates**, **1 cycle**, **1 instruction**, **Line**
+  and **Line into** (step one Pebble line, over a function call or into it; see
+  [Stepping a Pebble Line](stepping-a-pebble-line.md)), **Run** with a number of
+  instructions, the **speed** for Play, and the box for your own program, with
+  **Load Pebble** and **Load assembly**.
 
-Three kinds of click take you into the circuit:
+**Only the newest change glows.** Whatever the last move changed is highlighted and
+carries the word "changed", so it can be read aloud too. In the drawing, the last move
+ran `load r1, [r7-1]`, so `r1` (now 5) and `pc` (now 35) glow, and nothing else. The
+next move takes those marks away and marks only what *it* changed. A flag lamp or a
+wire that holds a 1 is shaded blue, which means "this is on", not "this changed". When a
+walk wants you to look at one thing, that thing gets an outline as well, and its pane scrolls to it.
 
-- **Click anything that lives in the circuit** (a register, `pc`, `sp`, the flags, a word
-  of machine code, a word of the stack, a variable, or the sentence naming the current
-  instruction) and the zoom panel opens on the part that holds it. Clicking `r1` lands
-  you in `cpu.registers.r1`; clicking the current instruction lands you in the part that
-  does its main work, such as `cpu.alu` for an add.
-- **Click a Pebble line** and every word of machine code it made is outlined, and the
-  machine code pane scrolls to the first of them. Click it again to clear it.
-- **After a gate step that ended on a gate**, a **show this gate** button appears. It
-  opens the zoom panel on the part that holds the gate that just changed, and highlights
-  that gate until the next move. A clock beat is made of clock-wire moves as well as
-  gates, so a gate step can end on a clock wire instead (the very first **1 gate** of a
-  program does). Then there is no gate to show, and the page says so in the zoom panel,
-  where the button would be:
-  "That step moved the write clock wire, not a gate, so there is no gate to show."
-  The memory's `write` clock is named; the main clock, `clk`, is just "the clock wire".
+**Clicking goes deeper; the trail climbs back.** Click inside the glass and it looks one
+depth closer: from the line to the instruction, from the instruction to its CPU part,
+from the part to its gates. Inside the gates, click a smaller part to look inside it.
+Each name on the trail is a button that climbs back up to that depth. Climbing and
+clicking never move the machine. Clicking a variable or a word of the stack, or a
+register in the glass, opens the gates that hold that number.
 
-While the computer is playing the step buttons are switched off, and the zoom panel
-says "Pause to look inside the gates": the gates are not running then, so there is
-nothing real to show (see [Watching It Run](watching-it-run.md)).
+**Following a gate.** After a gate step that ended on a gate, a **show this gate**
+button appears in the glass. It opens the part that holds the gate that just changed,
+and highlights that gate until the next move. A clock beat is made of clock-wire moves
+as well as gates, so a gate step can end on a clock wire instead (the very first gate
+step of a program does). Then there is no gate to show, and What just happened says so:
+"That step moved the write clock wire, not a gate, so there is no gate to show."
+The memory's `write` clock is named; the main clock, `clk`, is just "the clock wire".
+
+While the computer is playing, the Step, Rewind and Run buttons are switched off, and
+the glass says "Pause to look inside the gates": the gates are not running then, so
+there is nothing real to show (see [Watching It Run](watching-it-run.md)).
+
+**Opening a walk from a link.** An address ending in `#walk=` and a walk's name, such as
+`http://127.0.0.1:8765/#walk=many-instructions`, opens that walk straight away. If no
+walk has that name, the page shows the list of walks with one sentence: "Walk not
+found."
 
 The page in your browser and the Cockpit app behind it talk by sending each other short
 messages, like notes passed through a hatch. Each kind of note goes to its own address,
@@ -124,21 +159,24 @@ that", and **404** means "not found, there is no such thing".
 |---------------|----------|
 | The whole instrument panel | The Cockpit page, served by `python -m pycpu` |
 | The aeroplane in flight, frozen | A `Computer` (from [Pausing and Rewinding](pausing-and-rewinding.md)), paused |
-| Flight plans kept in the cockpit | The example programs, from `GET /api/examples`; `python -m pycpu` loads the `tour` |
+| Training flights with an instructor | The guided walks, from `GET /api/walks` and `POST /api/walk` |
+| Flight plans kept in the cockpit | The example programs, from `GET /api/examples` |
 | The dials in front of the pilot | `registers`, `pc`, `sp`, `flags` and `output`, read from `GET /api/machine` |
-| The flight plan, with your place marked | The machine code pane, with the current instruction marked |
-| Nudging time forward | `POST /api/step` with `"gate"`, `"cycle"` or `"instruction"` |
+| The flight plan, with your place marked | The program pane, with the running line and the next instruction marked |
+| A magnifying glass held over one dial | The glass, at one of four depths |
+| Nudging time forward | `POST /api/step` with a `depth`, from the one Step button |
+| The co-pilot saying what just happened | `happened`, one plain sentence about the last move |
 | Going back to the start of the manoeuvre | `POST /api/rewind` |
 | Letting the flight go on for a while | `POST /api/run` |
 | Loading a new flight plan | `POST /api/program`, with assembly text |
 | Loading a plan that comes with a written briefing | `POST /api/pebble`, with a Pebble program that the translator turns into machine code |
-| The briefing, held up beside the plan | The Pebble pane, next to the machine code pane |
 | The line of the briefing being flown right now | `pebble.line`: the Pebble line of the current instruction |
 | The program, in full | `GET /api/listing`: one row for each word, with its source line, labels and Pebble line |
 | Circled differences | `changed`: what the last move altered |
 | A part you point at | A **scope**, such as `cpu.alu.adder` (see [Looking Inside a Circuit](looking-inside.md)) |
 | The smallest part you can find | One NAND gate, with its two inputs and one output |
 | The cockpit door | `create_cockpit()` in `src/pycpu/cockpit/app.py` |
+
 
 ## Try It
 
@@ -307,7 +345,7 @@ as [What Happens When Things Go Wrong](what-happens-when-things-go-wrong.md). Th
 program uses `/`, which PyCPU cannot do, so nothing is loaded and the answer is a 400
 naming the exact line and column.
 
-The page's **Load** list comes from `GET /api/examples`: each example is a Pebble file in
+The page's example list comes from `GET /api/examples`: each example is a Pebble file in
 `src/pycpu/cockpit/examples/`, and the `#` comment on its first line is its title. You
 can also start a Cockpit with one of them already loaded, which is what
 `python -m pycpu` does with the tour. The tour needs 456 words of memory, so this
@@ -352,7 +390,8 @@ To open the real thing, run this in a terminal, then visit the address it prints
 uv run python -m pycpu
 ```
 
-It serves the page at `http://127.0.0.1:8765`, with the tour loaded. The address
+It serves the page at `http://127.0.0.1:8765`, with the tour loaded behind the list of
+walks. The address
 `127.0.0.1` means "this computer only", so nobody else on your network can see it. The real Cockpit has the full
 4K words of memory, more than 600,000 NAND gates, so it says `Building the computer
 from NAND gates...` and takes about 3 seconds (on the computer this page was written on)
@@ -370,22 +409,27 @@ calls the session and answers.
  ┌───────────────┐   GET /              ┌────────────────────────────────┐
  │  page.html    │ <─────────────────── │  app.py: create_cockpit()      │
  │               │                      │                                │
- │  Pebble pane  │   GET /api/machine   │  one Computer, paused:         │
- │  machine code │   GET /api/listing   │   a fast engine and a gate     │
- │  dials        │   GET /api/examples  │   engine of real NAND gates    │
+ │  walks list   │   GET /api/walks     │  walks/*.toml, replayed on     │
+ │  walk bar     │   POST /api/walk     │   the real machine             │
+ │               │   POST /api/walk/    │                                │
+ │               │        leave         │                                │
+ │  program pane │   GET /api/machine   │  one Computer, paused:         │
+ │               │   GET /api/listing   │   a fast engine and a gate     │
+ │  example list │   GET /api/examples  │   engine of real NAND gates    │
  │               │ <─────────────────── │                                │
- │  buttons      │   POST /api/step     │  assemble / disassemble        │
- │  load         │   POST /api/rewind   │  translate (Pebble -> words,   │
- │               │   POST /api/run      │   plus a line for each word)   │
- │               │   POST /api/play     │                                │
- │               │   POST /api/pause    │  examples/*.pebble             │
+ │  Step, Play,  │   POST /api/step     │  assemble / disassemble        │
+ │  Pause,       │   POST /api/rewind   │  translate (Pebble -> words,   │
+ │  Rewind and   │   POST /api/run      │   plus a line for each word)   │
+ │  the Expert   │   POST /api/play     │                                │
+ │  drawer       │   POST /api/pause    │  examples/*.pebble             │
  │               │   POST /api/program  │                                │
  │               │   POST /api/pebble   │                                │
  │               │ ───────────────────> │                                │
  │               │   GET /api/events    │  a "machine" event after       │
  │               │ <─ ─ ─ ─ ─ ─ ─ ─ ─ ─ │  every move                    │
- │  zoom panel   │   GET /api/view      │  circuit_view reads the gates' │
- │               │ <─────────────────── │  own wires                     │
+ │  the glass    │   GET /api/part      │  part_picture and circuit_view │
+ │               │   GET /api/view      │   read the gates' own wires    │
+ │               │ <─────────────────── │                                │
  └───────────────┘                      └────────────────────────────────┘
 ```
 
@@ -423,6 +467,9 @@ the page redraws:
   Once the machine halts, `message` says how the run ended, such as
   `"Division by zero at line 2"` or `"The program finished"`, and `line` is the line
   to blame (`null` after a normal finish).
+  Three more keys are for the page's helpers: `steps` holds the Step button's label for
+  each depth, `happened` is the What just happened sentence (`null` before any move and
+  just after a load), and `walk` is the walk you are on, or `null`.
 - `POST /api/step` takes `{"size": "gate"}`, `{"size": "cycle"}` or
   `{"size": "instruction"}` and calls `Computer.step` with that size (the three sizes
   from [Pausing and Rewinding](pausing-and-rewinding.md)). One instruction is thousands
@@ -437,6 +484,10 @@ the page redraws:
   count with a cycle or instruction step gets a 400 ("bad request") answer.
   `{"size": "line"}` and `{"size": "line_into"}` step a whole Pebble line, over or into
   a function call; [Stepping a Pebble Line](stepping-a-pebble-line.md) explains them.
+  These sizes are the Expert drawer's buttons. The one Step button sends a **depth**
+  instead: `{"depth": "line"}`, `"instruction"`, `"part"` or `"gate"`, with no count.
+  [The Magnifying Glass](the-magnifying-glass.md) explains each depth. A body with both
+  a `depth` and a `size` gets a 400.
 - `POST /api/rewind` goes back to the start of the current instruction.
 - `POST /api/run` takes `{"instructions": 25}` (from 1 to 10,000). The computer
   resumes, which finishes any half-done instruction in the gates, runs that many more
@@ -457,6 +508,14 @@ the page redraws:
 - `GET /api/view?path=cpu.alu` answers with `circuit_view` for that scope of the gate
   engine's circuit, exactly as before. A scope that does not exist, such as `cpu.nope`,
   gets a friendly 404 ("not found") answer that says `No part called cpu.nope`.
+- `GET /api/part?path=cpu.alu` reads one CPU part's inputs and outputs off its real
+  wires, for the glass's part depth (see [The Magnifying Glass](the-magnifying-glass.md)).
+  While playing it answers 409 ("busy"), because the gates are standing still, and the
+  whole `cpu` gets a 404: it is too big to have a few inputs and outputs.
+- `GET /api/walks`, `POST /api/walk` and `POST /api/walk/leave` list the guided walks,
+  open one at a step, and put the guide away; [Guided Walks](guided-walks.md) explains
+  them. A walk name that does not exist gets a 404 that says, for example,
+  "There is no walk called nonsense."
 - `GET /api/examples` lists the example programs, always in the same order with the
   tour first, as `{"name", "title", "source"}`: the file's name without `.pebble`, the
   words of its first-line `#` comment, and the whole program. The page loads one by
@@ -466,39 +525,65 @@ the page redraws:
 
 **The page** is plain HTML, CSS and JavaScript in one file, `src/pycpu/cockpit/page.html`,
 with nothing fetched from anywhere else, so it works with no internet. Its colours are
-named once at the top, with a second set for when your computer is in dark mode, and
-under 44rem wide (about a phone held upright) the bands fold into one column. It draws
-layout A, from the picture every route answers with:
+named once at the top, with a second set for when your computer is in dark mode. The
+whole page is one grid exactly as tall as the browser window (`height: 100vh`, where
+`vh` means "a hundredth of the window's height"), and the page's body has
+`overflow: hidden`, so it cannot scroll. Each pane has `overflow: auto` instead, so a
+long program scrolls inside its own box and nothing else moves. Under 44rem wide (about
+a phone held upright) the two halves stack into one column, with the glass above the
+program, so the effect of a step is still at the top. It draws the screen from the
+picture every route answers with:
 
-- **The Pebble pane** shows `pebble.source`, one numbered line per row, marks
-  `pebble.line`, and says in a sentence above it what is happening ("Running line 18",
-  "Inside a ready-made routine", or, once halted, how the run ended). For an assembly
-  program it says there is no Pebble to show.
-- **The machine code pane** is drawn once from `GET /api/listing` after each load. Every
-  picture carries `program`, a count the session adds one to on every load, and the
-  listing carries the `program` it was made for; when the two differ, the page fetches
-  the listing again, so it never shows a program that is not loaded. Every other
-  picture only moves the marks: `>` on the current instruction (none once the
-  machine has halted, because nothing runs next) and shading on every row whose
-  `pebble_line` is the running line. Above it, a sentence names the current
-  instruction; clicking it zooms to `parts["instruction"]`.
-- **The dials** are `registers`, `pc`, `sp` and `flags`, the `stack` cells, the
-  `variables` and the `output`. A value is highlighted and labelled "changed" when its
-  register index, its flag name or its address is in `changed`. A variable whose
-  `hidden` is true is dim, with a title that says the compiler made it.
-- **The zoom panel** opens on `cpu`, lists the parts inside with their gate counts, and
-  draws each gate with its two inputs and its output, a wire holding a 1 highlighted.
-  Each level is labelled in one plain sentence, with the name of the page that explains
-  it. After every move the page reloads the part you are looking at, so you can watch
-  its wires change. When `last_gate` is not `null`, a **show this gate** button opens
-  `last_gate.path` and highlights gate `last_gate.id`.
+- **The walks list** comes from `GET /api/walks`. Choosing a walk sends
+  `POST /api/walk` with `{"name": ..., "step": 0}`. **Next ▸** sends the walk's `step`
+  plus 1 and **◂ Back** the `step` minus 1. **Back to the walk** sends the same `step`
+  again, which replays the walk to that moment. **Leave** sends `POST /api/walk/leave`.
+  The picture's `walk` key gives the sentence (`say`), the depth for the glass (`look`)
+  and the one thing to outline (`show`). At the **Now you try** stage (`trying`) it gives
+  the `task` and `done`, and `step_kind`: when that is `"into"`, a second button,
+  Step into ▸, sends `{"size": "line_into"}`, so a call is followed into its function.
+  When the page opens, it reads `#walk=` from its own address and opens that walk.
+- **The Step button**'s label is `steps[depth]`, where `depth` is how deep the glass is
+  looking, and pressing it sends `{"depth": depth}`. The page has no labels of its own
+  for it, so the label always says exactly the move the Cockpit will make.
+- **What just happened** shows `happened`. The picture's `note` appears under it only
+  when it is a different sentence.
+- **The program pane** draws the program from `GET /api/listing`, once per program.
+  Every picture carries `program`, a count the session adds one to on every load, and
+  the listing carries the `program` it was made for; when the two differ, the page
+  fetches the listing again, so it never shows a program that is not loaded. Every
+  picture then redraws the program pane from that one listing, with `▶` on
+  `pebble.line`, that line's instructions (every row whose `pebble_line` is the running
+  line) under it, and `>` on the current instruction (none once the machine has halted, because nothing runs
+  next). Above the program, a sentence says what is happening ("Running line 18", "Inside a ready-made
+  routine", or, once halted, how the run ended). Under it come `variables` (a name whose
+  `hidden` is true is dim, with a title saying the compiler made it), the `stack` cells
+  and the `output`.
+- **The glass** draws one depth. The line depth uses the listing. The instruction depth
+  splits `instruction.word` into its fields, using the field table on the
+  [Instruction Set](../reference/instruction-set.md) page, and shows the `registers`,
+  `pc`, `sp` and `flags`. The part depth asks `GET /api/part` about
+  `parts["instruction"]`, and shows each input and output with a plain name, such as
+  "stack pointer − 1" for `sp_minus_1`. The gates depth asks `GET /api/view`: it lists
+  the parts inside with their gate counts and draws each gate with its two inputs and
+  its output, a wire holding a 1 highlighted. Each part is labelled in one plain
+  sentence, with the name of the page that explains it. After every move the glass
+  reloads what it is showing, so you can watch its wires change, and if two answers
+  cross on the way back, only the answer to the newest question is drawn. When
+  `last_gate` is not `null`, the **show this gate** button opens `last_gate.path` and
+  highlights gate `last_gate.id`.
+- **The glow** comes from `changed`. Once for each new picture, the page clears every
+  old mark and marks the registers, flags, `pc`, `sp` and memory addresses that
+  `changed` lists, so only the newest change ever glows.
 
 The page listens to `GET /api/events` with the browser's `EventSource` (a built-in
 listener for server-sent events) and redraws from every `machine` event, so a second
 tab, or play, keeps it up to date. Every button still sends its own request and draws
-from the answer too, so the page keeps working if the event stream drops. While the
-picture says `running`, the step, rewind and run buttons are switched off, and the zoom
-panel shows "Pause to look inside the gates" instead of asking `/api/view`.
+from the answer too, so the page keeps working if the event stream drops. If the
+Cockpit refuses a button, the page shows the refusal's message and asks for the picture
+again, to catch up with what is really happening. While the picture says `running`,
+the Step, Rewind and Run buttons are switched off, and the glass shows "Pause to look
+inside the gates" instead of asking `/api/part` or `/api/view`.
 
 The page writes every piece of text it shows with `textContent`, which puts words on
 the page as plain words, so a program containing something like `<b>` shows those three
@@ -535,44 +620,52 @@ show:
     ret
 ```
 
-1. Open the Cockpit, paste the program above into the box under **Load**, and press
-   **Load assembly**. The machine code pane marks address 0, `set r1, 0xFFFF` (its
-   first word is `li r1, 255`, as the sentence above the pane says), and every register
-   is 0. Press **1 instruction**. `r1` becomes 255 and the mark moves to address 1.
-   `pc` is 1.
-2. Type 4 in the Run box and press **Run**. The mark is now on
+1. Open the Cockpit and press **Explore on my own**. Press **Expert**, paste the program
+   above into the box for your own program, and press **Load assembly**. An assembly
+   program has no Pebble lines, so the glass starts one depth down, on the instruction:
+   `li r1, 255`, the first word of `set r1, 0xFFFF`. The program pane marks address 0,
+   and every register is 0. Press **Step one instruction ▸**. `r1` becomes 255 and
+   glows, the mark moves to address 1, and `pc` is 1.
+2. In the Expert drawer, type 4 in the Run box and press **Run**. The glass now shows
    `add r3, r3, r2` at address 8, inside the `show` function. `sp` is one less than
    before, because the `call` pushed the address to come back to (see
    [Calling and Returning](calling-and-returning.md)).
-3. Press **1 cycle**. The phase now says `execute`: the add has been fetched into the
-   instruction register (`ir`) and is waiting to be obeyed. Notice `pc` already says 9.
-4. In the zoom panel you are looking at `cpu`. Click **alu**, then **adder**, then
-   **bit0**, then **full_adder**, then the first **half_adder**, then **and**. Here are
-   the two gates that decide whether the first column of 48 + 3 carries: one input
-   holds a 0 and the other a 1, so nothing carries.
-5. Press **1 gate** a few times, then **100 gates**, and watch the phase, the boundary
-   flag and the wires. Press **Rewind** and you are back at the start of the add, with
-   the phase saying `fetch` again.
-6. Press **1 instruction**: `r3` turns from 48 into 51, the code for the character
-   `3`. Press **Run** with 100 and the output says `321`.
+3. Click the instruction in the glass to look closer. The glass shows the ALU, with its
+   inputs going in and its outputs coming out, and the Step button now says
+   **Step one ALU beat ▸**. Press it. That beat **fetched** the add into the CPU, and
+   What just happened says so: "Fetch: the CPU read the word at address 8, which says
+   add r3, r3, r2." Its gates are already working on it: number A is 48, number B is 3,
+   and the answer coming out is 51.
+4. Click the ALU to look at its gates. Click **adder**, then **bit0**, then
+   **full_adder**, then the first **half_adder**, then **and**. Here are the two gates
+   that decide whether the first column of 48 + 3 carries: one input holds a 0 and the
+   other a 1, so nothing carries.
+5. Press **Step one gate ▸** a few times, then **100 gates** in the Expert drawer, and
+   watch the wires. Press **Rewind** and you are back at the start of the add.
+6. On the trail, click `add r3, r3, r2` to climb back to the instruction, and press
+   **Step one instruction ▸**: `r3` turns from 48 into 51, the code for the character
+   `3`, and What just happened says "The ALU added 48 and 3. The answer, 51, went into
+   r3." Press **Run** with 100 and the program pane's output says `321`.
 
 ### A second tour: one Pebble line, many instructions
 
-1. The box under **Load** starts with a Pebble countdown from 3 (if you have changed it,
-   type it back: `let n = 3`, then `while n > 0 {`, `print(n)`, `n = n - 1` and `}`).
-   Press **Load Pebble**. The Pebble pane marks line 1, `let n = 3`, and the machine
-   code pane marks `getsp r1` at address 0: the start of main's frame.
-2. Press **1 instruction** again and again. The machine code mark moves every time; the
-   Pebble mark sits on line 1 until the frame is made and `n` is stored, then
-   jumps to line 2, `while n > 0`.
+1. Open the example list and choose **Write your own...**. The Expert drawer opens on a
+   box that starts with a Pebble countdown from 3 (if you have changed it, type it back:
+   `let n = 3`, then `while n > 0 {`, `print(n)`, `n = n - 1` and `}`). Press
+   **Load Pebble**. The program pane marks line 1, `let n = 3`, and under it lists its
+   instructions, with `getsp r1` at address 0 marked as next: the start of main's frame.
+2. Click the line in the glass to look closer, then press **Step one instruction ▸**
+   again and again. The `>` mark moves every time; the `▶` mark sits on line 1 until the
+   frame is made and `n` is stored, then jumps to line 2, `while n > 0`.
 3. Keep going until line 3, `print(n)`, and on until the `call`. One more press and the
-   Pebble pane says you are inside a ready-made routine: no line is marked, and the
-   machine code mark is in the printing routine's own instructions. Press **Run** with
-   180 and you come out the other side, on line 4, with `3` printed.
-4. Whatever line is marked, press **1 cycle** and click down through the zoom
-   panel as in the first tour. The gates you reach are working on that Pebble line,
-   right now.
-5. Press **Run** with 1000. The output says `3`, `2`, `1`, and the Pebble pane says
+   program pane says you are inside a ready-made routine: no line is marked, and the
+   instruction is one of the printing routine's own. In the Expert drawer, press
+   **Run** with 180 and you come out the other side, on line 4, with `3` printed.
+4. On the trail, click the first crumb to climb back to the line, and press
+   **Step one line ▸**. What just happened says "Line 4 ran 1 instruction. n changed
+   from 3 to 2.": the Run stopped just before the last instruction of line 4,
+   `store r1, [r7-1]`, which puts the answer into `n`'s box.
+5. Press **Run** with 1000. The output says `3`, `2`, `1`, and the program pane says
    "The program finished."
 6. Change line 3 to `print(10 // (n - 1))` and press **Load Pebble**, then **Run**.
    It prints `5` and `10`, then `n - 1` reaches 0 and the pane says
@@ -580,8 +673,8 @@ show:
 
 ### The levels, in plain words
 
-The page shows a one-line explanation and a pointer to the matching concept page at
-every level you visit. These are the main ones.
+At the gates depth, the glass shows a one-line explanation and a pointer to the
+matching concept page for every part you visit. These are the main ones.
 
 | Level | What the page says | Read more |
 |-------|--------------------|-----------|
@@ -613,10 +706,10 @@ answer in a key called `changed`:
 | `flags` | The names of the flag lamps that differ: `zero`, `negative`, `carry`, `overflow` |
 | `memory` | The addresses of the words of memory that differ |
 
-The page uses these to mark the changed values, so your eye goes straight to what the
-last button did. The marks always compare with the state *before the last move*,
-whatever that move was: after a rewind they show what the rewind undid, and after you
-load a new program they show how the new machine differs from the old one.
+The page uses these to make the changed values glow, so your eye goes straight to what
+the last button did. The marks always compare with the state *before the last move*,
+whatever that move was: after a rewind they show what the rewind undid. Loading a
+program is a fresh start, so just after a load nothing is marked.
 
 ```python
 from pynet.loop import run
@@ -673,8 +766,8 @@ Next to `rows` and `pebble` sits `program`, a count of how many programs this Co
 has loaded. Every picture carries the same count, so the page can tell a listing of
 the program on the machine from a listing of one that has since been replaced. The
 listing shows each word as the program was loaded: a program that writes over its own
-instructions changes them in memory, where the memory pane and the zoom panel show the
-new words, but not in the listing.
+instructions changes them in memory, where the glass shows the new words, but not in
+the listing.
 
 ```python
 from pynet.loop import run
@@ -774,7 +867,8 @@ run(zoom())
 
 Five instructions in, the demo is about to run `add r3, r3, r2`, so its zoom target is
 the ALU, and `/api/view` shows the parts inside it. On the page, clicking a value does
-exactly this: it asks `/api/view` for the value's path and opens the zoom panel there. The test suite checks that every
+exactly this: it asks `/api/view` for the value's path and opens the glass at the gates
+depth there. The test suite checks that every
 path the picture can name is a real scope of the circuit, so a doorway never opens on
 a wall.
 
@@ -880,7 +974,7 @@ That is how engineers debug real chips, with probes and logic analysers that sho
 which wire is high right now, and how programmers debug programs, with a **debugger**
 that pauses and steps through code.
 
-The Pebble pane is the trick every real debugger plays. When you pause a Python or C
+The program pane's `▶` mark is the trick every real debugger plays. When you pause a Python or C
 program on a line, the debugger is doing what the Cockpit does: the processor only knows
 which machine instruction it is on, and a table made by the compiler, like our source
 map, turns that address back into a line of your code. Without that table, the
@@ -900,8 +994,8 @@ it. Only part of Pebble runs on PyCPU so far: whole numbers, variables, `if`, `w
 `for` over a range, functions and `print`. Lists, text in variables and the rest are
 refused with a friendly message.
 
-What comes next is the rest of the Cockpit. First, instead of pressing **1
-instruction** hundreds of times to get through one line, you can step a whole *Pebble
-line* at a time, stepping over a function call or into it, and then drop from that line
+What comes next is the rest of the Cockpit. First, instead of pressing
+**Step one instruction ▸** hundreds of times to get through one line, you can step a
+whole *Pebble line* at a time, stepping over a function call or into it, and then drop from that line
 all the way down to the gates: read
 [Stepping a Pebble Line](stepping-a-pebble-line.md).

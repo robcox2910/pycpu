@@ -103,14 +103,14 @@ which carries the whole machine over to the gates, so you can step through an
 instruction one gate at a time and **rewind** it to watch again.
 
 You can do all of that on **the Cockpit**, a page on your own computer. Start it with
-`uv run python -m pycpu`: it opens with the **tour** loaded, a Pebble program that uses
-every piece of Pebble PyCPU can run. On one screen it shows the Pebble program with the
-running line marked, the machine code with the running instruction marked, the
-registers, the stack, the program's variables and what it has printed. Its buttons step
-by a gate, a clock beat, an instruction or a whole Pebble line, rewind, run, or **play**
-the program on its own while the screen updates live, and **pause** it at any moment.
-Its zoom panel goes from the whole CPU down to a single gate, with the real 0s and 1s on
-its wires. Read [The Cockpit](concepts/the-cockpit.md), or take
+`uv run python -m pycpu`: it opens on **guided walks**, short tours that show you one
+idea at a time on the real machine and end with a small task for you to try. The Pebble
+program is on the left, with the running line marked, and a **magnifying glass** is on the
+right. One **Step** button moves by as much as the glass is looking at: a whole Pebble
+line, one instruction, one part of the CPU, or one gate, with the real 0s and 1s on its
+wires. A sentence says what just happened, and you can rewind, run, or **play** the
+program on its own while the screen updates live, and **pause** it at any moment. The
+Expert drawer holds every exact control. Read [The Cockpit](concepts/the-cockpit.md), or take
 [A Tour of the Cockpit](concepts/a-tour-of-the-cockpit.md), which follows one Pebble
 line all the way down to a single NAND gate.
 
@@ -145,7 +145,7 @@ the instruction that is running right now. You can **pause at any moment**
 and click down through the layers (the ALU, the adder, a single bit, a single gate)
 and see the real circuit, with real wires carrying real values.
 
-That screen is built. `uv run python -m pycpu` opens it with the tour loaded, and
+That screen is built. `uv run python -m pycpu` opens it on guided walks, and
 [A Tour of the Cockpit](concepts/a-tour-of-the-cockpit.md) shows the whole journey, from
 one Pebble line to one gate. The climb has reached the top.
 

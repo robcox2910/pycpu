@@ -185,9 +185,8 @@ What Plan 3 learned, measured on the same Intel Core i7-9750H laptop (macOS 26.5
 - **Pebble VM bugs found** (both in the VM, not PyCPU):
   - A function that falls off its end after a `return` inside an `if` crashes the VM with
     `IndexError` (PyCPU returns null, as Pebble's own functions-without-return do). Fixed
-    upstream in pebble-lang PR #84 (merge pending, to ship as v0.4.1, unreleased). Once it
-    ships: raise PyCPU's floor to `fromscratch-pebble>=0.4.1`, and remove the
-    `# Pebble v0.4.1:` workarounds in the tests (grep for that marker).
+    upstream in pebble-lang PR #84 and released in v0.4.1 (2026-11-04). PyCPU's floor is now
+    `fromscratch-pebble>=0.4.1` and the workarounds are gone (done in Plan 5, Task 1).
   - Calling a variable as a function (`let x = 1` then `x()`) crashes the Pebble v0.4.0 VM
     with `KeyError`. Not yet reported upstream. PyCPU refuses it as "functions used as values".
 - **Carried from the Plan 3 ledger (minors that matter later):**
@@ -210,7 +209,10 @@ What Plan 3 learned, measured on the same Intel Core i7-9750H laptop (macOS 26.5
   - Long source lines in `printing-a-number.md` and `from-pebble-to-machine-code.md` (render fine).
   - The engine speed limits now live once, in `pycpu.proof.ENGINE_LIMITS` (done in Plan 3).
 
-## Notes for Plan 5
+## Notes for Plan 6
+
+PyStack and the release are now Plan 6. Plan 5 is the Cockpit for learners
+(`docs/superpowers/specs/2026-11-04-pycpu-cockpit-for-learners-design.md`).
 
 What Plan 4 left, and what it learned. Measured on the same Intel Core i7-9750H laptop
 (macOS 26.5, Python 3.14.3) on 2026-11-04, with a throwaway script (not in the repo), two
@@ -226,7 +228,7 @@ fresh runs.
 | Both engines pass lockstep equivalence | Done | `tests/test_lockstep.py` (random states, assembled programs, self-modifying code) |
 | Conformance against the Pebble VM passes | Done | `tests/test_conformance.py` (`test_corpus_matches_the_pebble_vm` over `tests/pebble_programs/`, plus `test_random_programs_match_the_pebble_vm`); the Cockpit examples in `tests/test_examples_programs.py` |
 | Every layer has concept docs | Done | Every page under `docs/concepts/`, from gates to the tour, guarded by `tests/test_docs.py` (sections, the output of every block with an `# Output:` marker, `KEY_IDEAS`, nav, What's Next) |
-| PyStack launches it and `import "cpu"` works | **Left for Plan 5** | No `pycpu` plugin in `pystack/src/pystack/plugins/` yet |
+| PyStack launches it and `import "cpu"` works | **Left for Plan 6** | No `pycpu` plugin in `pystack/src/pystack/plugins/` yet |
 
 Only PyStack's launcher (a shell command that opens the Cockpit) and the `import "cpu"`
 Pebble module are left, with the release steps in the table at the top.
@@ -295,6 +297,66 @@ Pebble module are left, with the release steps in the table at the top.
   fewer than `n` events ever come (for example, a play that halts in its first tick sends
   one event). Tests and measurements must only ask for events that are sure to arrive.
 
+## Notes for Plan 6, after Plan 5
+
+Plan 5 rebuilt the Cockpit for learners (spec
+`docs/superpowers/specs/2026-11-04-pycpu-cockpit-for-learners-design.md`): the program on
+the left, a magnifying glass on the right, one Step button at four depths, a "what just
+happened" sentence, and five guided walks as the front door. The notes above still hold.
+This is what is left, and what Plan 5 learned.
+
+### Definition of done (spec section 9), again
+
+| Spec item | Status | Evidence |
+|---|---|---|
+| A Pebble program using every subset feature runs on PyCPU in the Cockpit | Done | As in the table above; the `tour` example is still loaded behind the walks |
+| It can be paused at any moment | Done | As above, and the walks stop play before they load (`tests/test_walks.py`) |
+| ...and zoomed from Pebble line to individual gate, the gate view showing the real circuit's real values | Done | [The Magnifying Glass](../../concepts/the-magnifying-glass.md) (four depths, `tests/test_depths.py`), [What Just Happened](../../concepts/what-just-happened.md), `/api/part` (`tests/test_parts_view.py`), and [A Tour of the Cockpit](../../concepts/a-tour-of-the-cockpit.md) |
+| Both engines pass lockstep equivalence | Done | `tests/test_lockstep.py` |
+| Conformance against the Pebble VM passes | Done | `tests/test_conformance.py`, now on the `fromscratch-pebble>=0.4.1` floor |
+| Every layer has concept docs | Done | Every page under `docs/concepts/`, with [Guided Walks](../../concepts/guided-walks.md), and each walk's concept page links back to its walk (`tests/test_docs.py`) |
+| PyStack launches it and `import "cpu"` works | **Left for Plan 6** | No `pycpu` plugin in `pystack/src/pystack/plugins/` yet |
+
+Only PyStack's launcher and the `import "cpu"` Pebble module are left, with the release
+steps in the table at the top.
+
+### Measured on this machine, 2026-11-05
+
+These are timings, not pinned figures: no test depends on them. Same Intel Core i7-9750H
+laptop (macOS 26.5, Python 3.14.3), a throwaway script (not in the repo), full size
+(4K words), through `TestClient`, five runs each.
+
+- `create_cockpit()` built in 3.8 s.
+- `POST /api/walk` replays a walk on the real machine. Opening a walk at its first step
+  took 0.108 to 0.117 s. Opening it at the "Now you try" stage (the longest replay):
+  `many-instructions` 0.544 to 0.554 s, `where-n-lives` 0.565 to 0.571 s,
+  `subtracting-with-gates` 0.382 to 0.399 s, `a-call-and-the-stack` 0.503 to 0.520 s,
+  `why-the-clock-ticks` 0.447 to 0.456 s. So the slowest walk takes about 0.6 s to reach
+  its task. If that ever feels slow, the replay is the place to look.
+- `GET /api/part` answered in under a millisecond (176 bytes for `cpu.alu`, 234 for
+  `cpu.halt`): it only reads wires that are already settled.
+
+### Minors from the Plan 5 ledger
+
+- Fixed in Plan 5's final wave: the prologue "changed from" bug (a slot below `start.sp`
+  is now new, "finished setting up"), `subset.py`'s jump past the last instruction,
+  `gate_place`'s substring test, the long lines, the Looking at a Part heading level, a
+  malformed `#walk=` link, and the docs link check.
+- Still open: Task 6, no JavaScript runtime in the tests, so the page's field-splitting JS
+  is checked by its text and in a real browser, not run.
+- Deferred to Plan 6 (Ruling 14): registers and RAM get no `/api/part` view. The glass
+  already shows registers and the stack at instruction depth, and the gate depth reaches
+  their gates. The spec lists them, so the owner may ask for two part views.
+
+### Owner items still open
+
+- **Nothing is exposed yet.** No GitHub Pages, no push trigger in `docs.yml`, no
+  `series.yml` entry, no tag, no PyPI release, no links from other series projects. The
+  "See it in the Cockpit" links on the concept pages point only at
+  `http://127.0.0.1:8765`, which works on your own computer. Plan 6 needs the owner's
+  go-ahead before any of that changes.
+- The owner's browser check of the new page (the controller owes it before merging).
+
 ## Rule #1: docs ship with the code
 
 Documentation is as important as code, and it outranks everything else in these plans. The
@@ -319,5 +381,6 @@ plans: copy it into each one.
   how a function call really works; multiply and divide with only adding and shifting;
   printing a number; what happens when things go wrong; why 16-bit numbers wrap.
 - **Plan 4:** a guided tour of the Cockpit, following one Pebble line all the way to a gate.
-- **Plan 5:** PyCPU's place in PyStack, and a closing "you built a computer" page tying the
+- **Plan 5:** the Cockpit for learners (see its design spec).
+- **Plan 6:** PyCPU's place in PyStack, the release, and a closing "you built a computer" page tying the
   whole climb together.

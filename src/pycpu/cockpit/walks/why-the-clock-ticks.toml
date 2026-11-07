@@ -1,0 +1,50 @@
+title = "Why the clock ticks"
+example = "countdown"
+see_also = "the-clock"
+
+[[steps]]
+say = "This walk watches the clock, the drummer that tells every part of the computer when to move."
+do = "start"
+look = "gate"
+
+[[steps]]
+say = "The first gate step did not work a gate at all: it moved the write clock wire up, the moment when the memory may save a number."
+do = "step gate"
+look = "gate"
+show = "happened"
+
+[[steps]]
+say = "The next step is a real NAND gate in the memory, which worked because one of its two inputs is the write wire."
+do = "step gate"
+look = "gate"
+show = "last_gate"
+
+[[steps]]
+say = "Then the write wire went back down, so the saving moment is over before anything else moves."
+do = "step gate"
+look = "gate"
+show = "happened"
+
+[[steps]]
+say = "That same memory gate worked again, because the write wire it listens to moved again."
+do = "step gate"
+look = "gate"
+show = "last_gate"
+
+[[steps]]
+say = "Now the main clock wire went up: this is the beat itself, when every register steps to its new number at the same moment."
+do = "step gate"
+look = "gate"
+show = "happened"
+
+[[steps]]
+say = "Finishing this beat let the gates the clock woke up settle, and the CPU has read its first instruction, getsp r1."
+do = "step part"
+look = "part"
+show = "instruction"
+
+[try]
+task = "Press Step, one beat at a time, until the instruction li r3, 13 has put 13 into r3, and count the beats: every instruction takes two, a fetch beat and an execute beat."
+look = "part"
+check = "register r3 == 13"
+solution = ["step part", "step part", "step part", "step part", "step part", "step part", "step part"]

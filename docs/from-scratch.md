@@ -108,10 +108,10 @@ into machine code for that processor, so they run on it and print the same answe
 as Pebble's own way of running them, for numbers that fit in 16 bits. Only part of
 Pebble runs so far (whole numbers, variables, `if`, `while`, `for` over a range, functions and `print`),
 and anything else gets a friendly "not supported yet" message. The fourth climb
-finishes the Cockpit: one screen with the Pebble program, the machine code, the
-registers, the stack, the variables and the output, buttons that step a whole Pebble
-line or play the program while the screen updates live, and a pause that drops you into
-the gates at any moment. `uv run python -m pycpu` opens it with the tour loaded, and
+finishes the Cockpit: one screen with the Pebble program on the left and a magnifying
+glass on the right, one Step button that moves by a Pebble line, an instruction, a part
+or a gate, and a pause that drops you into the gates at any moment.
+`uv run python -m pycpu` opens it on guided walks, and
 [A Tour of the Cockpit](concepts/a-tour-of-the-cockpit.md) follows one Pebble line down
 to a single gate. One climb is left: fitting PyCPU into PyStack, the project that joins
 the whole series together, and the first release.

@@ -174,7 +174,7 @@ fakes the gate view. So while playing, the picture's `variables` and `last_gate`
 `null`, and `at_boundary` is always true (the fast engine only stops between
 instructions). If anyone asks `/api/view` while playing, the answer is the gate engine
 **as it was last paused**, never something made up. The Cockpit page does not even ask:
-while playing, its zoom panel just says "Pause to look inside the gates". Press Pause,
+while playing, the magnifying glass just says "Pause to look inside the gates". Press Pause,
 and every wire is real again.
 
 ## Why Does This Matter?

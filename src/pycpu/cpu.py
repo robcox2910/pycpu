@@ -149,6 +149,11 @@ class GateMachine:
         simulator: The simulator running the circuit.
         port_write: The wire that is 1 when this beat stores to the output port.
         port_data: The 16 wires carrying the word a `STORE` would write.
+        taps: For each part of the CPU (such as `"cpu.alu"`), its inputs and then
+            its outputs, each a name for a row of wires the CPU already has. They are
+            recorded while the CPU is wired up and only read after that; a tap never
+            adds a gate or a wire.
+        tap_outputs: For each part in `taps`, which of its names are outputs.
 
     """
 
@@ -170,6 +175,8 @@ class GateMachine:
         self.words = 1 << address_bits
         # Registers whose input placeholders still wait for a driver (see `_feed`).
         self._pending: dict[str, tuple[Bus, Wire]] = {}
+        self.taps: dict[str, dict[str, Bus]] = {}
+        self.tap_outputs: dict[str, tuple[str, ...]] = {}
         c = Circuit()
         self.circuit = c
         self._clock = make_clock(c)
@@ -227,6 +234,15 @@ class GateMachine:
             self._pending[name] = ((), load)
         return Register(c, width, data_in, load, self._clock, name)
 
+    def _tap(self, part: str, inputs: dict[str, Bus], outputs: dict[str, Bus]) -> None:
+        """Name a part's input and output wires, so the part view can read them later.
+
+        This only writes names down, like labels tied onto cables already laid:
+        it makes no gate and no wire.
+        """
+        self.taps[part] = {**inputs, **outputs}
+        self.tap_outputs[part] = tuple(outputs)
+
     def _feed(self, c: Circuit, name: str, load: Wire, data: Bus = ()) -> None:
         """Drive the waiting `load` (and data) placeholders of the register `name`."""
         data_in, load_in = self._pending.pop(name)
@@ -269,6 +285,11 @@ class GateMachine:
             )
             op = mux_bus(c, forced, _field(ir, 0, FIELD_BITS), (line[Opcode.CMP], c.low, c.low))
         out = alu(c, bank.a, b, op)
+        self._tap(
+            "cpu.alu",
+            {"a": bank.a, "b": b},
+            {"result": out.result, "flags": (out.zero, out.negative, out.carry, out.overflow)},
+        )
         flags = self._flags.q
         met = condition_met(c, rd, flags[0], flags[1], flags[2], flags[3])
         sp = self._sp.q
@@ -283,6 +304,11 @@ class GateMachine:
             stack_spot = mux_bus(c, pops, sp_down, sp)
             execute_address = mux_bus(c, or_(c, pushes, pops), out.result, stack_spot)
             address = mux_bus(c, execute, self._pc.q, execute_address)
+        self._tap(
+            "cpu.address_mux",
+            {"pc": self._pc.q, "alu": out.result, "sp": sp, "sp_minus_1": sp_down},
+            {"address": address},
+        )
         return _Wires(
             line=line,
             imm8=imm8,
@@ -318,13 +344,22 @@ class GateMachine:
             uses_memory = or_many(c, [and_(c, w.memory_op, not_(c, port_store)), w.pushes, w.pops])
             needs_ram = or_(c, w.fetch, uses_memory)
             bad = and_(c, w.outside, needs_ram)
-            stop = or_(c, bad, and_(c, w.execute, w.line[Opcode.HALT]))
+            halt_instruction = and_(c, w.execute, w.line[Opcode.HALT])
+            stop = or_(c, bad, halt_instruction)
             w.go = and_(c, w.running, not_(c, stop))  # nothing else may load after a stop
             w.act = and_(c, w.go, w.execute)
             halt_load = and_(c, w.running, stop)
             self._feed(c, "halted", halt_load)
             fault_code = _constant(c, Fault.BAD_ADDRESS, HALT_CODE_BITS)
-            self._feed(c, "halt_code", halt_load, mux_bus(c, bad, w.imm8, fault_code))
+            code = mux_bus(c, bad, w.imm8, fault_code)
+            self._feed(c, "halt_code", halt_load, code)
+        # The outputs are what the halt logic sends this beat, not what the `halted` and
+        # `halt_code` registers hold: those only take it in when the clock rises.
+        self._tap(
+            "cpu.halt",
+            {"bad_address": (bad,), "halt_instruction": (halt_instruction,), "imm8": w.imm8},
+            {"halt_now": (halt_load,), "code": code},
+        )
 
     def _build_next_pc(self, c: Circuit, w: _Wires) -> None:
         """Add the two adders and the choosers that decide `pc`, `ir` and `phase`.
@@ -346,9 +381,21 @@ class GateMachine:
             elsewhere = mux_bus(c, line[Opcode.RET], elsewhere, self._ram.out)
             moves = or_many(c, [jumps, line[Opcode.RET], and_(c, line[Opcode.BR], w.met)])
             pc_load = and_(c, w.go, or_(c, w.fetch, moves))
-            self._feed(c, "pc", pc_load, mux_bus(c, w.execute, plus_one, elsewhere))
+            next_pc = mux_bus(c, w.execute, plus_one, elsewhere)
+            self._feed(c, "pc", pc_load, next_pc)
             self._feed(c, "ir", and_(c, w.go, w.fetch))
             self._feed(c, "phase", w.go, (w.fetch,))
+        self._tap(
+            "cpu.next_pc",
+            {
+                "pc": pc,
+                "pc_plus_1": plus_one,
+                "branch_target": target,
+                "jump_to": jump_to,
+                "memory": self._ram.out,
+            },
+            {"next_pc": next_pc, "load": (pc_load,)},
+        )
 
     def _build_write_back(self, c: Circuit, w: _Wires) -> None:
         """Add the choosers for what goes into `rd`, `sp` and the RAM, and their load wires."""
@@ -370,7 +417,8 @@ class GateMachine:
                 Opcode.ADDI,
             ]
             loads_rd = or_many(c, [line[o] for o in writers])
-            _drive(c, (and_(c, w.act, loads_rd),), (w.register_write,))
+            write = and_(c, w.act, loads_rd)
+            _drive(c, (write,), (w.register_write,))
             sets_flags = or_many(c, [line[Opcode.ALU], line[Opcode.CMP], line[Opcode.ADDI]])
             out = w.out
             flags = (out.zero, out.negative, out.carry, out.overflow)
@@ -379,7 +427,31 @@ class GateMachine:
             moved = mux_bus(c, w.pops, w.sp_down, w.sp_up)
             sp_value = mux_bus(c, line[Opcode.SETSP], moved, w.bank.b)
             sp_load = or_many(c, [w.pushes, w.pops, line[Opcode.SETSP]])
-            self._feed(c, "sp", and_(c, w.act, sp_load), sp_value)
+            sp_write = and_(c, w.act, sp_load)
+            self._feed(c, "sp", sp_write, sp_value)
+        rd = _field(self._ir.q, RD_SHIFT, FIELD_BITS)
+        self._tap(
+            "cpu.write_back",
+            {
+                "alu": w.out.result,
+                "memory": self._ram.out,
+                "imm8": w.imm8,
+                "register_a": w.bank.a,
+                "sp": self._sp.q,
+                "destination": rd,
+            },
+            {"value": value, "write": (write,)},
+        )
+        self._tap(
+            "cpu.next_sp",
+            {
+                "sp": self._sp.q,
+                "sp_minus_1": w.sp_down,
+                "sp_plus_1": w.sp_up,
+                "register": w.bank.b,
+            },
+            {"next_sp": sp_value, "load": (sp_write,)},
+        )
         with c.scope("ram_data"):
             # CALL writes the return address (pc); STORE and PUSH write window b.
             w.ram_data = mux_bus(c, line[Opcode.CALL], w.bank.b, self._pc.q)

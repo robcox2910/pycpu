@@ -26,12 +26,11 @@ Five kinds of check live here:
 Two honest limits. Integers on PyCPU are 16 bits and wrap, while Pebble's are
 unbounded, so random programs are worked out in Python first (here, in the test,
 never in the translator) and any program with a value outside -32768..32767 is
-thrown away. And Pebble v0.4.0's VM has a known bug: a function whose last
-statement is an `if` containing `return` crashes the VM with an `IndexError`
-when the condition is false (PyCPU correctly returns null). The fix is merged
-for Pebble v0.4.1; until it is released, the corpus avoids that shape and every
-generated function ends with an unconditional `return` (search for
-"Pebble v0.4.1:" to find the places to change once that version is the floor).
+thrown away. And a function whose last statement is an `if` containing `return`
+falls off its end, and gives null, when the condition is false. Pebble's VM crashed
+on that before v0.4.1, so the corpus now includes it: some generated functions end
+in a guarded `return`, and are only ever called as statements, because their answer
+may be null.
 """
 
 import io
@@ -48,6 +47,7 @@ from pycpu.cpu import GateMachine
 from pycpu.fast import FastMachine
 from pycpu.isa import Fault
 from pycpu.translator import PebbleRun, UnsupportedFeature, run_pebble, translate
+from pycpu.translator.subset import JUMPS
 
 PROGRAMS = Path(__file__).parent / "pebble_programs"
 CORPUS = sorted(PROGRAMS.glob("*.pebble"))
@@ -126,6 +126,30 @@ def test_corpus_matches_the_pebble_vm(path: Path) -> None:
         assert run.fault is Fault.DIVIDE_BY_ZERO
     else:
         assert run.fault is None
+
+
+def assert_no_jump_leaves_the_code(source: str) -> None:
+    """Check no jump in the bytecode of `source` lands past the last instruction.
+
+    The translator relies on Pebble ending every piece of code with a `return`, so a
+    jump always lands on a real instruction. If a future Pebble stops doing that, this
+    fails loudly, instead of the translator quietly writing a jump to nowhere.
+    """
+    compiled = pebble.compile_source(source).compiled
+    pieces = [compiled.main, *compiled.functions.values()]
+    for piece in pieces:
+        instructions = piece.instructions
+        assert instructions[-1].opcode in {pebble.OpCode.RETURN, pebble.OpCode.HALT}
+        for instruction in instructions:
+            if instruction.opcode in JUMPS:
+                assert isinstance(instruction.operand, int)
+                assert instruction.operand < len(instructions)
+
+
+@pytest.mark.parametrize("path", CORPUS, ids=[path.stem for path in CORPUS])
+def test_no_corpus_jump_lands_past_the_end_of_its_code(path: Path) -> None:
+    """Every jump in every corpus program lands on a real instruction."""
+    assert_no_jump_leaves_the_code(path.read_text())
 
 
 # ---------------------------------------------------------------------------
@@ -316,16 +340,16 @@ type Stmt = Let | Assign | Print | PrintText | If | While | For | CallStmt | Obs
 
 @dataclass(frozen=True)
 class Function:
-    """`fn name(params) { body; return result }`, always ending in a plain `return`."""
+    """`fn name(params) { body; return result }`, or with a `guard`, `if guard { return result }`.
 
-    # Pebble v0.4.1: allow a conditional final return once the floor is >=0.4.1.
-    # (v0.4.0's VM crashes when a function's last statement is an `if` with a
-    # `return` inside and the condition is false.)
+    A guarded function falls off its end when the guard is false, so it gives null.
+    """
 
     name: str
     params: tuple[str, ...]
     body: tuple[Stmt, ...]
     result: Expr
+    guard: Cond | None = None
 
 
 @dataclass(frozen=True)
@@ -442,8 +466,12 @@ def render(script: Script) -> str:
     for function in script.functions:
         lines.append(f"fn {function.name}({', '.join(function.params)}) {{")
         lines.extend(render_block(function.body, "    "))
-        # Pebble v0.4.1: allow a conditional final return once the floor is >=0.4.1.
-        lines.append(f"    return {render_expr(function.result)}")
+        if function.guard is None:
+            lines.append(f"    return {render_expr(function.result)}")
+        else:
+            lines.append(f"    if {render_cond(function.guard)} {{")
+            lines.append(f"        return {render_expr(function.result)}")
+            lines.append("    }")
         lines.append("}")
     lines.extend(render_block(script.main, ""))
     return "\n".join(lines)
@@ -520,6 +548,8 @@ class Model:
         function = self.functions[name]
         env = dict(zip(function.params, args, strict=True))
         self.block(function.body, env)
+        if function.guard is not None and not self.cond(function.guard, env):
+            return 0  # really null, but only statement calls reach a guarded function
         return self.expr(function.result, env)
 
     def block(self, stmts: Sequence[Stmt], env: dict[str, int]) -> None:
@@ -597,6 +627,7 @@ class Scope:
     readable: tuple[str, ...]
     writable: tuple[str, ...]
     functions: tuple[tuple[str, int], ...]
+    statement_only: tuple[tuple[str, int], ...] = ()
 
     def with_var(self, name: str, *, writable: bool = True) -> Scope:
         """Return this scope with one more variable in it."""
@@ -604,6 +635,7 @@ class Scope:
             (*self.readable, name),
             (*self.writable, name) if writable else self.writable,
             self.functions,
+            self.statement_only,
         )
 
 
@@ -647,9 +679,15 @@ def draw_expr(draw: st.DrawFn, scope: Scope, depth: int = EXPRESSION_DEPTH) -> E
     return draw_leaf(draw, scope)
 
 
-def draw_call(draw: st.DrawFn, scope: Scope, depth: int = EXPRESSION_DEPTH) -> Call:
-    """Draw a call to one of the functions in scope, with the right number of arguments."""
-    name, arity = draw(st.sampled_from(scope.functions))
+def draw_call(
+    draw: st.DrawFn, scope: Scope, depth: int = EXPRESSION_DEPTH, *, statement: bool = False
+) -> Call:
+    """Draw a call to a function in scope, with the right number of arguments.
+
+    A call used as a statement may also name a guarded function, whose answer may be null.
+    """
+    pool = (*scope.functions, *scope.statement_only) if statement else scope.functions
+    name, arity = draw(st.sampled_from(pool))
     return Call(name, tuple(draw_expr(draw, scope, depth - 1) for _ in range(arity)))
 
 
@@ -705,7 +743,7 @@ def draw_stmt(draw: st.DrawFn, scope: Scope, names: Names, depth: int) -> tuple[
     if scope.writable:
         kinds += ["assign", "assign"]
     kinds += ["let", "print", "print", "text"]
-    if scope.functions:
+    if scope.functions or scope.statement_only:
         kinds.append("call")
     kind = draw(st.sampled_from(kinds))
     if kind == "let":
@@ -726,7 +764,7 @@ def draw_simple(draw: st.DrawFn, kind: str, scope: Scope) -> Stmt:
         return PrintText(draw(st.sampled_from(WORDS)))
     if kind == "observe":
         return Observe(draw_cmp(draw, scope))
-    return CallStmt(draw_call(draw, scope))
+    return CallStmt(draw_call(draw, scope, statement=True))
 
 
 def draw_compound(draw: st.DrawFn, kind: str, scope: Scope, names: Names, depth: int) -> Stmt:
@@ -759,15 +797,23 @@ def scripts(draw: st.DrawFn) -> Script:
     names = Names()
     functions: list[Function] = []
     known: tuple[tuple[str, int], ...] = ()
+    guarded: tuple[tuple[str, int], ...] = ()
     for _ in range(draw(st.integers(0, FUNCTION_MAX))):
         name = names.fresh("f")
         params = tuple(names.fresh("p") for _ in range(draw(st.integers(1, PARAMETER_MAX))))
         # A function sees only its own parameters and the functions defined above it.
         scope = Scope(params, params, known)
         body = draw_block(draw, scope, names, 1, 3)
-        functions.append(Function(name, params, body, draw_expr(draw, scope)))
-        known = (*known, (name, len(params)))
-    main = draw_block(draw, Scope((), (), known), names, BLOCK_DEPTH, PROGRAM_MAX, PROGRAM_MIN)
+        result = draw_expr(draw, scope)
+        if draw(st.booleans()):
+            functions.append(Function(name, params, body, result))
+            known = (*known, (name, len(params)))
+        else:
+            # Ends in `if guard { return result }`, so it may give null: statement calls only.
+            functions.append(Function(name, params, body, result, draw_cond(draw, scope)))
+            guarded = (*guarded, (name, len(params)))
+    main_scope = Scope((), (), known, guarded)
+    main = draw_block(draw, main_scope, names, BLOCK_DEPTH, PROGRAM_MAX, PROGRAM_MIN)
     # Print every top-level variable at the end, so a wrong turn anywhere shows up.
     finale = tuple(Print(Var(stmt.name)) for stmt in main if isinstance(stmt, Let))
     return Script(tuple(functions), main + finale)
@@ -782,6 +828,14 @@ fair_scripts = scripts().filter(fair_to_compare)
 def test_random_programs_match_the_pebble_vm(script: Script) -> None:
     """A random program in the subset prints the same on PyCPU as on the VM."""
     assert_same_behaviour(render(script))
+
+
+@given(fair_scripts)
+@pytest.mark.timeout(RANDOM_TIMEOUT_SECONDS)
+@settings(max_examples=RANDOM_EXAMPLES, deadline=None)
+def test_no_random_jump_lands_past_the_end_of_its_code(script: Script) -> None:
+    """Every jump in a random program lands on a real instruction."""
+    assert_no_jump_leaves_the_code(render(script))
 
 
 EDGE_VALUES = (SMALLEST, SMALLEST + 1, -1, 0, 1, BIGGEST - 1, BIGGEST)

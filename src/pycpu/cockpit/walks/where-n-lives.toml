@@ -1,0 +1,39 @@
+title = "Where does n live? A box in memory"
+example = "countdown"
+see_also = "variables-in-memory"
+
+[[steps]]
+say = "The countdown keeps its number in a variable called n, and n is really one box in the computer's memory."
+do = "start"
+look = "line"
+show = "pebble.line"
+
+[[steps]]
+say = "Line 2, let n = 5, put 5 into n's box."
+do = "step line"
+look = "line"
+show = "variables"
+
+[[steps]]
+say = "We ran on to line 5, which will take 1 away from n."
+do = "run to line 5"
+look = "line"
+show = "pebble.line"
+
+[[steps]]
+say = "The CPU can only do sums in its registers, so its first instruction copied 5 out of n's box into r1."
+do = "step instruction"
+look = "instruction"
+show = "memory"
+
+[[steps]]
+say = "The rest of line 5 took 1 away and copied the answer, 4, back into n's box."
+do = "step line"
+look = "line"
+show = "variables"
+
+[try]
+task = "Press Step until n's box holds 2."
+look = "line"
+check = "variable n == 2"
+solution = ["step line", "step line", "step line", "step line", "step line", "step line"]

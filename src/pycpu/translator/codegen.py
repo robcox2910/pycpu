@@ -239,15 +239,6 @@ class _CodeWriter:
                 self.out.raw(f"{self._page(index)}:", line)
             self.out.raw(f"    ; {self._describe(instruction, line)}", line)
             self._instruction(index, instruction, line)
-        end = len(self.code.instructions)
-        if end in self.targets:
-            # A jump to just past the last instruction: Pebble returns null there.
-            place = self.places[-1]
-            line = place.line if place else None
-            self.out.raw(f"{self._page(end)}:", line)
-            self.out.raw("    ; the end of the code: Pebble gives back null here", line)
-            self.out.op("push r0", "null is stored as 0", line)
-            self._leave(OpCode.RETURN, line)
 
     def _page(self, index: int) -> str:
         """Return the label of instruction `index`, such as `__main_7`."""

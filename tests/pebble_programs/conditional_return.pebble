@@ -1,0 +1,13 @@
+# A function that ends in an if holding a return: it gives null when the test is false.
+fn positive(a) {
+    if a > 0 {
+        return 1
+    }
+}
+print(10)
+positive(5)
+print(20)
+positive(0)
+print(30)
+positive(-3)
+print(40)

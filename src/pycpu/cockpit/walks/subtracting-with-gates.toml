@@ -1,0 +1,39 @@
+title = "How the computer subtracts, down to the gates"
+example = "countdown"
+see_also = "the-alu"
+
+[[steps]]
+say = "This walk follows line 5 of the countdown, n = n - 1, all the way down to the gates that take 1 away."
+do = "start"
+look = "line"
+show = "pebble.line"
+
+[[steps]]
+say = "We ran to line 5, and n is 5, so the computer is about to work out 5 take away 1."
+do = "run to line 5"
+look = "line"
+show = "variables"
+
+[[steps]]
+say = "Six tiny instructions got the two numbers ready, so r1 holds 5, r2 holds 1, and the next instruction is a subtract."
+do = "run 6 instructions"
+look = "instruction"
+show = "registers"
+
+[[steps]]
+say = "We stepped one gate at a time until a gate inside the ALU, the part of the CPU that does sums, did some work."
+do = "step gate until cpu.alu"
+look = "gate"
+show = "last_gate"
+
+[[steps]]
+say = "Finishing the instruction let all the ALU's gates settle on the answer: 5 take away 1 is 4."
+do = "step instruction"
+look = "instruction"
+show = "registers"
+
+[try]
+task = "Press Step until n's box holds 4."
+look = "instruction"
+check = "variable n == 4"
+solution = ["step instruction", "step instruction", "step instruction"]

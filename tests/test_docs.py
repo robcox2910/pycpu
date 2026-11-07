@@ -13,6 +13,8 @@ from pathlib import Path
 
 import pytest
 
+from pycpu.cockpit.walks import WALK_ORDER, load_walks
+
 ROOT = Path(__file__).parent.parent
 DOCS = ROOT / "docs"
 CONCEPT_PAGES = sorted((DOCS / "concepts").glob("*.md"))
@@ -70,6 +72,9 @@ KEY_IDEAS: dict[str, list[str]] = {
     "concepts/stepping-a-pebble-line.md": ["line", "step over", "step into"],
     "concepts/watching-it-run.md": ["live", "event", "pause"],
     "concepts/a-tour-of-the-cockpit.md": ["tour", "pebble line", "gate"],
+    "concepts/the-magnifying-glass.md": ["depth", "magnifying glass", "step"],
+    "concepts/what-just-happened.md": ["sentence", "what just happened", "real values"],
+    "concepts/guided-walks.md": ["walk", "now you try", "replay"],
 }
 
 
@@ -335,3 +340,24 @@ def test_site_builds_strictly(tmp_path: Path) -> None:
         check=False,
     )
     assert result.returncode == 0, result.stdout + result.stderr
+
+
+def test_every_walks_concept_page_links_to_that_walk_in_the_cockpit() -> None:
+    """Each walk's `see_also` page holds exactly one link to the walk, on the local Cockpit."""
+    names = {walk.see_also: name for name, walk in zip(WALK_ORDER, load_walks(), strict=True)}
+    assert len(names) == len(WALK_ORDER)
+    for page, name in names.items():
+        text = (DOCS / "concepts" / f"{page}.md").read_text(encoding="utf-8")
+        link = f"http://127.0.0.1:8765/#walk={name}"
+        assert text.count(link) == 1, f"{page} must link to {link} exactly once"
+        para = next(p for p in text.split("\n\n") if link in p)
+        assert "uv run python -m pycpu" in para
+        assert para.startswith("**See it in the Cockpit.**")
+        assert text.count("http://127.0.0.1:8765/#walk=") == 1, "only one walk link per page"
+
+
+def test_no_page_links_to_the_cockpit_anywhere_but_the_local_address() -> None:
+    """Nothing is exposed: the only Cockpit links point at this computer."""
+    for page in _all_pages():
+        for url in re.findall(r"https?://[^\s)]*cockpit[^\s)]*", page.read_text(encoding="utf-8")):
+            assert url.startswith("http://127.0.0.1:8765"), f"{_page_id(page)}: {url}"
