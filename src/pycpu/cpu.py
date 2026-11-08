@@ -156,7 +156,8 @@ class GateMachine:
         tap_outputs: For each part in `taps`, which of its names are outputs.
         builders: For each part in `taps`, the function or method whose code built it,
             and the name of the `with c.scope(...)` block to show (None means the part's
-            own last path segment). The Cockpit reads that live source for its code panel.
+            own last path segment, and "" means the whole function). The Cockpit reads
+            that live source for its code panel.
 
     """
 

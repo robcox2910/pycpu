@@ -804,7 +804,7 @@ function setLook(depth, path) {
   look = depth;
   if (path !== undefined) gatePath = path;
   const w = latest && latest.walk;
-  wandered = Boolean(w && !w.trying && look !== w.look || partPath !== null);
+  wandered = Boolean(w && !w.trying && (look !== w.look || partPath !== null));
   if (latest) { drawWalk(latest); drawGlass(latest); drawStep(latest); setControls(); }
 }
 

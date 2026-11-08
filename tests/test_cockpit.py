@@ -2248,7 +2248,10 @@ class TestTheCodePanel:
 
     def test_picking_a_part_during_a_walk_counts_as_wandering(self) -> None:
         """A picked part, not only a different depth, takes the learner off the walk."""
-        assert "partPath !== null" in _function(_script(), "setLook")
+        assert (
+            "wandered = Boolean(w && !w.trying && (look !== w.look || partPath !== null));"
+            in _function(_script(), "setLook")
+        )
 
     def test_the_code_box_is_shorter_on_a_phone(self) -> None:
         """At 375 px the code box gets a smaller max-height so the glass shows more."""
