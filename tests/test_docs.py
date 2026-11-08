@@ -4,8 +4,10 @@ Tests can catch a missing section or an example that no longer runs. They cannot
 catch a bad explanation, so a human still reads every page as a curious 12-year-old.
 """
 
+import ast
 import contextlib
 import importlib
+import inspect
 import io
 import re
 import subprocess
@@ -16,6 +18,7 @@ import pytest
 
 from pycpu.cockpit.picture import PART_NAMES
 from pycpu.cockpit.walks import WALK_ORDER, load_walks
+from pycpu.translator.runtime import RUNTIME
 
 ROOT = Path(__file__).parent.parent
 DOCS = ROOT / "docs"
@@ -368,19 +371,56 @@ def test_no_page_links_to_the_cockpit_anywhere_but_the_local_address() -> None:
 
 
 BUILD_PAGE = DOCS / "build-it-yourself.md"
-ROW = re.compile(r"^\|\s*\d+\s*\|(?P<cells>.*)\|\s*$", flags=re.MULTILINE)
+BUILD_COLUMNS = 6
+WALK_LINK = re.compile(r"http://127\.0\.0\.1:8765/#walk=([a-z-]+)")
+PART_WATCH = re.compile(r"open \*\*(.+?)\*\* from the Every part list at the part depth")
+TICKED = re.compile(r"`([^`]+)`")
 
 
 def _build_rows() -> list[list[str]]:
-    """Read the numbered rows of the Build It Yourself table as lists of cells."""
-    text = BUILD_PAGE.read_text(encoding="utf-8")
-    return [[cell.strip() for cell in m["cells"].split(" | ")] for m in ROW.finditer(text)]
+    """Read the numbered rows of the Build It Yourself table as lists of six cells."""
+    rows: list[list[str]] = []
+    for line in BUILD_PAGE.read_text(encoding="utf-8").splitlines():
+        if not re.match(r"^\|\s*\d+\s*\|", line):
+            continue
+        cells = [cell.strip() for cell in line.strip().strip("|").split("|")]
+        assert len(cells) == BUILD_COLUMNS, f"a table cell holds a pipe or is missing: {line}"
+        rows.append(cells)
+    return rows
 
 
 def _nav_pages() -> list[str]:
     """List every page in mkdocs.yml, in menu order."""
     nav = (ROOT / "mkdocs.yml").read_text(encoding="utf-8")
     return re.findall(r":\s*(\S+\.md)\s*$", nav, flags=re.MULTILINE)
+
+
+def _resolve(dotted: str) -> object:
+    """Import the longest module prefix of `dotted`, then walk the rest as attributes."""
+    parts = dotted.split(".")
+    for cut in range(len(parts) - 1, 0, -1):
+        try:
+            thing: object = importlib.import_module(".".join(parts[:cut]))
+        except ModuleNotFoundError:
+            continue
+        for name in parts[cut:]:
+            thing = getattr(thing, name)
+        return thing
+    raise AssertionError(dotted)
+
+
+def _test_exists(ref: str) -> bool:
+    """Say whether `tests/<file>.py::[Class::]test` names a test that is really defined."""
+    file, *path = ref.split("::")
+    tree = ast.parse((ROOT / "tests" / file).read_text(encoding="utf-8"))
+    body: list[ast.stmt] = tree.body
+    for index, name in enumerate(path):
+        kind = ast.FunctionDef if index == len(path) - 1 else ast.ClassDef
+        found = [n for n in body if isinstance(n, kind) and n.name == name]
+        if not found:
+            return False
+        body = found[0].body
+    return True
 
 
 def test_build_it_yourself_has_its_sections_and_a_runnable_pinned_try_it() -> None:
@@ -397,40 +437,74 @@ def test_build_it_yourself_follows_from_scratch_in_the_nav() -> None:
     assert pages.index("build-it-yourself.md") == pages.index("from-scratch.md") + 1
 
 
-def test_every_build_step_names_a_function_that_imports() -> None:
-    """Every dotted name in the table imports, so no step names something that is gone."""
+def test_every_build_step_names_a_real_function_class_or_routine() -> None:
+    """Each named piece is a function, class or method of pycpu, or a label in RUNTIME."""
     rows = _build_rows()
     assert rows
     for cells in rows:
-        dotted = cells[1].strip("`")
-        module_name, _, attribute = dotted.rpartition(".")
-        assert hasattr(importlib.import_module(module_name), attribute), dotted
+        names = TICKED.findall(cells[2])
+        assert names, cells[2]
+        for name in names:
+            if name.startswith("__"):
+                assert f"\n{name}:" in RUNTIME, f"{name} is not a routine in RUNTIME"
+                continue
+            thing = _resolve(name)
+            if name == "pycpu.translator.runtime.RUNTIME":
+                assert thing is RUNTIME
+                continue
+            assert inspect.isclass(thing) or inspect.isroutine(thing), name
+            assert getattr(thing, "__module__", "").startswith("pycpu"), name
 
 
-def test_every_build_step_links_a_real_page_and_a_real_test_in_nav_order() -> None:
-    """Page links and test files exist, and the rows follow the menu's order."""
-    positions: list[int] = []
+def test_every_build_step_links_a_real_page_in_nav_order() -> None:
+    """Page links exist, and the rows follow the menu's order."""
     pages = _nav_pages()
+    positions: list[int] = []
     for cells in _build_rows():
-        link = re.search(r"\]\(([^)]+\.md)\)", cells[2])
+        link = re.search(r"\]\(([^)]+\.md)\)", cells[3])
         assert link, cells
         assert (DOCS / link[1]).is_file(), link[1]
         positions.append(pages.index(link[1]))
-        assert (ROOT / cells[3].strip("`")).is_file(), cells[3]
     assert positions == sorted(positions)
     assert len(set(positions)) == len(positions)
 
 
-def test_every_watch_it_is_a_real_walk_or_a_real_part() -> None:
-    """Watch-it cells name a walk in WALK_ORDER, a part in PART_NAMES, or are a dash."""
+def test_every_build_step_names_its_own_real_test() -> None:
+    """Each row names one test that exists, and no two rows name the same one."""
+    named: list[str] = []
     for cells in _build_rows():
-        watch = cells[4]
+        refs = [r for r in TICKED.findall(cells[4]) if r.startswith("tests/")]
+        assert len(refs) == 1, cells[4]
+        ref = refs[0].removeprefix("tests/")
+        assert _test_exists(ref), f"{ref} is not a test"
+        named.append(ref)
+    assert len(set(named)) == len(named)
+
+
+def test_the_test_finder_rejects_a_missing_test() -> None:
+    """The finder says no to a test that is not defined, in a file or in a class."""
+    assert _test_exists("test_simulator.py::test_nand_truth_table")
+    assert not _test_exists("test_simulator.py::test_nothing_like_this")
+    assert not _test_exists("test_translator.py::TestRunningPebble::test_nothing_like_this")
+
+
+def test_every_runtime_routine_is_named_with_its_label() -> None:
+    """Rows about the runtime name a routine, and the label is in RUNTIME."""
+    labels = [n for cells in _build_rows() for n in TICKED.findall(cells[2]) if n.startswith("__")]
+    assert labels == ["__mul", "__divmod", "__print_int"]
+
+
+def test_every_watch_it_is_a_real_walk_or_a_real_part_and_every_walk_link_is_real() -> None:
+    """Watch-it cells hold a walk, a part shown by its friendly name, or a dash; all are real."""
+    part_names = set(PART_NAMES.values())
+    for cells in _build_rows():
+        watch = cells[5]
         if watch == "—":
             continue
-        walk = re.fullmatch(r"http://127\.0\.0\.1:8765/#walk=([a-z-]+)", watch)
-        part = re.fullmatch(r"open `([a-z._]+)` in the glass", watch)
+        walk = WALK_LINK.fullmatch(watch)
+        part = PART_WATCH.fullmatch(watch)
         assert walk or part, watch
-        if walk:
-            assert walk[1] in WALK_ORDER
-        elif part:
-            assert part[1] in PART_NAMES
+        if part:
+            assert part[1] in part_names, part[1]
+    for name in WALK_LINK.findall(BUILD_PAGE.read_text(encoding="utf-8")):
+        assert name in WALK_ORDER, name
