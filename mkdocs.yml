@@ -42,6 +42,7 @@ markdown_extensions:
 nav:
   - Home: index.md
   - From Scratch: from-scratch.md
+  - Build It Yourself: build-it-yourself.md
   - The Basics:
       - Bits and Binary: concepts/bits-and-binary.md
       - Switches and NAND: concepts/switches-and-nand.md

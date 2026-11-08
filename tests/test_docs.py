@@ -5,6 +5,7 @@ catch a bad explanation, so a human still reads every page as a curious 12-year-
 """
 
 import contextlib
+import importlib
 import io
 import re
 import subprocess
@@ -13,6 +14,7 @@ from pathlib import Path
 
 import pytest
 
+from pycpu.cockpit.picture import PART_NAMES
 from pycpu.cockpit.walks import WALK_ORDER, load_walks
 
 ROOT = Path(__file__).parent.parent
@@ -25,6 +27,7 @@ OUTPUT_MARKER = "# Output:"
 KEY_IDEAS: dict[str, list[str]] = {
     "index.md": ["nand", "pebble", "cockpit"],
     "from-scratch.md": ["petzold", "nand", "faking", "pebble"],
+    "build-it-yourself.md": ["model kit", "nand", "ripple", "cockpit"],
     "concepts/bits-and-binary.md": ["bit", "binary", "hex"],
     "concepts/switches-and-nand.md": ["nand", "wire", "gate", "truth table"],
     "concepts/simulating-a-circuit.md": ["event", "settle", "oscillat", "netlist", "step"],
@@ -362,3 +365,72 @@ def test_no_page_links_to_the_cockpit_anywhere_but_the_local_address() -> None:
     for page in _all_pages():
         for url in re.findall(r"https?://[^\s)]*cockpit[^\s)]*", page.read_text(encoding="utf-8")):
             assert url.startswith("http://127.0.0.1:8765"), f"{_page_id(page)}: {url}"
+
+
+BUILD_PAGE = DOCS / "build-it-yourself.md"
+ROW = re.compile(r"^\|\s*\d+\s*\|(?P<cells>.*)\|\s*$", flags=re.MULTILINE)
+
+
+def _build_rows() -> list[list[str]]:
+    """Read the numbered rows of the Build It Yourself table as lists of cells."""
+    text = BUILD_PAGE.read_text(encoding="utf-8")
+    return [[cell.strip() for cell in m["cells"].split(" | ")] for m in ROW.finditer(text)]
+
+
+def _nav_pages() -> list[str]:
+    """List every page in mkdocs.yml, in menu order."""
+    nav = (ROOT / "mkdocs.yml").read_text(encoding="utf-8")
+    return re.findall(r":\s*(\S+\.md)\s*$", nav, flags=re.MULTILINE)
+
+
+def test_build_it_yourself_has_its_sections_and_a_runnable_pinned_try_it() -> None:
+    """The top-level Build It Yourself page has the four sections, and its Try It is run."""
+    text = BUILD_PAGE.read_text(encoding="utf-8")
+    check_sections(text, "build-it-yourself.md")
+    check_whats_next(text, "build-it-yourself.md")
+    run_try_it(text, "build-it-yourself.md")
+
+
+def test_build_it_yourself_follows_from_scratch_in_the_nav() -> None:
+    """The page sits right after From Scratch in mkdocs.yml."""
+    pages = _nav_pages()
+    assert pages.index("build-it-yourself.md") == pages.index("from-scratch.md") + 1
+
+
+def test_every_build_step_names_a_function_that_imports() -> None:
+    """Every dotted name in the table imports, so no step names something that is gone."""
+    rows = _build_rows()
+    assert rows
+    for cells in rows:
+        dotted = cells[1].strip("`")
+        module_name, _, attribute = dotted.rpartition(".")
+        assert hasattr(importlib.import_module(module_name), attribute), dotted
+
+
+def test_every_build_step_links_a_real_page_and_a_real_test_in_nav_order() -> None:
+    """Page links and test files exist, and the rows follow the menu's order."""
+    positions: list[int] = []
+    pages = _nav_pages()
+    for cells in _build_rows():
+        link = re.search(r"\]\(([^)]+\.md)\)", cells[2])
+        assert link, cells
+        assert (DOCS / link[1]).is_file(), link[1]
+        positions.append(pages.index(link[1]))
+        assert (ROOT / cells[3].strip("`")).is_file(), cells[3]
+    assert positions == sorted(positions)
+    assert len(set(positions)) == len(positions)
+
+
+def test_every_watch_it_is_a_real_walk_or_a_real_part() -> None:
+    """Watch-it cells name a walk in WALK_ORDER, a part in PART_NAMES, or are a dash."""
+    for cells in _build_rows():
+        watch = cells[4]
+        if watch == "—":
+            continue
+        walk = re.fullmatch(r"http://127\.0\.0\.1:8765/#walk=([a-z-]+)", watch)
+        part = re.fullmatch(r"open `([a-z._]+)` in the glass", watch)
+        assert walk or part, watch
+        if walk:
+            assert walk[1] in WALK_ORDER
+        elif part:
+            assert part[1] in PART_NAMES
