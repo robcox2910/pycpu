@@ -154,8 +154,9 @@ class GateMachine:
             recorded while the CPU is wired up and only read after that; a tap never
             adds a gate or a wire.
         tap_outputs: For each part in `taps`, which of its names are outputs.
-        builders: For each part in `taps`, the function or method whose code built it.
-            The Cockpit reads that function's live source for its code panel.
+        builders: For each part in `taps`, the function or method whose code built it,
+            and the name of the `with c.scope(...)` block to show (None means the part's
+            own last path segment). The Cockpit reads that live source for its code panel.
 
     """
 
@@ -179,7 +180,7 @@ class GateMachine:
         self._pending: dict[str, tuple[Bus, Wire]] = {}
         self.taps: dict[str, dict[str, Bus]] = {}
         self.tap_outputs: dict[str, tuple[str, ...]] = {}
-        self.builders: dict[str, Callable[..., object]] = {}
+        self.builders: dict[str, tuple[Callable[..., object], str | None]] = {}
         c = Circuit()
         self.circuit = c
         self._clock = make_clock(c)
@@ -249,14 +250,16 @@ class GateMachine:
         inputs: dict[str, Bus],
         outputs: dict[str, Bus],
         builder: Callable[..., object],
+        scope: str | None = None,
     ) -> None:
         """Name a part's input and output wires, and the code that built it.
 
         This only writes names down, like labels tied onto cables already laid:
         it makes no gate and no wire. `builder` is the function or method that holds
-        the part's `with c.scope(...)` block, so the Cockpit can show its source.
+        the part's `with c.scope(...)` block, so the Cockpit can show its source; `scope`
+        names that block when it is not called after the part's last path segment.
         """
-        self.builders[part] = builder
+        self.builders[part] = (builder, scope)
         self.taps[part] = {**inputs, **outputs}
         self.tap_outputs[part] = tuple(outputs)
 
@@ -390,7 +393,8 @@ class GateMachine:
             "cpu.halt",
             {"bad_address": (bad,), "halt_instruction": (halt_instruction,), "imm8": w.imm8},
             {"halt_now": (halt_load,), "code": code},
-            self._build_cpu,
+            self._build_checks,
+            scope="fault",
         )
 
     def _build_next_pc(self, c: Circuit, w: _Wires) -> None:

@@ -8,8 +8,9 @@ import pytest
 from pynet.loop import run as run_loop
 from pyweb.testing import TestClient, TestResponse
 
+from pycpu.cockpit import code as code_module
 from pycpu.cockpit.app import create_cockpit
-from pycpu.cockpit.code import DOCS_URL, PAGE_TITLES, PART_PAGES, built_by
+from pycpu.cockpit.code import DOCS_URL, PAGE_TITLES, PART_PAGES, built_by, root_for
 from pycpu.cockpit.picture import part_picture
 from pycpu.cockpit.session import Cockpit
 from pycpu.cpu import GateMachine
@@ -18,6 +19,7 @@ ROOT = Path(__file__).parent.parent
 CONCEPTS = ROOT / "docs" / "concepts"
 BITS = 6
 OK = 200
+WHOLE_FUNCTION = {"ram"}  # opens `c.scope(name)`, so there is no literal block to cut
 EVERY_PART = sorted(GateMachine(BITS).taps)
 
 
@@ -47,7 +49,7 @@ class TestEveryPart:
     def test_each_part_answers_with_its_live_source(self, gate: GateMachine, path: str) -> None:
         """The record names the function, a repo file, a line and a docs URL."""
         record = built_by(gate, path)
-        function = gate.builders[path]
+        function = gate.builders[path][0]
         assert record["function"] == f"{function.__module__}.{function.__qualname__}"
         file = ROOT / str(record["file"])
         assert file.is_file()
@@ -86,13 +88,22 @@ class TestTheRightBlock:
         lines = (ROOT / "src/pycpu/arithmetic.py").read_text(encoding="utf-8").splitlines()
         assert lines[cast("int", record["line"]) - 1].strip() == 'with c.scope("alu"):'
 
-    def test_halt_is_cut_out_of_build_cpu(self, gate: GateMachine) -> None:
-        """The halt scope sits in `_build_cpu`, so that is the method shown, cut to the block."""
+    def test_halt_shows_the_fault_block_that_makes_its_wires(self, gate: GateMachine) -> None:
+        """The halt view reads wires made in the `fault` block of `_build_checks`."""
         record = built_by(gate, "cpu.halt")
-        assert record["function"] == "pycpu.cpu.GateMachine._build_cpu"
+        assert record["function"] == "pycpu.cpu.GateMachine._build_checks"
         code = cast("str", record["code"])
-        assert code.startswith('with c.scope("halt"):')
-        assert "opcode_lines" not in code
+        assert code.startswith('with c.scope("fault"):')
+        assert "halt_load" in code
+        assert "mux_bus(c, bad, w.imm8, fault_code)" in code
+        assert 'with c.scope("port"):' not in code
+
+    @pytest.mark.parametrize("path", [p for p in EVERY_PART if p not in WHOLE_FUNCTION])
+    def test_every_part_starts_at_its_own_scope_line(self, gate: GateMachine, path: str) -> None:
+        """Except the named whole-function cases, the code opens with the part's own scope."""
+        scope = gate.builders[path][1] or path.rsplit(".", 1)[-1]
+        code = cast("str", built_by(gate, path)["code"])
+        assert code.splitlines()[0] == f'with c.scope("{scope}"):'
 
     def test_ram_falls_back_to_the_whole_function(self, gate: GateMachine) -> None:
         """RAM opens `c.scope(name)`, so there is no literal block and the whole method shows."""
@@ -121,7 +132,7 @@ class TestWithoutSource:
         assert record["code"] is None
         assert record["function"] == "pycpu.arithmetic.alu"
         assert record["file"] == "src/pycpu/arithmetic.py"
-        assert record["line"] == gate.builders["cpu.alu"].__code__.co_firstlineno
+        assert record["line"] == gate.builders["cpu.alu"][0].__code__.co_firstlineno
         assert cast("dict[str, str]", record["page"])["title"] == "The ALU"
 
 
@@ -146,3 +157,27 @@ class TestInThePartView:
             assert response.status == OK
             body = cast("dict[str, Any]", response.json())
             assert name in body["built_by"]["function"]
+
+
+class TestFilePaths:
+    """File paths are repo-relative in a checkout and package-relative when installed."""
+
+    def test_a_checkout_is_relative_to_the_repo(self, tmp_path: Path) -> None:
+        """With a pyproject.toml above src/, the root is the repo."""
+        package = tmp_path / "src" / "pycpu"
+        package.mkdir(parents=True)
+        (tmp_path / "pyproject.toml").write_text("", encoding="utf-8")
+        assert root_for(package) == tmp_path
+
+    def test_an_installed_package_is_relative_to_its_parent(self, tmp_path: Path) -> None:
+        """Without a pyproject.toml, paths start at the package folder's name."""
+        package = tmp_path / "lib" / "site-packages" / "pycpu"
+        package.mkdir(parents=True)
+        assert root_for(package) == package.parent
+
+    def test_built_by_uses_the_installed_root(
+        self, gate: GateMachine, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """When the root is the package's parent, `file` reads `pycpu/arithmetic.py`."""
+        monkeypatch.setattr(code_module, "_REPO_ROOT", code_module._PACKAGE_DIR.parent)
+        assert built_by(gate, "cpu.alu")["file"] == "pycpu/arithmetic.py"

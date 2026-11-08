@@ -17,7 +17,7 @@ panel has a link to the concept page that explains the part.
 | ALU (`cpu.alu`) | `pycpu.arithmetic.alu` | [The ALU](the-alu.md) |
 | Registers (`cpu.registers`) | `pycpu.cpu_parts.RegisterFile.__init__` | [Registers](registers.md) |
 | RAM (`ram`) | `pycpu.memory.Ram.__init__` | [RAM](ram.md) |
-| Halt (`cpu.halt`) | `GateMachine._build_cpu` | [What Happens When Things Go Wrong](what-happens-when-things-go-wrong.md) |
+| Halt (`cpu.halt`) | `GateMachine._build_checks` (its `fault` block) | [What Happens When Things Go Wrong](what-happens-when-things-go-wrong.md) |
 | Write-back (`cpu.write_back`) | `GateMachine._build_write_back` | [Fetch, Decode, Execute](fetch-decode-execute.md) |
 | Memory address (`cpu.address_mux`) | `GateMachine._build_datapath` | [Fetch, Decode, Execute](fetch-decode-execute.md) |
 | Next instruction (`cpu.next_pc`) | `GateMachine._build_next_pc` | [Fetch, Decode, Execute](fetch-decode-execute.md) |
@@ -48,8 +48,8 @@ print("page:", record["page"]["url"])
 ```
 
 Two parts, the write-back and the stack pointer, are built by the same method. Each
-one gets only its own block of it. RAM and halt are the odd ones out, and the second
-block shows how.
+one gets only its own block of it. Halt is the odd one: its part is built in a block called `fault`, so
+the record remembers that name. RAM is odd too, and the second block shows both.
 
 ```python
 from pycpu.cockpit.code import built_by
@@ -70,8 +70,8 @@ print("RAM shows its whole method:", str(ram["code"]).startswith("def __init__("
 #    it shows: with c.scope("write_back"):
 # cpu.next_sp is built by _build_write_back
 #    it shows: with c.scope("next_sp"):
-# halt is cut out of _build_cpu
-#    it shows: with c.scope("halt"):
+# halt is cut out of _build_checks
+#    it shows: with c.scope("fault"):
 # RAM shows its whole method: True
 ```
 
@@ -86,13 +86,15 @@ of gates as before.
 **2. `inspect` reads the live file.** Python can show you the source of any function
 it is running. The standard `inspect` module finds the module on disk and hands back
 the function's lines and the number of its first line. `built_by` asks for that every
-time you look. Nothing is copied into a file or a string. Edit `arithmetic.py`, look
-again, and the panel shows your edit. That is why the code **cannot drift** from the
-circuit: it is not a description of the code, it is the code.
+time you look. Nothing is copied into a file or a string. The panel shows the file as it is
+right now, so it never goes stale like a copy would. If you edit `arithmetic.py` while
+the Cockpit is running, the circuit on screen was built from the old code, so restart the
+Cockpit and the circuit and the code match again. That is why the code cannot
+**drift** from the circuit it built: it is not a description of the code, it is the code.
 
 **3. A two-part method is cut to one block.** Some methods build more than one part.
 `_build_write_back` builds the write-back choosers and then the stack pointer's
-choosers. Every part the CPU builds sits inside a block that starts
+choosers. Almost every part the CPU builds sits inside a block that starts
 `with c.scope("<name>"):`, and everything inside is indented one step deeper. So
 `built_by` looks for the line that opens the viewed part's block, keeps it and every
 line indented deeper than it, and stops at the first line that is not. Then it takes
@@ -100,15 +102,16 @@ the shared indentation off the front so the block reads from the left margin. Th
 record's `line` is the number of the first line kept, so you can find the same line
 in the file.
 
-**4. When there is no block to cut.** The halt part's block sits in `_build_cpu`, a
-long method that builds the whole CPU, so the halt view shows only its three lines
-there. The RAM is different: it opens its scope with a name it was given
+**4. A block with another name, and no block at all.** The halt part is built in a
+block called `fault`, not `halt` (the `halt` block only holds the two registers that
+remember the answer). So the tap records the name `fault`, and the halt view shows that
+block of `_build_checks`. The RAM is different: it opens its scope with a name it was given
 (`with c.scope(name):`), so the words `scope("ram")` appear nowhere. The RAM view
 then shows the whole of `Ram.__init__`, which is the honest answer.
 
 **5. If the source is missing.** If the program is run from a zip file, Python may
-not find the source. Then `code` is empty (`None`), the panel says "The code isn't
-available here.", and the function name, file and page still show. It never fails.
+not find the source. Then `code` is empty (`None`), and the function name, file, first
+line and page still show. It never fails.
 
 ## Why Does This Matter?
 

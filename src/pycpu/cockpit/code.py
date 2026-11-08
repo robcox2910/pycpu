@@ -16,7 +16,21 @@ import pycpu
 from pycpu.cpu import GateMachine
 
 DOCS_URL = "http://127.0.0.1:8000/concepts"  # where `uv run mkdocs serve` shows the pages
-_REPO_ROOT = Path(pycpu.__file__).resolve().parents[2]  # src/pycpu/__init__.py is two below it
+_PACKAGE_DIR = Path(pycpu.__file__).resolve().parent
+
+
+def root_for(package_dir: Path) -> Path:
+    """Pick the folder that file paths are shown relative to.
+
+    In a checkout (`package_dir` is `<repo>/src/pycpu`, and `<repo>/pyproject.toml`
+    exists) that is the repo, so paths read `src/pycpu/...`. Installed from a wheel it is
+    the folder that holds the package, so paths read `pycpu/...`.
+    """
+    checkout = package_dir.parents[1]
+    return checkout if (checkout / "pyproject.toml").is_file() else package_dir.parent
+
+
+_REPO_ROOT = root_for(_PACKAGE_DIR)
 
 # The concept page that explains each part: the one whose How It Works describes it.
 PART_PAGES = {
@@ -50,6 +64,10 @@ def _block(lines: list[str], scope: str) -> tuple[int, list[str]]:
         such line the whole function: offset 0 and all its lines.
 
     """
+    # Edge cases this does not handle (none occur in the CPU's code today): a comment or a
+    # multi-line string dedented to the `with` line's level ends the block early, the first
+    # line that matches wins if a scope of the same name is nested earlier, and a `with`
+    # line with a trailing comment or an `as` name is not found (the whole function shows).
     opener = f'with c.scope("{scope}"):'
     for start, line in enumerate(lines):
         if line.strip() == opener:
@@ -82,7 +100,8 @@ def built_by(gate: GateMachine, path: str) -> dict[str, object]:
 
     When the function builds more than one part, such as `_build_write_back`, only the
     part's own `with c.scope(...)` block is kept, so the code shown is the code that
-    made this part. A part whose scope is opened somewhere else (the RAM's name is a
+    made this part. The block is named by the part's recorded scope, or else by the last
+    segment of its path. A part whose scope is opened somewhere else (the RAM's name is a
     variable) gets the whole function.
 
     Args:
@@ -92,13 +111,14 @@ def built_by(gate: GateMachine, path: str) -> dict[str, object]:
     Returns:
         `function` (a dotted name), `file` (relative to the repo), `line` (the first line
         shown, 1-based), `code` (None if Python cannot find the source) and `page`
-        (`title` and `url` of the concept page that explains the part).
+        (`title` and `url` of the concept page that explains the part). If the source
+        is missing, `line` is the function's first line (0 when it has no code object).
 
     Raises:
         KeyError: If the part has no builder recorded.
 
     """
-    function = gate.builders[path]
+    function, scope = gate.builders[path]
     stem = PART_PAGES[path]
     code: str | None = None
     first = getattr(function, "__code__", None)
@@ -108,7 +128,9 @@ def built_by(gate: GateMachine, path: str) -> dict[str, object]:
     except OSError, TypeError:
         pass
     else:
-        offset, kept = _block([text.rstrip("\n") for text in lines], path.rsplit(".", 1)[-1])
+        offset, kept = _block(
+            [text.rstrip("\n") for text in lines], scope or path.rsplit(".", 1)[-1]
+        )
         code = textwrap.dedent("\n".join(kept))
         line = start + offset
     return {
