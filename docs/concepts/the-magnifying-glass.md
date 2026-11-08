@@ -196,6 +196,20 @@ first (see [Bits and Binary](bits-and-binary.md)).
 | The list of where you may clip | `GateMachine.taps` in `src/pycpu/cpu.py` |
 | Reading the meter | `GET /api/part?path=cpu.alu` |
 
+Two more parts can be looked at the same way. Each row says what a value means.
+
+| Part (`path`) | Value | What it means |
+|---------------|-------|---------------|
+| registers (`cpu.registers`) | `write` | 1 when the registers are about to keep a new number, 0 when they are not |
+| registers | `write_select` | Which register (0 to 7) gets the new number, like a locker number |
+| registers | `data` | The new number waiting to be kept |
+| registers | `read_a`, `read_b` | Which two registers are being read right now |
+| registers | `a`, `b` | The two numbers those registers hold, which go on to the ALU |
+| RAM (`ram`) | `address` | Which word of the memory is being asked about, like a house number |
+| RAM | `data` | The number that would be stored there |
+| RAM | `write` | 1 when the number is going to be stored, 0 when the RAM is only being read |
+| RAM | `out` | The word that lives at that address right now |
+
 Here we load the countdown and run it, one instruction at a time, until the next
 instruction is its `sub` and `n` (held in `r1`) is 2. Then we step one beat. That beat
 is the fetch: the CPU picks up the `sub`, and the execute beat comes next. Now the ALU's

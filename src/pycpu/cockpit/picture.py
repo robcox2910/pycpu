@@ -49,6 +49,8 @@ PART_NAMES = {
     "cpu.next_pc": "next-instruction",
     "cpu.next_sp": "stack pointer",
     "cpu.halt": "halt",
+    "cpu.registers": "registers",
+    "ram": "RAM",
     "cpu": "CPU",
 }
 

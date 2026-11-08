@@ -184,6 +184,11 @@ class GateMachine:
         ram_data = _placeholders(c, WORD_BITS)
         (ram_write,) = _placeholders(c, 1)
         self._ram = Ram(c, ram_address, ram_data, ram_write, self._clock)
+        self._tap(
+            "ram",
+            {"address": ram_address, "data": ram_data, "write": (ram_write,)},
+            {"out": self._ram.out},
+        )
         with c.scope("cpu"):
             address, data, write = self._build_cpu(c, address_bits)
             with c.scope("ram_wires"):
@@ -275,6 +280,17 @@ class GateMachine:
         write_back, register_write = _placeholders(c, WORD_BITS), c.wire_placeholder()
         bank = RegisterFile(c, write_back, register_write, rd, read_a, read_b, self._clock)
         self._registers = bank.registers
+        self._tap(
+            "cpu.registers",
+            {
+                "write": (register_write,),
+                "write_select": rd,
+                "data": write_back,
+                "read_a": read_a,
+                "read_b": read_b,
+            },
+            {"a": bank.a, "b": bank.b},
+        )
         with c.scope("operand"):
             memory_op = or_(c, line[Opcode.LOAD], line[Opcode.STORE])
             b = mux_bus(c, memory_op, bank.b, sign_extend(c, _field(ir, 0, OFF6_BITS)))

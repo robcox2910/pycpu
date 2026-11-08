@@ -269,7 +269,7 @@ const LEVELS = {
 const GATE_LINE = ["One NAND gate: its output is 0 only when both inputs are 1. Every part above is built from these.", "Switches and NAND (switches-and-nand.md)"];
 const FALLBACK = ["A part of the circuit, made of smaller parts and gates.", "Looking Inside a Circuit (looking-inside.md)"];
 // Plain words for each part the glass can look at (the same names as PART_NAMES in picture.py).
-const PART_WORDS = {"cpu.alu": "ALU", "cpu.write_back": "write-back", "cpu.address_mux": "memory address", "cpu.next_pc": "next-instruction", "cpu.next_sp": "stack pointer", "cpu.halt": "halt", "cpu": "CPU"};
+const PART_WORDS = {"cpu.alu": "ALU", "cpu.write_back": "write-back", "cpu.address_mux": "memory address", "cpu.next_pc": "next-instruction", "cpu.next_sp": "stack pointer", "cpu.halt": "halt", "cpu.registers": "registers", "ram": "RAM", "cpu": "CPU"};
 // Plain words for every wire name a part view can show (the names in GateMachine.taps).
 const TAP_WORDS = {
   "a": "number A",
@@ -298,7 +298,12 @@ const TAP_WORDS = {
   "bad_address": "bad address? (1 means yes)",
   "halt_instruction": "is it a halt? (1 means yes)",
   "halt_now": "stop now? (1 means yes)",
-  "code": "the halt code"
+  "code": "the halt code",
+  "write_select": "which register gets it",
+  "data": "the number to keep",
+  "read_a": "first register being read",
+  "read_b": "second register being read",
+  "out": "the word at that address"
 };
 // Which fields each opcode's word holds, and which bits each field is (the Instruction Set page).
 const FIELDS = {"0": ["rd", "ra", "rb", "fn"], "1": ["ra", "rb"], "2": ["rd", "imm8"], "3": ["rd", "imm8"], "4": ["rd", "ra", "off6"], "5": ["rd", "ra", "off6"], "6": ["addr12"], "7": ["addr12"], "8": ["cond", "off9"], "9": [], "10": ["rd"], "11": ["rd"], "12": ["rd"], "13": ["rd"], "14": ["rd", "imm8"], "15": ["imm8"]};
