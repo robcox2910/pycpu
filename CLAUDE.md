@@ -47,7 +47,7 @@
 PyCPU is an educational computer simulated from NAND gates. Teaching comes first.
 
 - **NAND is the single primitive.** Nothing above `simulator.py` may compute a logic result in Python, except test helpers and `peek`/`poke`.
-- **Never fake the gate view.** What the zoom shows must be the real circuit computing the real value.
+- **Never fake the gate view.** What the glass shows must be the real circuit computing the real value.
 - **RAM is 4K words of 16 bits, every bit real gates.** If that proves unworkable, shrink the RAM; never add a behavioural store.
 - 16-bit words. Buses are tuples of wires, least significant bit first.
 - Never use `TYPE_CHECKING` or `from __future__ import annotations`.
@@ -55,6 +55,6 @@ PyCPU is an educational computer simulated from NAND gates. Teaching comes first
 - Every public module, class and function has a docstring; module docstrings open with an analogy and run at least 3 lines.
 - Add each new page to `mkdocs.yml` and to `KEY_IDEAS` in `tests/test_docs.py`.
 - Coverage floor is 90%. Slow tests carry `@pytest.mark.slow` and are skipped by default.
-- Do not publish yet: no GitHub Pages, no `series.yml` entry, no version tags until Plan 5.
+- Do not publish yet: no GitHub Pages, no `series.yml` entry, no version tags until the owner gives the go-ahead (Plan 7 at the earliest).
 - PyCPU's Hypothesis tests are named by subject (`test_lockstep.py` and the like) rather than `test_properties.py`.
-- `.github/workflows/release.yml` only runs on a `v*.*.*` tag, and PyCPU gets no tag until Plan 5, so nothing publishes yet.
+- `.github/workflows/release.yml` only runs on a `v*.*.*` tag, and PyCPU gets no tag until the owner gives the go-ahead (Plan 7 at the earliest), so nothing publishes yet.

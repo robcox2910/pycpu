@@ -1,8 +1,8 @@
 # PyCPU Implementation Roadmap
 
-The spec (`docs/superpowers/specs/2026-11-01-pycpu-design.md`) is built as five sequential
+The spec (`docs/superpowers/specs/2026-11-01-pycpu-design.md`) is built as seven sequential
 plans. Each produces working, tested software on its own, and each adds to the local Bench
-page so progress can be seen. **Nothing is tagged or released until Plan 5** (spec goal 7);
+page so progress can be seen. **Nothing is tagged or released until the owner gives the go-ahead (Plan 7 at the earliest)** (spec goal 7);
 merging to `main` is fine, publishing a version is not.
 
 Only Plan 1 is written in detail. Later plans are written when the one before finishes,
@@ -15,7 +15,9 @@ proof, and Plan 3 depends on Pebble's public API at the pinned tag.
 | 2 | **CPU and assembler** (`2026-11-02-pycpu-02-cpu-and-assembler.md`) | Instruction set; decoder, control unit, program counter, stack pointer; fast engine; lockstep equivalence property tests; pause, step, rewind and resume between engines; assembler; fault halts. Bench shows registers, memory and current instruction. |
 | 3 | **Pebble on the CPU** (`2026-11-03-pycpu-03-pebble-on-the-cpu.md`) | Bytecode-to-machine-code translator with source-line map; friendly errors at the subset's edges; multiply, divide, modulo, decimal-print routines in assembly; string-literal print; conformance against the Pebble VM. |
 | 4 | **The Cockpit** | Bench grows into the full layout A: Pebble and machine-code panes, registers, memory, drill-down zoom panel, four step sizes, program loading, live updates over WebSocket or SSE. |
-| 5 | **Integration and first release** | PyStack `pycpu` plugin (shell command, `import "cpu"`, pin, registry, docs); complete docs and README; final definition-of-done pass against spec section 9; add PyCPU to the series with the runbook in `robcox2910.github.io/README.md` (`series.yml`, `HOME_GROUPS`, enable Pages, `series sync`, `series hub`); `v0.1.0` tag. |
+| 5 | **The Cockpit for learners** (`docs/superpowers/specs/2026-11-04-pycpu-cockpit-for-learners-design.md`) | Guided walks, a magnifying glass at four depths, one Step button, a "what just happened" sentence. |
+| 6 | **Build and watch** (`2026-11-07-pycpu-06-build-and-watch.md`) | PyCPU leads with building: Build It Yourself, the code behind each part in the Cockpit ("The code that built this"), registers and RAM part views, and a story that builds first, then watches. |
+| 7 | **Integration and first release** | PyStack `pycpu` plugin (shell command, `import "cpu"`, pin, registry, docs); complete docs and README; final definition-of-done pass against spec section 9; add PyCPU to the series with the runbook in `robcox2910.github.io/README.md` (`series.yml`, `HOME_GROUPS`, enable Pages, `series sync`, `series hub`); `v0.1.0` tag. |
 
 ## Proof result
 
@@ -209,9 +211,9 @@ What Plan 3 learned, measured on the same Intel Core i7-9750H laptop (macOS 26.5
   - Long source lines in `printing-a-number.md` and `from-pebble-to-machine-code.md` (render fine).
   - The engine speed limits now live once, in `pycpu.proof.ENGINE_LIMITS` (done in Plan 3).
 
-## Notes for Plan 6
+## What Plan 4 left
 
-PyStack and the release are now Plan 6. Plan 5 is the Cockpit for learners
+PyStack and the release are now Plan 7. Plan 5 is the Cockpit for learners
 (`docs/superpowers/specs/2026-11-04-pycpu-cockpit-for-learners-design.md`).
 
 What Plan 4 left, and what it learned. Measured on the same Intel Core i7-9750H laptop
@@ -228,7 +230,7 @@ fresh runs.
 | Both engines pass lockstep equivalence | Done | `tests/test_lockstep.py` (random states, assembled programs, self-modifying code) |
 | Conformance against the Pebble VM passes | Done | `tests/test_conformance.py` (`test_corpus_matches_the_pebble_vm` over `tests/pebble_programs/`, plus `test_random_programs_match_the_pebble_vm`); the Cockpit examples in `tests/test_examples_programs.py` |
 | Every layer has concept docs | Done | Every page under `docs/concepts/`, from gates to the tour, guarded by `tests/test_docs.py` (sections, the output of every block with an `# Output:` marker, `KEY_IDEAS`, nav, What's Next) |
-| PyStack launches it and `import "cpu"` works | **Left for Plan 6** | No `pycpu` plugin in `pystack/src/pystack/plugins/` yet |
+| PyStack launches it and `import "cpu"` works | **Left for Plan 7** | No `pycpu` plugin in `pystack/src/pystack/plugins/` yet |
 
 Only PyStack's launcher (a shell command that opens the Cockpit) and the `import "cpu"`
 Pebble module are left, with the release steps in the table at the top.
@@ -297,7 +299,7 @@ Pebble module are left, with the release steps in the table at the top.
   fewer than `n` events ever come (for example, a play that halts in its first tick sends
   one event). Tests and measurements must only ask for events that are sure to arrive.
 
-## Notes for Plan 6, after Plan 5
+## Notes for Plan 7
 
 Plan 5 rebuilt the Cockpit for learners (spec
 `docs/superpowers/specs/2026-11-04-pycpu-cockpit-for-learners-design.md`): the program on
@@ -315,7 +317,7 @@ This is what is left, and what Plan 5 learned.
 | Both engines pass lockstep equivalence | Done | `tests/test_lockstep.py` |
 | Conformance against the Pebble VM passes | Done | `tests/test_conformance.py`, now on the `fromscratch-pebble>=0.4.1` floor |
 | Every layer has concept docs | Done | Every page under `docs/concepts/`, with [Guided Walks](../../concepts/guided-walks.md), and each walk's concept page links back to its walk (`tests/test_docs.py`) |
-| PyStack launches it and `import "cpu"` works | **Left for Plan 6** | No `pycpu` plugin in `pystack/src/pystack/plugins/` yet |
+| PyStack launches it and `import "cpu"` works | **Left for Plan 7** | No `pycpu` plugin in `pystack/src/pystack/plugins/` yet |
 
 Only PyStack's launcher and the `import "cpu"` Pebble module are left, with the release
 steps in the table at the top.
@@ -344,16 +346,26 @@ laptop (macOS 26.5, Python 3.14.3), a throwaway script (not in the repo), full s
   malformed `#walk=` link, and the docs link check.
 - Still open: Task 6, no JavaScript runtime in the tests, so the page's field-splitting JS
   is checked by its text and in a real browser, not run.
-- Deferred to Plan 6 (Ruling 14): registers and RAM get no `/api/part` view. The glass
-  already shows registers and the stack at instruction depth, and the gate depth reaches
-  their gates. The spec lists them, so the owner may ask for two part views.
+- Registers and RAM part views: done in Plan 6.
+
+### Minors parked in the Plan 6 ledger
+
+Still open, from `.superpowers/sdd/2026-11-07-pycpu-06-build-and-watch/progress.md`:
+
+- Task 1: check `a`/`b` against `state().registers`; add a comment on the `li r3, 13` choice.
+- Task 3 (F1-F7): pin the whole `gate_path` map; reword a doc sentence (F2); scroll the
+  opened code panel into view and keep its scroll position on Step (F3); in the RAM
+  look-closer list the non-word parts first (F4); three nits (F5-F7).
+- Task 4, wording in Build It Yourself: row 19's stack test is a fault case, so pick a
+  test that shows push and pop; row 26 "sums 1..10 = 55"; row 28 could also cite
+  `test_divmod_pinned_values`; row 20 doubles `r1`; "part depth" is not explained.
 
 ### Owner items still open
 
 - **Nothing is exposed yet.** No GitHub Pages, no push trigger in `docs.yml`, no
   `series.yml` entry, no tag, no PyPI release, no links from other series projects. The
   "See it in the Cockpit" links on the concept pages point only at
-  `http://127.0.0.1:8765`, which works on your own computer. Plan 6 needs the owner's
+  `http://127.0.0.1:8765`, which works on your own computer. Plan 7 needs the owner's
   go-ahead before any of that changes.
 - The owner's browser check of the new page (the controller owes it before merging).
 
@@ -382,5 +394,6 @@ plans: copy it into each one.
   printing a number; what happens when things go wrong; why 16-bit numbers wrap.
 - **Plan 4:** a guided tour of the Cockpit, following one Pebble line all the way to a gate.
 - **Plan 5:** the Cockpit for learners (see its design spec).
-- **Plan 6:** PyCPU's place in PyStack, the release, and a closing "you built a computer" page tying the
+- **Plan 6:** Build It Yourself and the code behind each part (done).
+- **Plan 7:** PyCPU's place in PyStack, the release, and a closing "you built a computer" page tying the
   whole climb together.

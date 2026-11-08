@@ -11,6 +11,11 @@ a small part that turns switches into a decision), then adders that do sums, the
 that remembers, and eventually a whole processor (the part of a computer that follows
 instructions).
 
+You build it yourself, in code. [Build It Yourself](docs/build-it-yourself.md) is the
+instruction sheet: the order to write the parts, from one NAND gate up to a computer that
+runs a Pebble program, with a picture to check each step. Then you open the **Cockpit** to
+check and watch what you built.
+
 Part of the "from scratch in Python" series. Each layer is made only from the one
 below it, so nothing is hidden, and nothing is faked: when a page shows you a circuit,
 that is the real circuit, doing the real work.
@@ -22,7 +27,6 @@ sums, RAM is the computer's big notebook, the CPU is the processor that follows 
 and the Assembler turns readable instructions into the numbers the CPU understands. The docs explain every word.
 
 ```
-  The Cockpit               <- built
   Pebble programs           <- built for part of Pebble
   Assembler                 <- built
   The CPU                   <- built
@@ -30,9 +34,11 @@ and the Assembler turns readable instructions into the numbers the CPU understan
   Arithmetic (adders, ALU)  <- built
   Gates (AND, OR, ...)      <- built
   NAND                      <- built, where it all starts
+
+  The Cockpit, beside the ladder, not on top of it: watch any rung in the Cockpit
 ```
 
-The destination is the **Cockpit**, a screen where you can watch a program written in
+The Cockpit comes second, as the place to check and watch what you built. It is a screen where you can watch a program written in
 Pebble (a small programming language from the same series) run on this computer, pause at any moment, and zoom all the way down to individual gates.
 The Cockpit is built: a local page (`uv run python -m pycpu`) that opens on **guided
 walks**, short tours of the real machine that end with a small task for you. It shows the
@@ -142,6 +148,8 @@ Every idea gets its own page, with an everyday analogy:
 | A tour of the Cockpit | [a-tour-of-the-cockpit.md](docs/concepts/a-tour-of-the-cockpit.md) | Following one letter through the post |
 | The magnifying glass | [the-magnifying-glass.md](docs/concepts/the-magnifying-glass.md) | A magnifying glass over a map |
 | What just happened | [what-just-happened.md](docs/concepts/what-just-happened.md) | A commentator who only says what really happened |
+| Build It Yourself | [build-it-yourself.md](docs/build-it-yourself.md) | A model kit with a picture on every bag |
+| The code behind a part | [the-code-behind-a-part.md](docs/concepts/the-code-behind-a-part.md) | The recipe printed next to the cake |
 | Guided walks | [guided-walks.md](docs/concepts/guided-walks.md) | A museum audio guide |
 
 ## Read the docs
