@@ -1,0 +1,120 @@
+"""The code behind a part: the Python that built it, read live, for the Cockpit's code panel.
+
+Think of a toy with a sticker on its back saying which page of the instruction booklet
+built it. This module is that sticker, except it never copies the page: it opens the
+booklet itself, the real source file, every time you ask. Because the code shown is read
+from the module that is running, it cannot drift from the circuit it built.
+"""
+
+import inspect
+import textwrap
+from collections.abc import Callable
+from pathlib import Path
+from types import CodeType
+
+import pycpu
+from pycpu.cpu import GateMachine
+
+DOCS_URL = "http://127.0.0.1:8000/concepts"  # where `uv run mkdocs serve` shows the pages
+_REPO_ROOT = Path(pycpu.__file__).resolve().parents[2]  # src/pycpu/__init__.py is two below it
+
+# The concept page that explains each part: the one whose How It Works describes it.
+PART_PAGES = {
+    "cpu.alu": "the-alu",
+    "cpu.registers": "registers",
+    "ram": "ram",
+    "cpu.halt": "what-happens-when-things-go-wrong",
+    "cpu.write_back": "fetch-decode-execute",
+    "cpu.address_mux": "fetch-decode-execute",
+    "cpu.next_pc": "fetch-decode-execute",
+    "cpu.next_sp": "the-stack",
+}
+
+# The title each of those pages shows in the docs menu.
+PAGE_TITLES = {
+    "the-alu": "The ALU",
+    "registers": "Registers",
+    "ram": "RAM",
+    "what-happens-when-things-go-wrong": "What Happens When Things Go Wrong",
+    "fetch-decode-execute": "Fetch, Decode, Execute",
+    "the-stack": "The Stack",
+}
+
+
+def _block(lines: list[str], scope: str) -> tuple[int, list[str]]:
+    """Cut the `with c.scope("<scope>"):` block out of a function's lines.
+
+    Returns:
+        The offset of the block's first line within `lines`, and the block's lines
+        (the `with` line and everything indented deeper). When the function has no
+        such line the whole function: offset 0 and all its lines.
+
+    """
+    opener = f'with c.scope("{scope}"):'
+    for start, line in enumerate(lines):
+        if line.strip() == opener:
+            indent = len(line) - len(line.lstrip())
+            end = start + 1
+            while end < len(lines):
+                text = lines[end]
+                if text.strip() and len(text) - len(text.lstrip()) <= indent:
+                    break
+                end += 1
+            while not lines[end - 1].strip():
+                end -= 1
+            return start, lines[start:end]
+    return 0, lines
+
+
+def _relative(function: Callable[..., object]) -> str:
+    """Name the function's file relative to the repo root, or as it is when outside it."""
+    name = inspect.getsourcefile(function)
+    if name is None:
+        return ""
+    try:
+        return Path(name).resolve().relative_to(_REPO_ROOT).as_posix()
+    except ValueError:
+        return name
+
+
+def built_by(gate: GateMachine, path: str) -> dict[str, object]:
+    """Show the live source of the function that built the part `path`.
+
+    When the function builds more than one part, such as `_build_write_back`, only the
+    part's own `with c.scope(...)` block is kept, so the code shown is the code that
+    made this part. A part whose scope is opened somewhere else (the RAM's name is a
+    variable) gets the whole function.
+
+    Args:
+        gate: The gate machine whose builders were recorded as it was wired up.
+        path: The part's scope path, such as `"cpu.alu"`.
+
+    Returns:
+        `function` (a dotted name), `file` (relative to the repo), `line` (the first line
+        shown, 1-based), `code` (None if Python cannot find the source) and `page`
+        (`title` and `url` of the concept page that explains the part).
+
+    Raises:
+        KeyError: If the part has no builder recorded.
+
+    """
+    function = gate.builders[path]
+    stem = PART_PAGES[path]
+    code: str | None = None
+    first = getattr(function, "__code__", None)
+    line = first.co_firstlineno if isinstance(first, CodeType) else 0
+    try:
+        lines, start = inspect.getsourcelines(function)
+    except OSError, TypeError:
+        pass
+    else:
+        offset, kept = _block([text.rstrip("\n") for text in lines], path.rsplit(".", 1)[-1])
+        code = textwrap.dedent("\n".join(kept))
+        line = start + offset
+    return {
+        "function": f"{function.__module__}.{function.__qualname__}",
+        "file": _relative(function),
+        "line": line,
+        "code": code,
+        "page": {"title": PAGE_TITLES[stem], "url": f"{DOCS_URL}/{stem}/"},
+    }

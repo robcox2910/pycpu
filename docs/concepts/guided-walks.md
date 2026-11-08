@@ -209,6 +209,7 @@ right moment, then let you fly it yourself.
 
 ## What's Next
 
-That is the last page of the climb for now. Go back to
-[What Is a Computer, Really?](../index.md) to see the whole ladder from one NAND gate
-to a Pebble program, or open the Cockpit and take a walk.
+Every part you zoom to also shows the code that built it. Read
+[The Code Behind a Part](the-code-behind-a-part.md) to see how the Cockpit finds that
+code, then go back to [What Is a Computer, Really?](../index.md) to see the whole
+ladder from one NAND gate to a Pebble program.

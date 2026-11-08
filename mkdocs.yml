@@ -84,5 +84,6 @@ nav:
       - The Magnifying Glass: concepts/the-magnifying-glass.md
       - What Just Happened: concepts/what-just-happened.md
       - Guided Walks: concepts/guided-walks.md
+      - The Code Behind a Part: concepts/the-code-behind-a-part.md
   - Reference:
       - Instruction Set: reference/instruction-set.md

@@ -9,6 +9,7 @@ line out as a dictionary the page can draw. Everything is read, nothing is chang
 from typing import cast
 
 from pycpu.assembler import disassemble
+from pycpu.cockpit.code import built_by
 from pycpu.cockpit.session import BUSY_MESSAGE, Cockpit, CockpitBusy
 from pycpu.cockpit.walks import walk_named
 from pycpu.computer import Computer
@@ -68,7 +69,8 @@ def part_picture(cockpit: Cockpit, path: str) -> dict[str, object]:
 
     Returns:
         `path`, `name` (from `PART_NAMES`), and `inputs` and `outputs`, each a list
-        of `{"name", "value"}` in the order the CPU's builder recorded them.
+        of `{"name", "value"}` in the order the CPU's builder recorded them, and
+        `built_by`: the live source of the code that built the part (see `code.built_by`).
 
     Raises:
         KeyError: If the part has no taps (an unknown path, or the whole `cpu`).
@@ -88,7 +90,13 @@ def part_picture(cockpit: Cockpit, path: str) -> dict[str, object]:
     for name, bus in gate.taps[path].items():
         value = sum(sim.get(wire) << bit for bit, wire in enumerate(bus))
         (outputs_seen if name in outputs else inputs_seen).append({"name": name, "value": value})
-    return {"path": path, "name": PART_NAMES[path], "inputs": inputs_seen, "outputs": outputs_seen}
+    return {
+        "path": path,
+        "name": PART_NAMES[path],
+        "inputs": inputs_seen,
+        "outputs": outputs_seen,
+        "built_by": built_by(gate, path),
+    }
 
 
 def _cell(state: MachineState, address: int) -> dict[str, object]:

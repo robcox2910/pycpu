@@ -14,7 +14,7 @@ the screen plugged into the output port, which listens to the CPU's real
 `port_write` wire and never decides anything for it.
 """
 
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from enum import IntEnum
 
@@ -154,6 +154,8 @@ class GateMachine:
             recorded while the CPU is wired up and only read after that; a tap never
             adds a gate or a wire.
         tap_outputs: For each part in `taps`, which of its names are outputs.
+        builders: For each part in `taps`, the function or method whose code built it.
+            The Cockpit reads that function's live source for its code panel.
 
     """
 
@@ -177,6 +179,7 @@ class GateMachine:
         self._pending: dict[str, tuple[Bus, Wire]] = {}
         self.taps: dict[str, dict[str, Bus]] = {}
         self.tap_outputs: dict[str, tuple[str, ...]] = {}
+        self.builders: dict[str, Callable[..., object]] = {}
         c = Circuit()
         self.circuit = c
         self._clock = make_clock(c)
@@ -188,6 +191,7 @@ class GateMachine:
             "ram",
             {"address": ram_address, "data": ram_data, "write": (ram_write,)},
             {"out": self._ram.out},
+            Ram.__init__,
         )
         with c.scope("cpu"):
             address, data, write = self._build_cpu(c, address_bits)
@@ -239,12 +243,20 @@ class GateMachine:
             self._pending[name] = ((), load)
         return Register(c, width, data_in, load, self._clock, name)
 
-    def _tap(self, part: str, inputs: dict[str, Bus], outputs: dict[str, Bus]) -> None:
-        """Name a part's input and output wires, so the part view can read them later.
+    def _tap(
+        self,
+        part: str,
+        inputs: dict[str, Bus],
+        outputs: dict[str, Bus],
+        builder: Callable[..., object],
+    ) -> None:
+        """Name a part's input and output wires, and the code that built it.
 
         This only writes names down, like labels tied onto cables already laid:
-        it makes no gate and no wire.
+        it makes no gate and no wire. `builder` is the function or method that holds
+        the part's `with c.scope(...)` block, so the Cockpit can show its source.
         """
+        self.builders[part] = builder
         self.taps[part] = {**inputs, **outputs}
         self.tap_outputs[part] = tuple(outputs)
 
@@ -290,6 +302,7 @@ class GateMachine:
                 "read_b": read_b,
             },
             {"a": bank.a, "b": bank.b},
+            RegisterFile.__init__,
         )
         with c.scope("operand"):
             memory_op = or_(c, line[Opcode.LOAD], line[Opcode.STORE])
@@ -305,6 +318,7 @@ class GateMachine:
             "cpu.alu",
             {"a": bank.a, "b": b},
             {"result": out.result, "flags": (out.zero, out.negative, out.carry, out.overflow)},
+            alu,
         )
         flags = self._flags.q
         met = condition_met(c, rd, flags[0], flags[1], flags[2], flags[3])
@@ -324,6 +338,7 @@ class GateMachine:
             "cpu.address_mux",
             {"pc": self._pc.q, "alu": out.result, "sp": sp, "sp_minus_1": sp_down},
             {"address": address},
+            self._build_datapath,
         )
         return _Wires(
             line=line,
@@ -375,6 +390,7 @@ class GateMachine:
             "cpu.halt",
             {"bad_address": (bad,), "halt_instruction": (halt_instruction,), "imm8": w.imm8},
             {"halt_now": (halt_load,), "code": code},
+            self._build_cpu,
         )
 
     def _build_next_pc(self, c: Circuit, w: _Wires) -> None:
@@ -411,6 +427,7 @@ class GateMachine:
                 "memory": self._ram.out,
             },
             {"next_pc": next_pc, "load": (pc_load,)},
+            self._build_next_pc,
         )
 
     def _build_write_back(self, c: Circuit, w: _Wires) -> None:
@@ -457,6 +474,7 @@ class GateMachine:
                 "destination": rd,
             },
             {"value": value, "write": (write,)},
+            self._build_write_back,
         )
         self._tap(
             "cpu.next_sp",
@@ -467,6 +485,7 @@ class GateMachine:
                 "register": w.bank.b,
             },
             {"next_sp": sp_value, "load": (sp_write,)},
+            self._build_write_back,
         )
         with c.scope("ram_data"):
             # CALL writes the return address (pc); STORE and PUSH write window b.
