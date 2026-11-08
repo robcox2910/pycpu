@@ -13,6 +13,7 @@ from pycpu.cockpit.app import create_cockpit
 from pycpu.cockpit.code import DOCS_URL, PAGE_TITLES, PART_PAGES, built_by, root_for
 from pycpu.cockpit.picture import part_picture
 from pycpu.cockpit.session import Cockpit
+from pycpu.cockpit.walks import load_walks
 from pycpu.cpu import GateMachine
 
 ROOT = Path(__file__).parent.parent
@@ -32,6 +33,10 @@ def gate() -> GateMachine:
 class TestEveryPart:
     """Every tapped part has a builder, a page and a source."""
 
+    def test_every_title_belongs_to_a_page_the_cockpit_links(self) -> None:
+        """PAGE_TITLES holds the part pages and the walks' pages, and nothing else."""
+        assert set(PAGE_TITLES) == {*PART_PAGES.values(), *(w.see_also for w in load_walks())}
+
     def test_every_tap_has_a_builder_and_a_page(self, gate: GateMachine) -> None:
         """Taps, builders and PART_PAGES name exactly the same parts."""
         assert set(gate.builders) == set(gate.taps)
@@ -39,7 +44,7 @@ class TestEveryPart:
 
     def test_every_page_stem_names_a_concept_page_with_a_title(self) -> None:
         """Each stem is a file in docs/concepts and has a menu title."""
-        for stem in PART_PAGES.values():
+        for stem in {*PART_PAGES.values(), *(walk.see_also for walk in load_walks())}:
             assert (CONCEPTS / f"{stem}.md").is_file(), stem
             assert stem in PAGE_TITLES
             heading = (CONCEPTS / f"{stem}.md").read_text(encoding="utf-8").splitlines()[0]

@@ -77,7 +77,9 @@ middle of the first walk, just after its third step:
   for this step. **Next ▸** and **◂ Back** move through the walk, and **Leave** puts the
   guide away. After the last step comes **Now you try**: one small task, such as "Press
   Step until n is 0.", which the Cockpit checks on the real machine. When you have done
-  it the bar cheers: "You did it! Pick another walk, or keep exploring." If you wander
+  it the bar cheers: "You did it! Pick another walk, or keep exploring." Under the cheer
+  a **Read about it** line names the concept page that explains the walk's idea, such
+  as [The ALU](the-alu.md) after the subtracting walk, with a link to it. If you wander
   off during a walk's steps, by pressing a button of your own or by moving the glass,
   the walk waits for you and a **Back to the walk** button takes you back to the
   step you were on. Going past the task is fine too. Say the task asks for
@@ -127,6 +129,37 @@ from the part to its gates. Inside the gates, click a smaller part to look insid
 Each name on the trail is a button that climbs back up to that depth. Climbing and
 clicking never move the machine. Clicking a variable or a word of the stack, or a
 register in the glass, opens the gates that hold that number.
+
+**The code that built this.** At the part depth, the part's wires come first. Under
+them sits a button, **The code that built this ▸**. It starts closed, so the screen
+looks just as it does in the drawing. Press it and it opens (its arrow turns to ▾):
+
+- one line naming the Python function that built the part, and its file and line, such
+  as `src/pycpu/arithmetic.py:` and a line number for the ALU;
+- the real code of that part, read from the running program's own file, in a box that
+  scrolls inside itself, so the page still never scrolls;
+- a **Read about it** link to the concept page that explains the part.
+
+The links point at `http://127.0.0.1:8000`, the docs on your own computer, so they work
+once you have started the docs with `uv run mkdocs serve` in the `pycpu` folder; the
+panel says so in one sentence. If Python cannot find the code (say the program runs from
+a zip file), the panel says "The code isn't available here." and keeps the rest.
+[The Code Behind a Part](the-code-behind-a-part.md) explains how the Cockpit finds the
+code.
+
+**Every part.** Under the code, the part depth lists **every part** with a part view.
+Two of them, **registers** and **RAM**, are not the main part of any instruction, so
+this list is the way to them. Press one and the glass shows its wires and its code,
+and the trail names it. The registers show whether to write, which register gets it,
+the number to keep, which two registers are read, and the two numbers read out; the RAM
+shows the address, the number to keep, the write wire and the word at that address. Looking closer at the
+instruction again goes back to the instruction's own part.
+
+**Look closer always opens the gates that made the wires.** Most parts' gates sit
+inside the part itself. The halt part is the odd one: its wires are made in the fault
+check, `cpu.fault`, while `cpu.halt` only holds the two registers that remember the
+answer. So the halt view says "Its gates are in cpu.fault", and Look closer opens
+`cpu.fault`, the same block its code shows.
 
 **Following a gate.** After a gate step that ended on a gate, a **show this gate**
 button appears in the glass. It opens the part that holds the gate that just changed,
@@ -542,6 +575,8 @@ picture every route answers with:
   and the one thing to outline (`show`). At the **Now you try** stage (`trying`) it gives
   the `task` and `done`, and `step_kind`: when that is `"into"`, a second button,
   Step into ▸, sends `{"size": "line_into"}`, so a call is followed into its function.
+  Once `done` is true, the bar shows `see_also`: the `title` of the walk's concept page,
+  linked to its `url`.
   When the page opens, it reads `#walk=` from its own address and opens that walk.
 - **The Step button**'s label is `steps[depth]`, where `depth` is how deep the glass is
   looking, and pressing it sends `{"depth": depth}`. The page has no labels of its own
@@ -563,8 +598,11 @@ picture every route answers with:
   splits `instruction.word` into its fields, using the field table on the
   [Instruction Set](../reference/instruction-set.md) page, and shows the `registers`,
   `pc`, `sp` and `flags`. The part depth asks `GET /api/part` about
-  `parts["instruction"]`, and shows each input and output with a plain name, such as
-  "stack pointer − 1" for `sp_minus_1`. The gates depth asks `GET /api/view`: it lists
+  `parts["instruction"]` (or the part you picked from the list of every part), and shows
+  each input and output with a plain name, such as
+  "stack pointer − 1" for `sp_minus_1`. Under them, its `built_by` fills the code panel,
+  writing the code in with `textContent` like everything else. Look closer opens
+  `parts["gates"]` for that part. The gates depth asks `GET /api/view`: it lists
   the parts inside with their gate counts and draws each gate with its two inputs and
   its output, a wire holding a 1 highlighted. Each part is labelled in one plain
   sentence, with the name of the page that explains it. After every move the glass
@@ -828,6 +866,7 @@ a **scope** path that `/api/view` understands:
 | `pc`, `sp`, the flags | `parts["pc"]` is `cpu.pc`, `parts["sp"]` is `cpu.sp`, `parts["flags"]` is `cpu.flags` |
 | A word of memory or of the stack | The cell's own `part`, such as `ram.word4` |
 | The current instruction | `parts["instruction"]`, chosen by what the instruction does (below) |
+| The gates behind a part's wires | `parts["gates"][part]`: the part itself, except `cpu.fault` for `cpu.halt` |
 
 An instruction does not live in one place, so the Cockpit picks the part that does its
 main work, using `part_for_instruction(word)` in `src/pycpu/cockpit/picture.py`:
@@ -839,7 +878,7 @@ main work, using `part_for_instruction(word)` in `src/pycpu/cockpit/picture.py`:
 | `load`, `store` | `cpu.address_mux`, which chooses the memory address |
 | `jmp`, `br`, `call`, `ret` | `cpu.next_pc`, which works out where to go next |
 | `push`, `pop`, `getsp`, `setsp` | `cpu.next_sp`, which works out the new stack pointer |
-| `halt` | `cpu.halt`, the lamp that stops the machine |
+| `halt` | `cpu.halt`, the lamp that stops the machine (its gates are in `cpu.fault`) |
 
 ```python
 from pynet.loop import run

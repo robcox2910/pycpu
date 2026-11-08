@@ -87,6 +87,9 @@
   ol#walk-list li { margin:.4rem 0; }
   ol#walk-list button { font-size:1.05rem; text-align:left; }
   #walks-note { color:var(--error); font-weight:600; }
+  a { color:var(--accent); }
+  .built { margin-top:.6rem; }
+  .built-code { overflow:auto; max-height:16rem; margin:.3rem 0; padding:.35rem .5rem; border:1px solid var(--line); border-radius:6px; background:var(--bg); font-family:ui-monospace,monospace; font-size:.78rem; white-space:pre; }
   @media (max-width:44rem) {
     main { padding:.4rem; gap:.3rem; }
     .brand { display:none; }
@@ -130,6 +133,7 @@
     <div id="try" hidden>
       <p><strong>Now you try:</strong> <span id="try-task"></span></p>
       <p id="try-cheer" class="cheer" hidden>You did it! Pick another walk, or keep exploring.</p>
+      <div id="try-read" hidden></div>
       <button type="button" id="try-again" class="quiet" hidden>Start the task again</button>
     </div>
   </section>
@@ -329,6 +333,11 @@ const NO_GATE = "so there is no gate to show.";
 const NOTHING_YET = "(nothing yet)";
 const WALK_NOT_FOUND = "Walk not found.";
 const UNREACHABLE = "Could not reach the Cockpit";
+// The code panel under a part's wires, and the links to the docs on your own computer.
+const BUILT_TITLE = "The code that built this";
+const NO_CODE = "The code isn't available here.";
+const DOCS_SERVER = "http://127.0.0.1:8000/";
+const DOCS_NOTE = "The link opens the docs on your own computer, so start them first: type uv run mkdocs serve in the pycpu folder.";
 const HIDDEN_TITLE = "A hidden helper: Pebble made this box for itself (a for loop keeps its end value here). Its name starts with $, which no program could write.";
 
 let busy = false;          // a button's request is on its way
@@ -338,6 +347,8 @@ let listing = null;        // the last GET /api/listing
 let fetchingListing = false;
 let look = "line";         // how deep the glass looks: one of DEPTHS
 let gatePath = "cpu";      // the part of the circuit the gates depth shows
+let partPath = null;       // the part the part depth shows; null means the instruction's own
+let codeOpen = false;      // whether "The code that built this" is open
 let pickedGate = null;     // {id, path}: the gate "show this gate" highlights, for its own picture only
 let lensSeq = 0;           // counts glass requests, so only the newest answer is drawn
 let glowing = new Set();   // what the latest picture changed, as data-glow keys
@@ -490,7 +501,8 @@ function followWalk(m) {
   wandered = false;
   look = w.look;
   pickedGate = null;
-  gatePath = m.parts.instruction;
+  partPath = null;
+  gatePath = gatesOf(m, m.parts.instruction);
   if (w.show === "last_gate" && m.last_gate) {
     gatePath = m.last_gate.path;
     pickedGate = { id: m.last_gate.id, path: m.last_gate.path };
@@ -513,6 +525,9 @@ function drawWalk(m) {
   document.getElementById("try").hidden = !w.trying;
   document.getElementById("try-task").textContent = w.task || "";
   document.getElementById("try-cheer").hidden = !w.done;
+  const read = document.getElementById("try-read");
+  read.hidden = !w.done;
+  read.replaceChildren(readAbout(w.see_also, "to see how this idea is built"));
   document.getElementById("try-again").hidden = !(w.trying && !w.done);
   document.getElementById("walk-next").hidden = w.trying;
   document.getElementById("back-to-walk").hidden = !away;
@@ -720,6 +735,67 @@ function drawVariables(m) {
 
 function partWords(path) { return PART_WORDS[path] || path.split(".").pop(); }
 
+// The part the part depth shows: one the learner picked, or else the instruction's own.
+function shownPart(m) { return partPath || m.parts.instruction; }
+
+// Where a part's gates are: the scope that makes its outputs (for halt, cpu.fault).
+function gatesOf(m, path) { return m.parts.gates[path] || path; }
+
+// "Read about it", linking a concept page on the docs server on your own computer.
+function readAbout(page, why) {
+  const box = el("div");
+  const line = el("p", "Read about it: ");
+  if (page.url.startsWith(DOCS_SERVER)) {
+    const link = el("a", page.title);
+    link.href = page.url;
+    link.target = "_blank";
+    link.rel = "noopener";
+    line.append(link);
+  } else {
+    line.append(page.title);
+  }
+  line.append(", " + why + ".");
+  box.append(line, el("p", DOCS_NOTE, "muted"));
+  return box;
+}
+
+// The code that built a part: closed until opened, then its file and line, the code, and the link.
+function drawBuiltBy(b) {
+  const box = el("div", undefined, "built");
+  const inside = el("div");
+  const toggle = button("", "quiet", () => { codeOpen = !codeOpen; show(); });
+  const show = () => {
+    toggle.textContent = BUILT_TITLE + (codeOpen ? " ▾" : " ▸");
+    toggle.setAttribute("aria-expanded", String(codeOpen));
+    inside.hidden = !codeOpen;
+  };
+  inside.append(el("p", "Built by " + b.function + ", in " + b.file + ":" + b.line, "muted"));
+  if (b.code === null) {
+    inside.append(el("p", NO_CODE));
+  } else {
+    const code = el("pre", undefined, "built-code");
+    code.textContent = b.code;
+    inside.append(code);
+  }
+  inside.append(readAbout(b.page, "the page that explains this part"));
+  show();
+  box.append(toggle, inside);
+  return box;
+}
+
+// Every part with a part view, to pick from at the part depth.
+function partList(m, current) {
+  const list = el("ul", undefined, "parts");
+  Object.keys(PART_WORDS).filter((p) => p !== "cpu").forEach((p) => {
+    const li = el("li");
+    const b = button(partWords(p), "", () => { partPath = p; setLook("part"); });
+    if (p === current) b.setAttribute("aria-current", "true");
+    li.append(b);
+    list.append(li);
+  });
+  return list;
+}
+
 // Move the glass (never the machine). During a walk's steps, looking somewhere else is wandering off.
 function setLook(depth, path) {
   look = depth;
@@ -733,7 +809,8 @@ function goDeeper() {
   const next = DEPTHS[DEPTHS.indexOf(look) + 1];
   if (!next) return;
   pickedGate = null;
-  setLook(next, next === "gate" ? latest.parts.instruction : undefined);
+  if (next === "part") partPath = null;
+  setLook(next, next === "gate" ? gatesOf(latest, shownPart(latest)) : undefined);
 }
 
 function gates(path) {
@@ -752,19 +829,19 @@ function drawTrail(m) {
   const names = {
     line: p ? (p.line === null ? "Ready-made routine" : "Line " + p.line) : "Machine code",
     instruction: m.halted ? "halted" : m.instruction.text,
-    part: partWords(m.parts.instruction),
+    part: partWords(shownPart(m)),
     gate: "gates",
   };
   const deepest = DEPTHS.indexOf(look);
   DEPTHS.slice(0, deepest + 1).forEach((depth, i) => {
     if (i > 0) trail.append(el("span", "›", "muted"));
-    const crumb = button(names[depth], "", () => { pickedGate = null; setLook(depth, depth === "gate" ? m.parts.instruction : undefined); });
+    const crumb = button(names[depth], "", () => { pickedGate = null; setLook(depth, depth === "gate" ? gatesOf(m, shownPart(m)) : undefined); });
     if (depth === look && look !== "gate") crumb.setAttribute("aria-current", "step");
     trail.append(crumb);
   });
   if (look !== "gate") return;
   // Inside the gates, every part on the way down is a crumb too.
-  const base = m.parts.instruction;
+  const base = gatesOf(m, shownPart(m));
   const under = gatePath === base || gatePath.startsWith(base + ".");
   const start = under ? base : "";
   const rest = (under ? gatePath.slice(base.length) : gatePath).split(".").filter((s) => s);
@@ -930,7 +1007,7 @@ function lensInstruction(m, lens) {
 }
 
 async function lensPart(m, lens) {
-  const path = m.parts.instruction;
+  const path = shownPart(m);
   lens.append(el("p", "Next beat: " + m.phase + ". Every instruction takes two beats: a fetch, then an execute.", "muted"));
   const holder = el("div");
   lens.append(holder);
@@ -940,6 +1017,7 @@ async function lensPart(m, lens) {
     if (mine !== lensSeq) return;
     if (!response.ok) {
       holder.append(el("p", "No one part of the CPU does this. Look closer to see all of the CPU's gates."), lookCloser());
+      holder.append(el("h3", "Every part"), partList(m, path));
       return;
     }
     const part = await response.json();
@@ -955,10 +1033,14 @@ async function lensPart(m, lens) {
       return column;
     };
     const middle = button(part.name, "partbox", goDeeper);
-    middle.title = "Look closer: the gates inside the " + part.name;
+    middle.title = "Look closer: the gates that make the " + part.name + "'s outputs, in " + part.gates;
     const flow = el("div", undefined, "flow");
     flow.append(side(part.inputs), middle, side(part.outputs));
-    holder.append(el("p", "What goes into the " + part.name + " and what comes out, read off its real wires:"), flow, lookCloser());
+    holder.append(el("p", "What goes into the " + part.name + " and what comes out, read off its real wires:"), flow);
+    if (part.gates !== part.path) {
+      holder.append(el("p", "Its gates are in " + part.gates + ", the block its code builds, so Look closer opens " + part.gates + ".", "muted"));
+    }
+    holder.append(lookCloser(), drawBuiltBy(part.built_by), el("h3", "Every part"), partList(m, path));
     outlineShow(latest);
   } catch (e) {
     showError(UNREACHABLE);
@@ -1058,7 +1140,8 @@ function setControls() {
 // A new program starts the glass at its top depth; a walk sets its own.
 function startLook(m) {
   look = m.pebble ? "line" : "instruction";
-  gatePath = m.parts.instruction;
+  partPath = null;
+  gatePath = gatesOf(m, m.parts.instruction);
   pickedGate = null;
 }
 

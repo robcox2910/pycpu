@@ -9,10 +9,11 @@ line out as a dictionary the page can draw. Everything is read, nothing is chang
 from typing import cast
 
 from pycpu.assembler import disassemble
-from pycpu.cockpit.code import built_by
+from pycpu.cockpit.code import built_by, page_link
 from pycpu.cockpit.session import BUSY_MESSAGE, Cockpit, CockpitBusy
 from pycpu.cockpit.walks import walk_named
 from pycpu.computer import Computer
+from pycpu.cpu import GateMachine
 from pycpu.isa import Fault, Opcode, decode
 from pycpu.state import WORD_BITS, MachineState
 from pycpu.translator import FRAME_POINTER, PebbleRun, TranslatedProgram
@@ -56,6 +57,30 @@ PART_NAMES = {
 }
 
 
+def gate_path(gate: GateMachine, part: str) -> str:
+    """Name the part of the circuit whose gates make `part`'s outputs, for the gate zoom.
+
+    Like the label on a fuse box saying which room each switch lights: a part's name
+    and the room its gates sit in are nearly always the same. The halt part is the odd
+    one: its wires are made in the `fault` block, next to it (`cpu.fault`), while
+    `cpu.halt` holds only the two registers that remember the answer. So when a part's
+    builder recorded a block name, the gates are that block, beside the part.
+
+    Args:
+        gate: The gate machine whose builders were recorded as it was wired up.
+        part: A part's scope path, such as `"cpu.halt"`, or any other path.
+
+    Returns:
+        The scope path to zoom to: `"cpu.fault"` for `"cpu.halt"`, else `part` itself.
+
+    """
+    _builder, scope = gate.builders.get(part, (None, None))
+    if scope is None:
+        return part
+    parent = part.rpartition(".")[0]
+    return f"{parent}.{scope}" if parent else scope
+
+
 def part_picture(cockpit: Cockpit, path: str) -> dict[str, object]:
     """Describe one part of the CPU by what goes into it and what comes out, right now.
 
@@ -69,8 +94,10 @@ def part_picture(cockpit: Cockpit, path: str) -> dict[str, object]:
 
     Returns:
         `path`, `name` (from `PART_NAMES`), and `inputs` and `outputs`, each a list
-        of `{"name", "value"}` in the order the CPU's builder recorded them, and
-        `built_by`: the live source of the code that built the part (see `code.built_by`).
+        of `{"name", "value"}` in the order the CPU's builder recorded them,
+        `gates`: the scope that holds the gates making its outputs (see `gate_path`),
+        and `built_by`: the live source of the code that built the part (see
+        `code.built_by`).
 
     Raises:
         KeyError: If the part has no taps (an unknown path, or the whole `cpu`).
@@ -95,6 +122,7 @@ def part_picture(cockpit: Cockpit, path: str) -> dict[str, object]:
         "name": PART_NAMES[path],
         "inputs": inputs_seen,
         "outputs": outputs_seen,
+        "gates": gate_path(gate, path),
         "built_by": built_by(gate, path),
     }
 
@@ -235,7 +263,8 @@ def walk_picture(cockpit: Cockpit) -> dict[str, object] | None:
         the try's, and `step_kind` is the try's `step` (`"into"` when the page should
         offer Step into; None otherwise, and always None before the try). `task` is
         always the try's task, and `done` and `off_script` come from the session's
-        `WalkProgress`.
+        `WalkProgress`. `see_also` is the `title` and `url` of the concept page that
+        explains the walk's idea, on the docs server on your own computer.
 
     """
     progress = cockpit.walk
@@ -262,6 +291,7 @@ def walk_picture(cockpit: Cockpit) -> dict[str, object] | None:
         "task": walk.trial.task,
         "done": progress.done,
         "off_script": progress.off_script,
+        "see_also": page_link(walk.see_also),
     }
 
 
@@ -368,6 +398,8 @@ def machine_picture(cockpit: Cockpit) -> dict[str, object]:
     (None before any move and after a load). `walk` is the `walk_picture` of the walk the
     learner is on, or None. `program` is the session's load count, so
     the page can tell whether its listing is of the program on the machine.
+    `parts["gates"]` maps every part with a part view to the scope its gate zoom shows
+    (see `gate_path`).
 
     Args:
         cockpit: The session to describe.
@@ -427,6 +459,7 @@ def machine_picture(cockpit: Cockpit) -> dict[str, object]:
             "sp": "cpu.sp",
             "flags": "cpu.flags",
             "instruction": instruction_part,
+            "gates": {part: gate_path(computer.gate, part) for part in computer.gate.taps},
         },
         "steps": {
             "line": "Step one line \u25b8",

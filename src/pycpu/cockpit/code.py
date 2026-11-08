@@ -44,7 +44,8 @@ PART_PAGES = {
     "cpu.next_sp": "the-stack",
 }
 
-# The title each of those pages shows in the docs menu.
+# The title of each page the Cockpit links to: the part pages above and every walk's
+# `see_also` page, as each page's own heading gives it.
 PAGE_TITLES = {
     "the-alu": "The ALU",
     "registers": "Registers",
@@ -52,7 +53,24 @@ PAGE_TITLES = {
     "what-happens-when-things-go-wrong": "What Happens When Things Go Wrong",
     "fetch-decode-execute": "Fetch, Decode, Execute",
     "the-stack": "The Stack",
+    "stepping-a-pebble-line": "Stepping a Pebble Line",
+    "variables-in-memory": "Variables in Memory",
+    "the-clock": "The Clock",
+    "how-a-function-call-really-works": "How a Function Call Really Works",
 }
+
+
+def page_link(stem: str) -> dict[str, str]:
+    """Return the `title` and `url` of a concept page on the docs server on your own computer.
+
+    Args:
+        stem: The page's file name without `.md`, such as `"the-alu"`.
+
+    Raises:
+        KeyError: If the page has no title in `PAGE_TITLES`.
+
+    """
+    return {"title": PAGE_TITLES[stem], "url": f"{DOCS_URL}/{stem}/"}
 
 
 def _block(lines: list[str], scope: str) -> tuple[int, list[str]]:
@@ -119,7 +137,6 @@ def built_by(gate: GateMachine, path: str) -> dict[str, object]:
 
     """
     function, scope = gate.builders[path]
-    stem = PART_PAGES[path]
     code: str | None = None
     first = getattr(function, "__code__", None)
     line = first.co_firstlineno if isinstance(first, CodeType) else 0
@@ -138,5 +155,5 @@ def built_by(gate: GateMachine, path: str) -> dict[str, object]:
         "file": _relative(function),
         "line": line,
         "code": code,
-        "page": {"title": PAGE_TITLES[stem], "url": f"{DOCS_URL}/{stem}/"},
+        "page": page_link(PART_PAGES[path]),
     }
