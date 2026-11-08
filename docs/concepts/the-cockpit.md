@@ -131,8 +131,8 @@ clicking never move the machine. Clicking a variable or a word of the stack, or 
 register in the glass, opens the gates that hold that number.
 
 **The code that built this.** At the part depth, the part's wires come first. Under
-them sits a button, **The code that built this ▸**. It starts closed, so the screen
-looks just as it does in the drawing. Press it and it opens (its arrow turns to ▾):
+them sits a button, **The code that built this ▸**. It starts closed, so the code
+takes no room until you want it. Press it and it opens (its arrow turns to ▾):
 
 - one line naming the Python function that built the part, and its file and line, such
   as `src/pycpu/arithmetic.py:` and a line number for the ALU;
@@ -142,8 +142,8 @@ looks just as it does in the drawing. Press it and it opens (its arrow turns to 
 
 The links point at `http://127.0.0.1:8000`, the docs on your own computer, so they work
 once you have started the docs with `uv run mkdocs serve` in the `pycpu` folder; the
-panel says so in one sentence. If Python cannot find the code (say the program runs from
-a zip file), the panel says "The code isn't available here." and keeps the rest.
+panel says so in one sentence. If Python cannot find the code (say PyCPU is installed
+without its `.py` files), the panel says "The code isn't available here." and keeps the rest.
 [The Code Behind a Part](the-code-behind-a-part.md) explains how the Cockpit finds the
 code.
 
@@ -152,8 +152,12 @@ Two of them, **registers** and **RAM**, are not the main part of any instruction
 this list is the way to them. Press one and the glass shows its wires and its code,
 and the trail names it. The registers show whether to write, which register gets it,
 the number to keep, which two registers are read, and the two numbers read out; the RAM
-shows the address, the number to keep, the write wire and the word at that address. Looking closer at the
-instruction again goes back to the instruction's own part.
+shows the address, the number to keep, the write wire and the word at that address.
+Looking closer at the instruction again goes back to the instruction's own part. Step
+still moves one beat of the running instruction, so its label keeps naming the
+instruction's own part. RAM has thousands of word parts that all look alike, so Look
+closer lists the other parts first, and the read blocks that make RAM's answer,
+`out`, are in `ram.read0` to `ram.read15`, near the top of the list.
 
 **Look closer always opens the gates that made the wires.** Most parts' gates sit
 inside the part itself. The halt part is the odd one: its wires are made in the fault

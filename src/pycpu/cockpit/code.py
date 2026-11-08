@@ -86,6 +86,8 @@ def _block(lines: list[str], scope: str) -> tuple[int, list[str]]:
     # multi-line string dedented to the `with` line's level ends the block early, the first
     # line that matches wins if a scope of the same name is nested earlier, and a `with`
     # line with a trailing comment or an `as` name is not found (the whole function shows).
+    if not scope:
+        return 0, lines
     opener = f'with c.scope("{scope}"):'
     for start, line in enumerate(lines):
         if line.strip() == opener:
@@ -104,9 +106,7 @@ def _block(lines: list[str], scope: str) -> tuple[int, list[str]]:
 
 def _relative(function: Callable[..., object]) -> str:
     """Name the function's file relative to the repo root, or as it is when outside it."""
-    name = inspect.getsourcefile(function)
-    if name is None:
-        return ""
+    name = inspect.getsourcefile(function) or inspect.getfile(function)
     try:
         return Path(name).resolve().relative_to(_REPO_ROOT).as_posix()
     except ValueError:
@@ -119,7 +119,8 @@ def built_by(gate: GateMachine, path: str) -> dict[str, object]:
     When the function builds more than one part, such as `_build_write_back`, only the
     part's own `with c.scope(...)` block is kept, so the code shown is the code that
     made this part. The block is named by the part's recorded scope, or else by the last
-    segment of its path. A part whose scope is opened somewhere else (the RAM's name is a
+    segment of its path. A part whose recorded scope is empty (the ALU, whose flags are
+    made after its block) or whose scope is opened somewhere else (the RAM's name is a
     variable) gets the whole function.
 
     Args:
@@ -146,7 +147,8 @@ def built_by(gate: GateMachine, path: str) -> dict[str, object]:
         pass
     else:
         offset, kept = _block(
-            [text.rstrip("\n") for text in lines], scope or path.rsplit(".", 1)[-1]
+            [text.rstrip("\n") for text in lines],
+            path.rsplit(".", 1)[-1] if scope is None else scope,
         )
         code = textwrap.dedent("\n".join(kept))
         line = start + offset

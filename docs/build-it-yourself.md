@@ -23,7 +23,10 @@ a number. Each row below is one bag.
 
 Work down the table in order. Each page is in the same order as the site's menu, so you
 can also just read the menu from top to bottom. Start the Cockpit with
-`uv run python -m pycpu` before you use a "Watch it" link.
+`uv run python -m pycpu` before you use a "Watch it" link. The Cockpit's magnifying
+glass has four depths: a Pebble line, an instruction, a part and its gates. Press Look
+closer until the trail ends in a part's name; that is the part depth, and the Every
+part list is under the part's code.
 
 | # | What you build | The function | Read | How you know it works | Watch it |
 |---|----------------|--------------|------|-----------------------|----------|
@@ -45,16 +48,16 @@ can also just read the menu from top to bottom. Start the Cockpit with
 | 16 | Assembly language | `pycpu.assembler.assemble` | [Assembly Language](concepts/assembly-language.md) | The assembler test checks the countdown becomes the words worked out by hand. `tests/test_assembler.py::test_the_countdown_assembles_to_the_words_worked_out_by_hand` | — |
 | 17 | The control unit's decoder | `pycpu.cpu_parts.opcode_lines` | [The Control Unit](concepts/the-control-unit.md) | The decoder test checks each opcode lights exactly its own line and no other. `tests/test_cpu_parts.py::test_each_opcode_lights_exactly_its_own_line` | — |
 | 18 | Fetch, decode, execute | `pycpu.cpu.GateMachine._build_datapath` | [Fetch, Decode, Execute](concepts/fetch-decode-execute.md) | The cycle test checks one instruction takes exactly two clock cycles. `tests/test_cpu.py::test_two_cycles_make_one_instruction` | — |
-| 19 | The stack | `pycpu.cpu.GateMachine._build_write_back` | [The Stack](concepts/the-stack.md) | The stack test pushes with the stack pointer at zero and checks nothing changes except the halt. `tests/test_cpu.py::test_push_with_sp_at_zero_changes_nothing_but_halted` | — |
-| 20 | Calling and returning | `pycpu.cpu.GateMachine._build_next_pc` | [Calling and Returning](concepts/calling-and-returning.md) | The call test calls and returns and checks the stack is exactly as it was. `tests/test_cpu.py::test_call_then_ret_restores_the_stack` | — |
+| 19 | The stack | `pycpu.cpu.GateMachine._build_write_back` | [The Stack](concepts/the-stack.md) | The stack test pushes 42, pops it back into another register, and checks the stack pointer moved down and back up. `tests/test_cpu.py::test_push_then_pop_gives_the_value_back` | — |
+| 20 | Calling and returning | `pycpu.cpu.GateMachine._build_next_pc` | [Calling and Returning](concepts/calling-and-returning.md) | The call test calls a routine that doubles r1 (7 becomes 14), returns, and checks the stack pointer is back where it started. `tests/test_cpu.py::test_call_then_ret_restores_the_stack` | — |
 | 21 | A fast twin of the CPU | `pycpu.fast.FastMachine` | [Two Engines](concepts/two-engines.md) | The lockstep test starts both engines in the same state and checks they always agree. `tests/test_lockstep.py::test_both_engines_agree_from_any_state` | — |
 | 22 | Pausing and rewinding | `pycpu.computer.Computer` | [Pausing and Rewinding](concepts/pausing-and-rewinding.md) | The pause test checks that pausing always stops between whole instructions. `tests/test_computer.py::test_pause_lands_on_an_instruction_boundary` | — |
 | 23 | Pebble to machine code | `pycpu.translator.translate` | [From Pebble to Machine Code](concepts/from-pebble-to-machine-code.md) | The translator test checks the assembly names each Pebble instruction it came from. `tests/test_translator.py::TestTheTranslatedProgram::test_the_assembly_names_each_pebble_instruction` | — |
 | 24 | Variables in memory | `pycpu.translator.FrameLayout` | [Variables in Memory](concepts/variables-in-memory.md) | The frame test checks each variable's offset is the one the generated code uses. `tests/test_frames.py::TestTheLayout::test_the_offsets_are_the_ones_the_code_uses` | http://127.0.0.1:8765/#walk=where-n-lives |
 | 25 | 16-bit numbers that wrap | `pycpu.translator.run_pebble` | [Why 16-Bit Numbers Wrap](concepts/why-16-bit-numbers-wrap.md) | The wrap test adds past the top number and checks it comes round to the bottom. `tests/test_translator.py::TestRunningPebble::test_adding_past_the_top_wraps_round_to_the_bottom` | — |
-| 26 | If and while as jumps | `pycpu.translator.codegen._CodeWriter._jump` | [If and While as Jumps](concepts/if-and-while-as-jumps.md) | The loop test runs a while loop and checks it counts up to ten. `tests/test_translator.py::TestConditionsAndLoops::test_a_while_loop_counts_up_to_ten` | — |
+| 26 | If and while as jumps | `pycpu.translator.codegen._CodeWriter._jump` | [If and While as Jumps](concepts/if-and-while-as-jumps.md) | The loop test runs a while loop that adds 1 to 10 and checks the total is 55. `tests/test_translator.py::TestConditionsAndLoops::test_a_while_loop_counts_up_to_ten` | — |
 | 27 | Function calls | `pycpu.translator.codegen._CodeWriter._call` | [How a Function Call Really Works](concepts/how-a-function-call-really-works.md) | The function test works out 7 factorial with a function that calls itself and checks it is 5040. `tests/test_functions.py::TestCallingFunctions::test_factorial_of_seven_is_5040` | http://127.0.0.1:8765/#walk=a-call-and-the-stack |
-| 28 | Multiply and divide | `__mul` and `__divmod` in `pycpu.translator.runtime.RUNTIME` | [Multiply and Divide](concepts/multiply-and-divide.md) | The multiply test checks products worked out by hand. `tests/test_runtime.py::test_multiply_pinned_values` | — |
+| 28 | Multiply and divide | `__mul` and `__divmod` in `pycpu.translator.runtime.RUNTIME` | [Multiply and Divide](concepts/multiply-and-divide.md) | The multiply test checks products worked out by hand, and the divide test checks the worked examples, negative numbers included. `tests/test_runtime.py::test_multiply_pinned_values` `tests/test_runtime.py::test_divmod_pinned_values` | — |
 | 29 | Printing a number | `__print_int` in `pycpu.translator.runtime.RUNTIME` | [Printing a Number](concepts/printing-a-number.md) | The print test checks the exact characters sent to the screen for several numbers. `tests/test_runtime.py::test_print_int_pinned_values` | — |
 
 When you reach row 29, you have built every layer, and a Pebble program can print its
@@ -68,7 +71,8 @@ instructions.
 
 Step 6 of the path: build a half adder, a full adder and a 4-bit
 ripple adder from the ready-made functions, and count the NAND gates each one costs.
-The first two numbers are the ones the [Adding](concepts/adding.md) page prints. The third is new: it is 4 full adders, and this page pins it.
+The first two numbers are the ones the [Adding](concepts/adding.md) page prints. The
+third is new: it is 4 full adders, and this page pins it.
 
 ```python
 from pycpu.arithmetic import full_adder, half_adder, ripple_adder
@@ -110,7 +114,8 @@ finished when its test passes, like a model that only counts as built once it ma
 the picture on the bag.
 
 **The list can't go stale.** A test in `tests/test_docs.py` reads the table on this
-page. It imports every function named, checks that every page exists and that every test named in the table is really there,
+page. It imports every function named, checks that every page exists and that every
+test named in the table is really there,
 checks that every walk and every part named is real, and checks the rows follow the same
 order as the site's menu.
 

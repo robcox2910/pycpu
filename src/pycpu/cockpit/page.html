@@ -98,6 +98,7 @@
     #boxes { grid-template-columns:repeat(2,minmax(0,1fr)); }
     .big { font-size:1.15rem; }
     .flow { grid-template-columns:minmax(0,1fr); }
+    .built-code { max-height:10rem; }
   }
 </style>
 </head>
@@ -348,6 +349,7 @@ let fetchingListing = false;
 let look = "line";         // how deep the glass looks: one of DEPTHS
 let gatePath = "cpu";      // the part of the circuit the gates depth shows
 let partPath = null;       // the part the part depth shows; null means the instruction's own
+let codeScroll = { path: null, top: 0 };   // where the learner left the code box
 let codeOpen = false;      // whether "The code that built this" is open
 let pickedGate = null;     // {id, path}: the gate "show this gate" highlights, for its own picture only
 let lensSeq = 0;           // counts glass requests, so only the newest answer is drawn
@@ -760,10 +762,10 @@ function readAbout(page, why) {
 }
 
 // The code that built a part: closed until opened, then its file and line, the code, and the link.
-function drawBuiltBy(b) {
+function drawBuiltBy(b, path) {
   const box = el("div", undefined, "built");
   const inside = el("div");
-  const toggle = button("", "quiet", () => { codeOpen = !codeOpen; show(); });
+  const toggle = button("", "quiet", () => { codeOpen = !codeOpen; show(); if (codeOpen) keepVisible(inside); });
   const show = () => {
     toggle.textContent = BUILT_TITLE + (codeOpen ? " ▾" : " ▸");
     toggle.setAttribute("aria-expanded", String(codeOpen));
@@ -775,6 +777,7 @@ function drawBuiltBy(b) {
   } else {
     const code = el("pre", undefined, "built-code");
     code.textContent = b.code;
+    code.onscroll = () => { codeScroll = { path: path, top: code.scrollTop }; };
     inside.append(code);
   }
   inside.append(readAbout(b.page, "the page that explains this part"));
@@ -801,7 +804,7 @@ function setLook(depth, path) {
   look = depth;
   if (path !== undefined) gatePath = path;
   const w = latest && latest.walk;
-  wandered = Boolean(w && !w.trying && look !== w.look);
+  wandered = Boolean(w && !w.trying && look !== w.look || partPath !== null);
   if (latest) { drawWalk(latest); drawGlass(latest); drawStep(latest); setControls(); }
 }
 
@@ -1040,7 +1043,12 @@ async function lensPart(m, lens) {
     if (part.gates !== part.path) {
       holder.append(el("p", "Its gates are in " + part.gates + ", the block its code builds, so Look closer opens " + part.gates + ".", "muted"));
     }
-    holder.append(lookCloser(), drawBuiltBy(part.built_by), el("h3", "Every part"), partList(m, path));
+    holder.append(lookCloser(), drawBuiltBy(part.built_by, path), el("h3", "Every part"), partList(m, path));
+    const pre = holder.querySelector(".built-code");
+    if (pre && codeScroll.path === path) pre.scrollTop = codeScroll.top;
+    if (part.path === "ram") {
+      holder.append(el("p", "Its answer, out, is made in ram.read0 to ram.read15, near the top of Look closer's list.", "muted"));
+    }
     outlineShow(latest);
   } catch (e) {
     showError(UNREACHABLE);
@@ -1074,7 +1082,10 @@ async function lensGates(m, lens) {
     if (view.gates.length > 0) holder.append(el("p", GATE_LINE[0] + " (" + GATE_LINE[1] + ")", "muted"));
     holder.append(el("h3", "Parts inside"));
     const parts = el("ul", undefined, "parts");
-    view.children.forEach((child) => {
+    // RAM's thousands of word parts are all alike: list the other parts first, so the
+    // read blocks that make its answer are easy to find.
+    const word = (c) => /^word\d+$/.test(c.name);
+    [...view.children.filter((c) => !word(c)), ...view.children.filter(word)].forEach((child) => {
       const li = el("li");
       li.append(button(child.name + " - " + child.gate_count + " gates", "", () => { pickedGate = null; setLook("gate", path ? path + "." + child.name : child.name); }));
       parts.append(li);

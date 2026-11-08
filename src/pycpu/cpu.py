@@ -257,7 +257,8 @@ class GateMachine:
         This only writes names down, like labels tied onto cables already laid:
         it makes no gate and no wire. `builder` is the function or method that holds
         the part's `with c.scope(...)` block, so the Cockpit can show its source; `scope`
-        names that block when it is not called after the part's last path segment.
+        names that block when it is not called after the part's last path segment; an empty
+        `scope` means every line of the builder makes the part, so all of it is shown.
         """
         self.builders[part] = (builder, scope)
         self.taps[part] = {**inputs, **outputs}
@@ -322,6 +323,7 @@ class GateMachine:
             {"a": bank.a, "b": b},
             {"result": out.result, "flags": (out.zero, out.negative, out.carry, out.overflow)},
             alu,
+            scope="",  # the whole function: its flags are made after the block closes
         )
         flags = self._flags.q
         met = condition_met(c, rd, flags[0], flags[1], flags[2], flags[3])

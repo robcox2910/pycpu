@@ -20,7 +20,9 @@ ROOT = Path(__file__).parent.parent
 CONCEPTS = ROOT / "docs" / "concepts"
 BITS = 6
 OK = 200
-WHOLE_FUNCTION = {"ram"}  # opens `c.scope(name)`, so there is no literal block to cut
+# "ram" opens `c.scope(name)`, so there is no literal block to cut; "cpu.alu" makes its flags
+# after its block closes, so only the whole function shows every gate its view reads.
+WHOLE_FUNCTION = {"ram", "cpu.alu"}
 EVERY_PART = sorted(GateMachine(BITS).taps)
 
 
@@ -85,13 +87,21 @@ class TestTheRightBlock:
         assert "ram_data" not in code
 
     def test_alu_points_at_its_line_in_arithmetic(self, gate: GateMachine) -> None:
-        """The ALU's code holds its scope, and file and line find that line."""
+        """The ALU's code holds its scope, and file and line find the `def` line."""
         record = built_by(gate, "cpu.alu")
         code = cast("str", record["code"])
         assert 'with c.scope("alu"):' in code
         assert record["file"] == "src/pycpu/arithmetic.py"
         lines = (ROOT / "src/pycpu/arithmetic.py").read_text(encoding="utf-8").splitlines()
-        assert lines[cast("int", record["line"]) - 1].strip() == 'with c.scope("alu"):'
+        assert lines[cast("int", record["line"]) - 1].startswith("def alu(")
+
+    def test_alu_shows_the_return_that_makes_its_flags_reach_the_view(
+        self, gate: GateMachine
+    ) -> None:
+        """The whole `alu` shows, so the `return AluOutput(...)` after the block is there."""
+        code = cast("str", built_by(gate, "cpu.alu")["code"])
+        assert code.startswith("def alu(")
+        assert "AluOutput(" in code
 
     def test_halt_shows_the_fault_block_that_makes_its_wires(self, gate: GateMachine) -> None:
         """The halt view reads wires made in the `fault` block of `_build_checks`."""
@@ -139,6 +149,17 @@ class TestWithoutSource:
         assert record["file"] == "src/pycpu/arithmetic.py"
         assert record["line"] == gate.builders["cpu.alu"][0].__code__.co_firstlineno
         assert cast("dict[str, str]", record["page"])["title"] == "The ALU"
+
+    def test_file_is_still_named_when_only_compiled_code_is_installed(
+        self, gate: GateMachine, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """With no `.py` file found, `file` falls back to the compiled file's path."""
+
+        def no_source(*_args: object) -> None:
+            """Pretend only compiled code is installed."""
+
+        monkeypatch.setattr(inspect, "getsourcefile", no_source)
+        assert built_by(gate, "cpu.alu")["file"] != ""
 
 
 class TestInThePartView:

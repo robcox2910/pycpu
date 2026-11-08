@@ -470,15 +470,25 @@ def test_every_build_step_links_a_real_page_in_nav_order() -> None:
 
 
 def test_every_build_step_names_its_own_real_test() -> None:
-    """Each row names one test that exists, and no two rows name the same one."""
+    """Each row names at least one test that exists, and no test is named twice."""
     named: list[str] = []
     for cells in _build_rows():
         refs = [r for r in TICKED.findall(cells[4]) if r.startswith("tests/")]
-        assert len(refs) == 1, cells[4]
-        ref = refs[0].removeprefix("tests/")
-        assert _test_exists(ref), f"{ref} is not a test"
-        named.append(ref)
+        assert refs, cells[4]
+        for ref in (r.removeprefix("tests/") for r in refs):
+            assert _test_exists(ref), f"{ref} is not a test"
+            named.append(ref)
     assert len(set(named)) == len(named)
+
+
+BUILD_STEPS = 29  # "When you reach row 29" in build-it-yourself.md
+
+
+def test_the_build_rows_are_numbered_one_to_the_last() -> None:
+    """Rows run 1, 2, 3... with no gap, and the page's "row N" is the last one."""
+    numbers = [int(cells[0]) for cells in _build_rows()]
+    assert numbers == list(range(1, BUILD_STEPS + 1))
+    assert f"When you reach row {BUILD_STEPS}," in BUILD_PAGE.read_text(encoding="utf-8")
 
 
 def test_the_test_finder_rejects_a_missing_test() -> None:

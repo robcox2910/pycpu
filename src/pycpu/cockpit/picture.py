@@ -75,7 +75,7 @@ def gate_path(gate: GateMachine, part: str) -> str:
 
     """
     _builder, scope = gate.builders.get(part, (None, None))
-    if scope is None:
+    if not scope:
         return part
     parent = part.rpartition(".")[0]
     return f"{parent}.{scope}" if parent else scope

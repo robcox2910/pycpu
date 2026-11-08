@@ -200,8 +200,9 @@ puts the guide away. The picture's `walk` key carries the step's `say`, `look` a
 `"into"` when the page should offer Step into (as the function-call walk does) and
 null otherwise. It also carries `see_also`, with the `title` and `url` of the walk's
 concept page on the docs server on your own computer, such as
-`{"title": "The ALU", "url": "http://127.0.0.1:8000/concepts/the-alu/"}`. A walk name that does not exist gets a 404 that says
-"There is no walk called nonsense." in plain words.
+`{"title": "The ALU", "url": "http://127.0.0.1:8000/concepts/the-alu/"}`.
+A walk name that does not exist gets a 404 that says "There is no walk called
+nonsense." in plain words.
 
 ## Why Does This Matter?
 

@@ -40,7 +40,7 @@ from pycpu.cockpit.session import Cockpit as Session
 from pycpu.computer import Computer, StepSize
 from pycpu.cpu import GateMachine
 from pycpu.fast import FastMachine
-from pycpu.isa import Opcode, decode
+from pycpu.isa import Opcode, decode, encode
 from pycpu.memory import RAM_ADDRESS_BITS
 from pycpu.state import REGISTER_COUNT
 from pycpu.translator import FRAME_POINTER, translate
@@ -2156,6 +2156,7 @@ class TestEachPartsGateZoom:
         gate = session.computer.gate
         gates = cast("dict[str, Any]", machine_picture(session)["parts"])["gates"]
         assert gates == {part: gate_path(gate, part) for part in gate.taps}
+        assert gates == {**{part: part for part in gate.taps}, "cpu.halt": "cpu.fault"}
         part = _json(_run(Cockpit().client.get("/api/part", query={"path": "cpu.halt"})))
         assert part["gates"] == "cpu.fault"
 
@@ -2228,7 +2229,35 @@ class TestTheCodePanel:
     def test_the_part_view_puts_the_wires_first_then_the_code(self) -> None:
         """The flow of wires is appended before the code panel."""
         body = _function(_script(), "lensPart")
-        assert body.index("flow") < body.index("drawBuiltBy(part.built_by)")
+        assert body.index("flow") < body.index("drawBuiltBy(part.built_by, path)")
+
+    def test_opening_the_code_scrolls_it_into_view_and_keeps_its_scroll(self) -> None:
+        """The toggle keeps the opened panel in view, and Step keeps the code box's scroll."""
+        script = _script()
+        assert "keepVisible(inside)" in _function(script, "drawBuiltBy")
+        assert "codeScroll" in _function(script, "drawBuiltBy")
+        assert "codeScroll" in _function(script, "lensPart")
+
+    def test_ram_lists_its_word_parts_last_and_says_where_its_answer_is(self) -> None:
+        """Look closer lists the non-word parts first; RAM's part view points at ram.read0."""
+        script = _script()
+        body = _function(script, "lensGates")
+        assert "view.children.filter((c) => !word(c))" in body
+        assert body.index("!word(c)") < body.index("filter(word)")
+        assert "ram.read0 to ram.read15" in _function(script, "lensPart")
+
+    def test_picking_a_part_during_a_walk_counts_as_wandering(self) -> None:
+        """A picked part, not only a different depth, takes the learner off the walk."""
+        assert "partPath !== null" in _function(_script(), "setLook")
+
+    def test_the_code_box_is_shorter_on_a_phone(self) -> None:
+        """At 375 px the code box gets a smaller max-height so the glass shows more."""
+        assert ".built-code { max-height:10rem; }" in _style()
+
+    def test_registers_and_ram_are_no_instructions_part(self) -> None:
+        """Only the Every part list reaches the registers and RAM views."""
+        parts = {part_for_instruction(encode(op)) for op in Opcode}
+        assert parts.isdisjoint({"cpu.registers", "ram"})
 
     def test_the_walks_done_card_points_at_its_page(self) -> None:
         """When the try is done, the bar names the walk's see_also page with the same link."""

@@ -243,7 +243,10 @@ class TestPartRoute:
         assert _body(response) == {"error": "Conflict", "message": BUSY_MESSAGE}
 
 
-LOADED_VALUE = 13  # the countdown's first `li` is `li r3, 13`, the fourth instruction run
+# The countdown's prologue checks there is room for its frame: `li r3, 13` puts the 13
+# words main may need (1 old r7, 1 variable, 2 stack, 9 routines) in r3. It is the fourth
+# instruction run, and the first that writes a register we can predict.
+LOADED_VALUE = 13
 INSTRUCTIONS_BEFORE_PAUSE = 4  # the instructions up to and including the first `li`
 REGISTER_INPUTS = ["write", "write_select", "data", "read_a", "read_b"]
 REGISTER_OUTPUTS = ["a", "b"]
@@ -275,6 +278,10 @@ class TestRegistersAndRamViews:
             assert bus["value"] == _read_bits(sim, gate.taps["cpu.registers"][bus["name"]])
         data = next(bus for bus in part["inputs"] if bus["name"] == "data")
         assert data["value"] == LOADED_VALUE
+        state = cockpit.computer.state()
+        seen = {bus["name"]: bus["value"] for bus in [*part["inputs"], *part["outputs"]]}
+        assert seen["a"] == state.registers[seen["read_a"]]
+        assert seen["b"] == state.registers[seen["read_b"]]
 
     def test_the_ram_out_is_the_word_at_the_address(self) -> None:
         """The RAM's `out` equals the memory word at its `address`."""

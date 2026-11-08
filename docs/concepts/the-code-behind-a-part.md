@@ -14,7 +14,7 @@ panel has a link to the concept page that explains the part.
 
 | Part you zoom to | The code that built it | The page that explains it |
 |------------------|------------------------|---------------------------|
-| ALU (`cpu.alu`) | `pycpu.arithmetic.alu` | [The ALU](the-alu.md) |
+| ALU (`cpu.alu`) | `pycpu.arithmetic.alu` (the whole function) | [The ALU](the-alu.md) |
 | Registers (`cpu.registers`) | `pycpu.cpu_parts.RegisterFile.__init__` | [Registers](registers.md) |
 | RAM (`ram`) | `pycpu.memory.Ram.__init__` | [RAM](ram.md) |
 | Halt (`cpu.halt`) | `GateMachine._build_checks` (its `fault` block) | [What Happens When Things Go Wrong](what-happens-when-things-go-wrong.md) |
@@ -43,13 +43,14 @@ print("page:", record["page"]["url"])
 # Output:
 # function: pycpu.arithmetic.alu
 # file: src/pycpu/arithmetic.py
-# first line: with c.scope("alu"):
+# first line: def alu(c: Circuit, a: Bus, b: Bus, op: Bus) -> AluOutput:
 # page: http://127.0.0.1:8000/concepts/the-alu/
 ```
 
 Two parts, the write-back and the stack pointer, are built by the same method. Each
-one gets only its own block of it. Halt is the odd one: its part is built in a block called `fault`, so
-the record remembers that name. RAM is odd too, and the second block shows both.
+one gets only its own block of it. Halt is the odd one: its part is built in a block
+called `fault`, so the record remembers that name. RAM is odd too, and the second block
+shows both.
 
 ```python
 from pycpu.cockpit.code import built_by
@@ -105,13 +106,17 @@ in the file.
 **4. A block with another name, and no block at all.** The halt part is built in a
 block called `fault`, not `halt` (the `halt` block only holds the two registers that
 remember the answer). So the tap records the name `fault`, and the halt view shows that
-block of `_build_checks`. The RAM is different: it opens its scope with a name it was given
-(`with c.scope(name):`), so the words `scope("ram")` appear nowhere. The RAM view
-then shows the whole of `Ram.__init__`, which is the honest answer.
+block of `_build_checks`. The RAM is different: it opens its scope with a name it was
+given (`with c.scope(name):`), so the words `scope("ram")` appear nowhere. The RAM view
+then shows the whole of `Ram.__init__`, which is the honest answer. The ALU is the
+third kind: its flags (`negative`, `carry` and `overflow`) are made after its block
+closes, in the `return AluOutput(...)` line. So its tap records an empty scope, which
+means "show the whole function", and the ALU view shows all of `alu`. Every gate the
+view reads is on the screen.
 
-**5. If the source is missing.** If the program is run from a zip file, Python may
-not find the source. Then `code` is empty (`None`), and the function name, file, first
-line and page still show. It never fails.
+**5. If the source is missing.** If PyCPU is installed without its `.py` files (only
+the compiled ones), Python cannot find the source. Then `code` is empty (`None`), and
+the function name, file, first line and page still show. It never fails.
 
 ## Why Does This Matter?
 

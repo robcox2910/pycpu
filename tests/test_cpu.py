@@ -184,6 +184,20 @@ def test_each_pinned_program_ends_the_same_on_gates(machine: GateMachine, name: 
     run_side_by_side(machine, program_state(PROGRAMS[name]))
 
 
+PUSHED_VALUE = 42
+SP_AFTER_SETSP_AND_PUSH = 9  # setsp to 10, then one push
+
+
+def test_push_then_pop_gives_the_value_back(machine: GateMachine) -> None:
+    """On the gates, a pushed 42 pops back out, and sp moves down, up and down again."""
+    state = run_side_by_side(machine, program_state(PROGRAMS["push and pop"]))
+    assert (state.registers[2], state.registers[3]) == (SMALL - 1, PUSHED_VALUE)
+    assert (state.sp, state.memory[SP_AFTER_SETSP_AND_PUSH]) == (
+        SP_AFTER_SETSP_AND_PUSH,
+        PUSHED_VALUE,
+    )
+
+
 def test_the_countdown_halts_with_r1_at_zero(machine: GateMachine) -> None:
     """The countdown runs on gates and stops normally with r1 = 0."""
     state = run_side_by_side(machine, program_state(COUNTDOWN))

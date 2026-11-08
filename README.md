@@ -35,11 +35,13 @@ and the Assembler turns readable instructions into the numbers the CPU understan
   Gates (AND, OR, ...)      <- built
   NAND                      <- built, where it all starts
 
-  The Cockpit, beside the ladder, not on top of it: watch any rung in the Cockpit
+  The Cockpit sits beside the ladder: use it to watch any rung.
 ```
 
-The Cockpit comes second, as the place to check and watch what you built. It is a screen where you can watch a program written in
-Pebble (a small programming language from the same series) run on this computer, pause at any moment, and zoom all the way down to individual gates.
+The Cockpit comes second, as the place to check and watch what you built. It is a
+screen where you can watch a program written in Pebble (a small programming language
+from the same series) run on this computer, pause at any moment, and zoom all the way
+down to individual gates.
 The Cockpit is built: a local page (`uv run python -m pycpu`) that opens on **guided
 walks**, short tours of the real machine that end with a small task for you. It shows the
 Pebble program on the left and a magnifying glass on the right. One Step button moves by a
@@ -149,7 +151,7 @@ Every idea gets its own page, with an everyday analogy:
 | The magnifying glass | [the-magnifying-glass.md](docs/concepts/the-magnifying-glass.md) | A magnifying glass over a map |
 | What just happened | [what-just-happened.md](docs/concepts/what-just-happened.md) | A commentator who only says what really happened |
 | Build It Yourself | [build-it-yourself.md](docs/build-it-yourself.md) | A model kit with a picture on every bag |
-| The code behind a part | [the-code-behind-a-part.md](docs/concepts/the-code-behind-a-part.md) | The recipe printed next to the cake |
+| The code behind a part | [the-code-behind-a-part.md](docs/concepts/the-code-behind-a-part.md) | A toy's instruction booklet, open at the right page |
 | Guided walks | [guided-walks.md](docs/concepts/guided-walks.md) | A museum audio guide |
 
 ## Read the docs
