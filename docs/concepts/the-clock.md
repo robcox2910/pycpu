@@ -167,7 +167,7 @@ slightly different times, and the machine would act on half-changed numbers.
 Splitting the beat into "write, then step" is how a real computer avoids
 trampling its own data.
 
-**See it in the Cockpit.** The Cockpit has a guided walk about this page's idea, the clock ticking the machine along. Start the Cockpit first with `uv run pycpu`, then open [the walk](http://127.0.0.1:8765/#walk=why-the-clock-ticks).
+**See it in the Cockpit.** The Cockpit has a guided walk about this page's idea, the clock ticking the machine along. Start the Cockpit first with `uv run pycpu` (or `uvx --from fromscratch-pycpu pycpu` with no clone), then open [the walk](http://127.0.0.1:8765/#walk=why-the-clock-ticks).
 
 ## What's Next
 

@@ -21,7 +21,7 @@ up, with the page that taught it and how many NAND gates it costs.
 | ALU | The calculator part: add, subtract and compare 16-bit numbers | 896 | [The ALU](concepts/the-alu.md) |
 | Memory | A latch remembers one bit, a flip-flop remembers it on the clock's tick | 4 and 9 | [Remembering](concepts/remembering.md) and [The Clock](concepts/the-clock.md) |
 | RAM | 4,096 words of 16 bits, every bit real gates | 607,454 | [How Big Is Our Memory?](concepts/how-big-is-our-memory.md) |
-| CPU | Fetches, decodes and runs instructions (with a small memory, the whole machine has 15,525 gates at 6 address bits) | 6,029 | [Two Engines](concepts/two-engines.md) |
+| CPU | Fetches, decodes and runs instructions (with a small memory, the whole machine has 15,525 gates at 6 address bits) | 6,029 | [Fetch, Decode, Execute](concepts/fetch-decode-execute.md) |
 | Assembler | Turns readable instructions into the numbers the CPU understands | 0 (it is a program) | [Assembly Language](concepts/assembly-language.md) |
 | Pebble | A friendly language, translated into those instructions | 0 (it is a program) | [From Pebble to Machine Code](concepts/from-pebble-to-machine-code.md) |
 | Cockpit | A screen where you watch it all run, down to one gate | 0 (it only looks) | [The Cockpit](concepts/the-cockpit.md) |
@@ -87,7 +87,8 @@ adders never reach past the gates. That is why you could build the tower one flo
 a time, and test each floor before you built the next.
 
 **The same program runs on the real gates.** Pebble is a small language with
-variables, loops and functions, like the ones you may have used. When the translator turns your Pebble into machine code, the gate engine
+variables, loops and functions, like the ones you may have used.
+When the translator turns your Pebble into machine code, the gate engine
 runs that code, with no shortcut. Every sum goes through the ALU's NAND gates, every
 remembered number sits in latches built from NAND gates. The fast engine exists only
 to get the same answer sooner, and the [Two Engines](concepts/two-engines.md) page
@@ -109,7 +110,7 @@ way down to one gate.
 ## What's Next
 
 You can go back over the path in [Build It Yourself](build-it-yourself.md), or open
-the [Cockpit](concepts/the-cockpit.md) with `uv run pycpu` and take the
-guided walks again, now that you know what every part is. And there is more to come:
+the [Cockpit](concepts/the-cockpit.md) with `uv run pycpu` (or
+`uvx --from fromscratch-pycpu pycpu` with no clone) and take the guided walks again, now that you know what every part is. And there is more to come:
 PyStack, the project that joins the whole series together, is getting an
 `import "cpu"` so that a Pebble program can run on PyCPU. It is coming to PyStack.

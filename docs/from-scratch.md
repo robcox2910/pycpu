@@ -123,7 +123,7 @@ or a gate, and a pause that drops you into the gates at any moment.
 `uv run pycpu` opens it on guided walks, and
 [A Tour of the Cockpit](concepts/a-tour-of-the-cockpit.md) follows one Pebble line down
 to a single gate. One climb is left: fitting PyCPU into PyStack, the project that joins
-the whole series together, and the first release.
+the whole series together.
 
 Ready? Go back to the [home page](index.md) to see the whole ladder again, or start
 climbing with [Bits and Binary](concepts/bits-and-binary.md).

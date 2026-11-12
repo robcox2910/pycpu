@@ -134,8 +134,7 @@ Load a Pebble program on the Cockpit and it shows the line that is running, next
 machine code.
 
 One last climb is left: putting PyCPU into **PyStack**, the series'
-project that joins all the others together, and then the first release, so other
-projects can use it.
+project that joins all the others together, so other projects can use it.
 
 ## By the End of the Climb
 

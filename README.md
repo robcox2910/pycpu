@@ -52,8 +52,7 @@ every exact control. Pebble programs run on PyCPU: whole numbers, variables, `if
 `while`, `for` over a range, functions and `print`, translated into machine code, with
 multiplying, dividing and printing done by small assembly routines. The rest of Pebble
 (decimals, lists, text in variables, ...) is refused with a friendly message. What is
-left comes next: PyCPU in PyStack (the series' project that joins the others together),
-and the first release.
+left comes next: PyCPU in PyStack (the series' project that joins the others together).
 
 ## Features
 

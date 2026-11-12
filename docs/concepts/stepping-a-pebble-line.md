@@ -286,7 +286,7 @@ machine at full speed, check the program counter against the compiler's line tab
 compare the frame (or stack) pointer to tell "a deeper call" from "back in my own code".
 And they too need a way out when a line never ends: you press pause.
 
-**See it in the Cockpit.** The Cockpit has a guided walk about this page's idea, one line of Pebble turning into many instructions. Start the Cockpit first with `uv run pycpu`, then open [the walk](http://127.0.0.1:8765/#walk=many-instructions).
+**See it in the Cockpit.** The Cockpit has a guided walk about this page's idea, one line of Pebble turning into many instructions. Start the Cockpit first with `uv run pycpu` (or `uvx --from fromscratch-pycpu pycpu` with no clone), then open [the walk](http://127.0.0.1:8765/#walk=many-instructions).
 
 ## What's Next
 

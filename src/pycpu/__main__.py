@@ -1,4 +1,4 @@
-"""Start the Cockpit with `python -m pycpu`.
+"""Start the Cockpit with `pycpu`.
 
 Like switching on the lights in the workshop: this builds the Cockpit app, with a
 whole computer made of NAND gates on it, and serves it on this computer only

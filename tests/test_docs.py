@@ -365,7 +365,7 @@ def test_every_walks_concept_page_links_to_that_walk_in_the_cockpit() -> None:
 
 
 def test_no_page_links_to_the_cockpit_anywhere_but_the_local_address() -> None:
-    """Nothing is exposed: the only Cockpit links point at this computer."""
+    """The Cockpit only runs on your own computer, so its links point only there."""
     for page in _all_pages():
         for url in re.findall(r"https?://[^\s)]*cockpit[^\s)]*", page.read_text(encoding="utf-8")):
             assert url.startswith("http://127.0.0.1:8765"), f"{_page_id(page)}: {url}"

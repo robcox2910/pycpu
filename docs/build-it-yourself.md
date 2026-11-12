@@ -23,7 +23,8 @@ a number. Each row below is one bag.
 
 Work down the table in order. Each page is in the same order as the site's menu, so you
 can also just read the menu from top to bottom. Start the Cockpit with
-`uv run pycpu` before you use a "Watch it" link. The Cockpit's magnifying
+`uv run pycpu` (or `uvx --from fromscratch-pycpu pycpu` with no clone) before you use a
+"Watch it" link. The Cockpit's magnifying
 glass has four depths: a Pebble line, an instruction, a part and its gates. Press Look
 closer until the trail ends in a part's name; that is the part depth, and the Every
 part list is under the part's code.
@@ -129,7 +130,7 @@ of.
 
 ## What's Next
 
-Open the Cockpit with `uv run pycpu` and watch the machine you built run. Start
+Open the Cockpit with `uv run pycpu` (or `uvx --from fromscratch-pycpu pycpu` with no clone) and watch the machine you built run. Start
 with [A Tour of the Cockpit](concepts/a-tour-of-the-cockpit.md), then try the
 [guided walks](concepts/guided-walks.md). To see the code that built any part, read
 [The Code Behind a Part](concepts/the-code-behind-a-part.md).
