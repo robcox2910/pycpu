@@ -86,8 +86,8 @@ steps, and every register and every word of memory ended up identical.
 adders never reach past the gates. That is why you could build the tower one floor at
 a time, and test each floor before you built the next.
 
-**The same program runs on the real gates.** Pebble is a real language that other
-people use. When the translator turns your Pebble into machine code, the gate engine
+**The same program runs on the real gates.** Pebble is a small language with
+variables, loops and functions, like the ones you may have used. When the translator turns your Pebble into machine code, the gate engine
 runs that code, with no shortcut. Every sum goes through the ALU's NAND gates, every
 remembered number sits in latches built from NAND gates. The fast engine exists only
 to get the same answer sooner, and the [Two Engines](concepts/two-engines.md) page
