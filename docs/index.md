@@ -112,7 +112,7 @@ which carries the whole machine over to the gates, so you can step through an
 instruction one gate at a time and **rewind** it to watch again.
 
 You can do all of that on **the Cockpit**, a page on your own computer. Start it with
-`uv run python -m pycpu`: it opens on **guided walks**, short tours that show you one
+`uv run pycpu` (or `uvx --from fromscratch-pycpu pycpu` with no clone): it opens on **guided walks**, short tours that show you one
 idea at a time on the real machine and end with a small task for you to try. The Pebble
 program is on the left, with the running line marked, and a **magnifying glass** is on the
 right. One **Step** button moves by as much as the glass is looking at: a whole Pebble
@@ -157,7 +157,7 @@ memory, and the instruction that is running right now. You can **pause at any mo
 and click down through the layers (the ALU, the adder, a single bit, a single gate)
 and see the real circuit, with real wires carrying real values.
 
-That screen is built. `uv run python -m pycpu` opens it on guided walks, and
+That screen is built. `uv run pycpu` opens it on guided walks, and
 [A Tour of the Cockpit](concepts/a-tour-of-the-cockpit.md) shows the whole journey, from
 one Pebble line to one gate. The climb has reached the top.
 

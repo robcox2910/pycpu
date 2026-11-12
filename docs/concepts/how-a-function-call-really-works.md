@@ -300,7 +300,7 @@ function names in an error message (a **stack trace**), it is a list of the fram
 the pile, read from the top. A debugger walks the pile the same way, following each saved
 `r7` to the frame below.
 
-**See it in the Cockpit.** The Cockpit has a guided walk about this page's idea, a function call building its frame on the stack. Start the Cockpit first with `uv run python -m pycpu`, then open [the walk](http://127.0.0.1:8765/#walk=a-call-and-the-stack).
+**See it in the Cockpit.** The Cockpit has a guided walk about this page's idea, a function call building its frame on the stack. Start the Cockpit first with `uv run pycpu`, then open [the walk](http://127.0.0.1:8765/#walk=a-call-and-the-stack).
 
 ## What's Next
 

@@ -42,7 +42,7 @@ The Cockpit comes second, as the place to check and watch what you built. It is 
 screen where you can watch a program written in Pebble (a small programming language
 from the same series) run on this computer, pause at any moment, and zoom all the way
 down to individual gates.
-The Cockpit is built: a local page (`uv run python -m pycpu`) that opens on **guided
+The Cockpit is built: a local page (`uv run pycpu`) that opens on **guided
 walks**, short tours of the real machine that end with a small task for you. It shows the
 Pebble program on the left and a magnifying glass on the right. One Step button moves by a
 whole Pebble line, an instruction, a part of the CPU or a single gate, a sentence says
@@ -102,8 +102,9 @@ uv run python examples/run_assembly.py   # assemble and run a program that print
 uv run python examples/run_pebble.py   # translate a Pebble program and run it: prints 6, 4, 2
 uv run python examples/cockpit_tour.py   # follow one Pebble line down to a single gate
 uv run python examples/alu_tour.py   # more programs live in examples/
-uv run mkdocs serve   # read the docs at http://127.0.0.1:8000
-uv run python -m pycpu   # open the Cockpit at http://127.0.0.1:8765
+uv run mkdocs serve   # build and read the docs on your own computer
+uv run pycpu   # open the Cockpit at http://127.0.0.1:8765
+uvx --from fromscratch-pycpu pycpu   # the same, without a clone
 ```
 
 ## Concepts

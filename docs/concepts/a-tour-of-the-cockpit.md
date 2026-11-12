@@ -238,7 +238,7 @@ The Cockpit's one Step button follows how closely you look. Read
 
 That is the whole climb, from one NAND gate to a Pebble program you can pause and look
 inside. Go back to [What Is a Computer, Really?](../index.md) to see the whole ladder
-again, or open the Cockpit yourself with `uv run python -m pycpu`. It opens on
+again, or open the Cockpit yourself with `uv run pycpu`. It opens on
 guided walks; the `tour` example, the program that uses every piece of Pebble PyCPU can
 run ([The Cockpit](the-cockpit.md) shows its first lines), is loaded behind them, so you
 can follow any line of it down to a gate in just the same way.

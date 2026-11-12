@@ -140,9 +140,8 @@ takes no room until you want it. Press it and it opens (its arrow turns to ▾):
   scrolls inside itself, so the page still never scrolls;
 - a **Read about it** link to the concept page that explains the part.
 
-The links point at `http://127.0.0.1:8000`, the docs on your own computer, so they work
-once you have started the docs with `uv run mkdocs serve` in the `pycpu` folder; the
-panel says so in one sentence. If Python cannot find the code (say PyCPU is installed
+The links point at the public docs site, `https://robcox2910.github.io/pycpu/`, so they
+open in a new tab with nothing to start first. If Python cannot find the code (say PyCPU is installed
 without its `.py` files), the panel says "The code isn't available here." and keeps the rest.
 [The Code Behind a Part](the-code-behind-a-part.md) explains how the Cockpit finds the
 code.
@@ -194,7 +193,7 @@ that", and **404** means "not found, there is no such thing".
 
 | The cockpit | In PyCPU |
 |---------------|----------|
-| The whole instrument panel | The Cockpit page, served by `python -m pycpu` |
+| The whole instrument panel | The Cockpit page, served by `pycpu` |
 | The aeroplane in flight, frozen | A `Computer` (from [Pausing and Rewinding](pausing-and-rewinding.md)), paused |
 | Training flights with an instructor | The guided walks, from `GET /api/walks` and `POST /api/walk` |
 | Flight plans kept in the cockpit | The example programs, from `GET /api/examples` |
@@ -385,7 +384,7 @@ naming the exact line and column.
 The page's example list comes from `GET /api/examples`: each example is a Pebble file in
 `src/pycpu/cockpit/examples/`, and the `#` comment on its first line is its title. You
 can also start a Cockpit with one of them already loaded, which is what
-`python -m pycpu` does with the tour. The tour needs 456 words of memory, so this
+`pycpu` does with the tour. The tour needs 456 words of memory, so this
 Cockpit gets 512 (`address_bits=9`).
 
 ```python
@@ -424,8 +423,11 @@ instruction is `getsp r1` again: the start of main's frame.
 To open the real thing, run this in a terminal, then visit the address it prints:
 
 ```text
-uv run python -m pycpu
+uv run pycpu
 ```
+
+(From a clone of the repo. With no clone, `uvx --from fromscratch-pycpu pycpu` does the
+same.)
 
 It serves the page at `http://127.0.0.1:8765`, with the tour loaded behind the list of
 walks. The address
@@ -478,7 +480,7 @@ number of memory address wires, just like `Computer` does; the real Cockpit uses
 when it needs room for a Pebble program. Given `start_example`, such as `"tour"`, it
 then loads that example exactly as `/api/pebble` would, so the Cockpit opens paused on
 the example's first line; a name that is not an example raises `ValueError`.
-`python -m pycpu` (in `src/pycpu/__main__.py`) opens the full-size Cockpit with
+`pycpu` (in `src/pycpu/__main__.py`) opens the full-size Cockpit with
 `start_example="tour"`. Every route answers with the same picture of the machine, which
 the page redraws:
 

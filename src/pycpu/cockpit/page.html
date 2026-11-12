@@ -334,11 +334,9 @@ const NO_GATE = "so there is no gate to show.";
 const NOTHING_YET = "(nothing yet)";
 const WALK_NOT_FOUND = "Walk not found.";
 const UNREACHABLE = "Could not reach the Cockpit";
-// The code panel under a part's wires, and the links to the docs on your own computer.
+// The code panel under a part's wires.
 const BUILT_TITLE = "The code that built this";
 const NO_CODE = "The code isn't available here.";
-const DOCS_SERVER = "http://127.0.0.1:8000/";
-const DOCS_NOTE = "The link opens the docs on your own computer, so start them first: type uv run mkdocs serve in the pycpu folder.";
 const HIDDEN_TITLE = "A hidden helper: Pebble made this box for itself (a for loop keeps its end value here). Its name starts with $, which no program could write.";
 
 let busy = false;          // a button's request is on its way
@@ -743,21 +741,16 @@ function shownPart(m) { return partPath || m.parts.instruction; }
 // Where a part's gates are: the scope that makes its outputs (for halt, cpu.fault).
 function gatesOf(m, path) { return m.parts.gates[path] || path; }
 
-// "Read about it", linking a concept page on the docs server on your own computer.
+// "Read about it", linking a concept page on the public docs site (the API gives the URL).
 function readAbout(page, why) {
   const box = el("div");
   const line = el("p", "Read about it: ");
-  if (page.url.startsWith(DOCS_SERVER)) {
-    const link = el("a", page.title);
-    link.href = page.url;
-    link.target = "_blank";
-    link.rel = "noopener";
-    line.append(link);
-  } else {
-    line.append(page.title);
-  }
-  line.append(", " + why + ".");
-  box.append(line, el("p", DOCS_NOTE, "muted"));
+  const link = el("a", page.title);
+  link.href = page.url;
+  link.target = "_blank";
+  link.rel = "noopener";
+  line.append(link, ", " + why + ".");
+  box.append(line);
   return box;
 }
 

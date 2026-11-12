@@ -1395,7 +1395,6 @@ STEP_INTO = "Step into ▸"
 LAPTOP = "1280 by 720 dots"
 CODE_TITLE = "The code that built this"
 NO_CODE = "The code isn't available here."
-MKDOCS_SERVE = "uv run mkdocs serve"
 REGISTER_TAPS = ["write", "write_select", "data", "read_a", "read_b", "a", "b"]
 RAM_TAPS = ["address", "data", "write", "out"]
 REFERENCE = Path(__file__).parent.parent / "docs" / "reference" / "instruction-set.md"
@@ -2215,16 +2214,15 @@ class TestTheCodePanel:
         assert '"Built by " + b.function + ", in " + b.file + ":" + b.line' in body
 
     def test_it_links_the_page_that_explains_the_part(self) -> None:
-        """Read about it links built_by.page.url, and says to start mkdocs serve first."""
+        """Read about it links the URL the API gives, and never builds a docs address itself."""
         script = _script()
         assert 'readAbout(b.page, "the page that explains this part")' in script
         about = _function(script, "readAbout")
         assert 'el("p", "Read about it: ")' in about
         assert "link.href = page.url;" in about
-        assert "if (page.url.startsWith(DOCS_SERVER)) {" in about
-        assert 'const DOCS_SERVER = "http://127.0.0.1:8000/";' in script
-        assert MKDOCS_SERVE in script
-        assert 'box.append(line, el("p", DOCS_NOTE, "muted"));' in about
+        assert "DOCS_SERVER" not in script
+        assert "DOCS_NOTE" not in script
+        assert "mkdocs serve" not in script
 
     def test_the_part_view_puts_the_wires_first_then_the_code(self) -> None:
         """The flow of wires is appended before the code panel."""
@@ -2275,7 +2273,6 @@ class TestTheCodePanel:
         docs = _cockpit_text()
         assert f"**{CODE_TITLE} \u25b8**" in docs
         assert NO_CODE in docs
-        assert MKDOCS_SERVE in docs
         assert "[The Code Behind a Part](the-code-behind-a-part.md)" in docs
         assert '"Its gates are in cpu.fault"' in docs
         gates = cast("dict[str, Any]", machine_picture(Session(SMALL))["parts"])["gates"]
@@ -2290,13 +2287,11 @@ class TestTheCodePanel:
         assert "The registers show whether to write, which register gets it," in docs
         assert "the RAM shows the address, the number to keep, the write wire" in docs
 
-    def test_no_url_but_the_local_ones_and_no_inner_html(self) -> None:
-        """Every http address in the page is on 127.0.0.1, and innerHTML never appears."""
+    def test_no_url_in_the_page_and_no_inner_html(self) -> None:
+        """The page holds no http address (docs links come from the API), and no innerHTML."""
         text = _page()
         assert "innerHTML" not in text
-        addresses = re.findall(r"https?://[^\s\"'<>]*", text)
-        assert addresses
-        assert all(a.startswith("http://127.0.0.1") for a in addresses), addresses
+        assert re.findall(r"https?://[^\s\"'<>]*", text) == []
 
 
 class TestEveryPartCanBeViewed:

@@ -109,7 +109,7 @@ way down to one gate.
 ## What's Next
 
 You can go back over the path in [Build It Yourself](build-it-yourself.md), or open
-the [Cockpit](concepts/the-cockpit.md) with `uv run python -m pycpu` and take the
+the [Cockpit](concepts/the-cockpit.md) with `uv run pycpu` and take the
 guided walks again, now that you know what every part is. And there is more to come:
 PyStack, the project that joins the whole series together, is getting an
 `import "cpu"` so that a Pebble program can run on PyCPU. It is coming to PyStack.

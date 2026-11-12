@@ -359,7 +359,7 @@ def test_every_walks_concept_page_links_to_that_walk_in_the_cockpit() -> None:
         link = f"http://127.0.0.1:8765/#walk={name}"
         assert text.count(link) == 1, f"{page} must link to {link} exactly once"
         para = next(p for p in text.split("\n\n") if link in p)
-        assert "uv run python -m pycpu" in para
+        assert "uv run pycpu" in para
         assert para.startswith("**See it in the Cockpit.**")
         assert text.count("http://127.0.0.1:8765/#walk=") == 1, "only one walk link per page"
 
