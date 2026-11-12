@@ -12,6 +12,7 @@ from pynet.loop import sleep
 from pyweb.testing import TestClient, TestResponse
 
 from pycpu.cockpit.app import create_cockpit
+from pycpu.cockpit.code import DOCS_URL
 from pycpu.cockpit.picture import machine_picture
 from pycpu.cockpit.session import (
     FINISHED_NOTE,
@@ -61,6 +62,7 @@ SOME_GATES = 5
 THIRTEEN = 13
 FAST_TICK = 0.01
 QUICK_PLAY = 1_000
+SUBTRACTING = "subtracting-with-gates"
 
 GOOD = """
 title = "A test walk"
@@ -193,6 +195,7 @@ class TestGoingToEveryStep:
                 "task": walk.trial.task,
                 "done": False,
                 "off_script": False,
+                "see_also": picture["see_also"],
             }
 
     @pytest.mark.parametrize("name", WALK_ORDER)
@@ -215,6 +218,29 @@ class TestGoingToEveryStep:
         assert picture["look"] == walk.trial.look.value
         assert picture["task"] == walk.trial.task
         assert picture["step_kind"] == walk.trial.step
+
+    @pytest.mark.parametrize("name", WALK_ORDER)
+    def test_the_picture_links_the_walks_see_also_page(self, cockpit: Cockpit, name: str) -> None:
+        """`see_also` is the page's own title and its URL on the local docs server."""
+        walk = _walk(name)
+        cockpit.go_to_walk(name, len(walk.steps))
+        heading = (CONCEPTS / f"{walk.see_also}.md").read_text(encoding="utf-8").splitlines()[0]
+        assert _walk_picture(cockpit)["see_also"] == {
+            "title": heading.removeprefix("# "),
+            "url": f"{DOCS_URL}/{walk.see_also}/",
+        }
+        assert DOCS_URL.startswith("http://127.0.0.1:8000/")
+
+    def test_the_docs_quote_the_subtracting_walks_see_also(self, cockpit: Cockpit) -> None:
+        """Guided Walks prints the subtracting walk's `see_also` exactly as the picture has it."""
+        walk = _walk(SUBTRACTING)
+        cockpit.go_to_walk(SUBTRACTING, len(walk.steps))
+        link = _walk_picture(cockpit)["see_also"]
+        text = (CONCEPTS / "guided-walks.md").read_text(encoding="utf-8")
+        assert f'`{{"title": "{link["title"]}", "url": "{link["url"]}"}}`' in text
+        assert "[The ALU](the-alu.md) after the subtracting walk" in (
+            CONCEPTS / "the-cockpit.md"
+        ).read_text(encoding="utf-8").replace("\n", " ")
 
     def test_the_call_walk_offers_step_into(self) -> None:
         """Only the call walk's try asks the page for Step into."""

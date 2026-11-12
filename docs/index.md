@@ -17,6 +17,11 @@ follows a list of instructions.
 PyCPU builds a computer this way, from the very bottom, using Python to pretend to be
 the electricity. We use only **one** kind of brick, and it is a very small one.
 
+You build it yourself, in code. [Build It Yourself](build-it-yourself.md) is the
+instruction sheet: the order to write the parts, from one NAND gate up to a computer that
+runs a Pebble program, with a picture to check each step. Once you have built something,
+you open the **Cockpit** to check it and watch it run.
+
 ## The One Brick: NAND
 
 The brick is called a **NAND gate**. It has two inputs and one output, and it follows
@@ -58,14 +63,14 @@ explained the first time it appears.
 7. **Pebble**, a small programming language that already exists in the same series. Pebble's
    own **compiler** (a translating program) turns a Pebble program into simple steps, and
    PyCPU's **translator** turns those steps into PyCPU machine code.
-8. **The Cockpit**, the screen where you watch it all run.
+
+Beside the ladder sits **the Cockpit**, the screen where you check and watch what you
+built, at any rung.
 
 Here it is as a picture. Read it from the bottom up.
 
 ```
   ┌──────────────────────────────────────────────────────┐
-  │  The Cockpit      watch a program run, zoom to gates │  built and working
-  ├──────────────────────────────────────────────────────┤
   │  Pebble           programs, translated to numbers    │  built for part of Pebble
   ├──────────────────────────────────────────────────────┤
   │  The assembler    readable words -> numbers          │  built and working
@@ -80,6 +85,8 @@ Here it is as a picture. Read it from the bottom up.
   ├──────────────────────────────────────────────────────┤
   │  NAND             the one brick                      │  built, where it all starts
   └──────────────────────────────────────────────────────┘
+
+  The Cockpit sits beside the ladder: use it to watch any rung.
 ```
 
 Each layer is built only from the layer beneath it. Everything from NAND up to the
@@ -87,14 +94,16 @@ CPU and the assembler exists and works, and Pebble programs now run on top of it
 numbers, variables, `if`, `while`, `for` over a range, functions (even ones that call
 themselves) and `print`. That is only part of Pebble. Decimal numbers, lists, text kept in
 variables and the rest are refused with a friendly message naming the line, so that rung
-says "built for part of Pebble". At the top, the Cockpit is built too.
+says "built for part of Pebble". The Cockpit is built too.
 
 ## Where We Are Today
 
-All eight rungs are built, the seventh only for part of Pebble. Gates, adders, the ALU, registers and a 4,096-word RAM
-are all made of real NAND gates, and on top of them sits a whole **CPU**, also made of
-NAND gates, that fetches instructions from memory and obeys them, one after another. You can write programs for it in **assembly language** (short
-words such as `add` and `store`), and the assembler turns them into the numbers the CPU obeys.
+All seven rungs are built, the seventh only for part of Pebble, and the Cockpit beside
+them is built too. Gates, adders, the ALU, registers and a 4,096-word RAM are all made
+of real NAND gates, and on top of them sits a whole **CPU**, also made of NAND gates,
+that fetches instructions from memory and obeys them, one after another. You can write
+programs for it in **assembly language** (short words such as `add` and `store`), and
+the assembler turns them into the numbers the CPU obeys.
 
 Running a program on gates is slow, so there is also a **fast engine** that follows
 the same rules with ordinary Python arithmetic, and the tests check after every
@@ -137,11 +146,14 @@ By the end of the climb, you will be able to:
 - see how a loop of gates can *remember* something
 - follow a program from a line of Pebble down to the individual gates that run it
 
-## The Destination: The Cockpit
+## Check and Watch: The Cockpit
 
-The prize at the top is a screen called the **Cockpit**. On one screen you see
-your Pebble program, the machine code it turned into, the registers (scratchpads) and memory, and
-the instruction that is running right now. You can **pause at any moment**
+Once you have built a part, a screen called the **Cockpit** lets you check it and watch it
+work. Each part view in the Cockpit has a "The code that built this" panel, so the gates
+you see are tied to the code you wrote
+([The Code Behind a Part](concepts/the-code-behind-a-part.md)). On one screen you see
+your Pebble program, the machine code it turned into, the registers (scratchpads) and
+memory, and the instruction that is running right now. You can **pause at any moment**
 and click down through the layers (the ALU, the adder, a single bit, a single gate)
 and see the real circuit, with real wires carrying real values.
 

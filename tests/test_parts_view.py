@@ -13,7 +13,7 @@ from pyweb.testing import TestClient, TestResponse
 from pycpu.circuit import Bus
 from pycpu.cockpit.app import create_cockpit
 from pycpu.cockpit.picture import PART_NAMES, part_picture
-from pycpu.cockpit.session import BUSY_MESSAGE, Cockpit, CockpitBusy, Depth
+from pycpu.cockpit.session import BUSY_MESSAGE, Cockpit, CockpitBusy, Depth, StepSize
 from pycpu.cpu import GateMachine, Phase
 from pycpu.isa import Opcode, encode
 from pycpu.simulator import Simulator
@@ -241,3 +241,82 @@ class TestPartRoute:
         response = run_loop(main())
         assert response.status == CONFLICT
         assert _body(response) == {"error": "Conflict", "message": BUSY_MESSAGE}
+
+
+# The countdown's prologue checks there is room for its frame: `li r3, 13` puts the 13
+# words main may need (1 old r7, 1 variable, 2 stack, 9 routines) in r3. It is the fourth
+# instruction run, and the first that writes a register we can predict.
+LOADED_VALUE = 13
+INSTRUCTIONS_BEFORE_PAUSE = 4  # the instructions up to and including the first `li`
+REGISTER_INPUTS = ["write", "write_select", "data", "read_a", "read_b"]
+REGISTER_OUTPUTS = ["a", "b"]
+RAM_INPUTS = ["address", "data", "write"]
+RAM_OUTPUTS = ["out"]
+
+
+def _paused_after_first_li() -> tuple[Cockpit, dict[str, Any]]:
+    """Return a countdown Cockpit paused just after `li r3, 13` executes, and its registers part."""
+    cockpit = Cockpit(BITS)
+    cockpit.load_pebble(COUNTDOWN)
+    for _ in range(INSTRUCTIONS_BEFORE_PAUSE):
+        cockpit.step(StepSize.INSTRUCTION)
+    return cockpit, cast("dict[str, Any]", part_picture(cockpit, "cpu.registers"))
+
+
+class TestRegistersAndRamViews:
+    """The registers and the RAM show their real wires, and refuse while playing."""
+
+    def test_the_registers_show_the_value_just_written(self) -> None:
+        """The registers' names and values are the register file's real wires."""
+        cockpit, part = _paused_after_first_li()
+        assert part["name"] == "registers"
+        assert [bus["name"] for bus in part["inputs"]] == REGISTER_INPUTS
+        assert [bus["name"] for bus in part["outputs"]] == REGISTER_OUTPUTS
+        gate = cockpit.computer.gate
+        sim = gate.simulator
+        for bus in [*part["inputs"], *part["outputs"]]:
+            assert bus["value"] == _read_bits(sim, gate.taps["cpu.registers"][bus["name"]])
+        data = next(bus for bus in part["inputs"] if bus["name"] == "data")
+        assert data["value"] == LOADED_VALUE
+        state = cockpit.computer.state()
+        seen = {bus["name"]: bus["value"] for bus in [*part["inputs"], *part["outputs"]]}
+        assert seen["a"] == state.registers[seen["read_a"]]
+        assert seen["b"] == state.registers[seen["read_b"]]
+
+    def test_the_ram_out_is_the_word_at_the_address(self) -> None:
+        """The RAM's `out` equals the memory word at its `address`."""
+        cockpit, _ = _paused_after_first_li()
+        part = cast("dict[str, Any]", part_picture(cockpit, "ram"))
+        assert part["name"] == "RAM"
+        assert [bus["name"] for bus in part["inputs"]] == RAM_INPUTS
+        assert [bus["name"] for bus in part["outputs"]] == RAM_OUTPUTS
+        address = next(bus for bus in part["inputs"] if bus["name"] == "address")
+        out = part["outputs"][0]["value"]
+        assert out == cockpit.computer.state().memory[address["value"]]
+
+    def test_both_answer_409_while_playing(self) -> None:
+        """Both routes answer 409 with the busy message while playing."""
+
+        async def main() -> list[TestResponse]:
+            """Play slowly, ask for both parts, then pause."""
+            client = TestClient(create_cockpit(address_bits=BITS, start_example="countdown"))
+            await client.post("/api/play", json={"speed": SLOW_SPEED})
+            answers = [await client.get(f"/api/part?path={p}") for p in ("cpu.registers", "ram")]
+            await client.post("/api/pause")
+            return answers
+
+        for response in run_loop(main()):
+            assert response.status == CONFLICT
+            assert _body(response) == {"error": "Conflict", "message": BUSY_MESSAGE}
+
+    def test_the_routes_answer_200(self) -> None:
+        """Both routes answer 200 with the part's name."""
+
+        async def main() -> list[TestResponse]:
+            """Ask for both parts at the start."""
+            client = TestClient(create_cockpit(address_bits=BITS, start_example="countdown"))
+            return [await client.get(f"/api/part?path={p}") for p in ("cpu.registers", "ram")]
+
+        responses = run_loop(main())
+        assert [r.status for r in responses] == [OK, OK]
+        assert [_body(r)["name"] for r in responses] == ["registers", "RAM"]

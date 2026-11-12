@@ -72,6 +72,15 @@ simulation of every one of them takes real effort. If we find we cannot afford a
 memory we hoped for, we will **make the memory smaller**. We will never swap in a
 cheat and pretend.
 
+## Build, Then Watch
+
+PyCPU is about building. [Build It Yourself](build-it-yourself.md) gives the order to build
+each part in code, from one NAND gate up to a computer that runs a Pebble program. The
+Cockpit comes second. It is where you watch what you built run, pause it, and zoom down
+to the gates. Each part view in it has a "The code that built this" panel, which shows the
+real code that made the circuit you are looking at, never a copy
+([The Code Behind a Part](concepts/the-code-behind-a-part.md)). Build first, then watch.
+
 ## Where PyCPU Fits in the Series
 
 This site belongs to a collection of "from scratch in Python" projects. Most of them

@@ -22,6 +22,7 @@ from pycpu.cockpit import picture as picture_module
 from pycpu.cockpit.app import create_cockpit
 from pycpu.cockpit.picture import (
     PART_NAMES,
+    gate_path,
     listing,
     machine_picture,
     part_for_instruction,
@@ -39,7 +40,7 @@ from pycpu.cockpit.session import Cockpit as Session
 from pycpu.computer import Computer, StepSize
 from pycpu.cpu import GateMachine
 from pycpu.fast import FastMachine
-from pycpu.isa import Opcode, decode
+from pycpu.isa import Opcode, decode, encode
 from pycpu.memory import RAM_ADDRESS_BITS
 from pycpu.state import REGISTER_COUNT
 from pycpu.translator import FRAME_POINTER, translate
@@ -1392,6 +1393,11 @@ EXPLORE = "Explore on my own"
 WRITE_YOUR_OWN = "Write your own..."
 STEP_INTO = "Step into ▸"
 LAPTOP = "1280 by 720 dots"
+CODE_TITLE = "The code that built this"
+NO_CODE = "The code isn't available here."
+MKDOCS_SERVE = "uv run mkdocs serve"
+REGISTER_TAPS = ["write", "write_select", "data", "read_a", "read_b", "a", "b"]
+RAM_TAPS = ["address", "data", "write", "out"]
 REFERENCE = Path(__file__).parent.parent / "docs" / "reference" / "instruction-set.md"
 
 
@@ -2107,3 +2113,213 @@ class TestTheTourGate:
         text = (DOCS / "a-tour-of-the-cockpit.md").read_text(encoding="utf-8")
         assert "one of the\nfour NANDs" in text
         assert f"{TOUR_GATE:,}" in text
+
+
+def _gates_making(gate: GateMachine, part: str) -> set[str]:
+    """Name the scope of every gate whose output is one of `part`'s output wires."""
+    circuit = gate.simulator.circuit
+    driver = {wire: number for number, wire in enumerate(circuit.gate_wires[2])}
+    return {
+        circuit.scope_of(driver[wire])
+        for name in gate.tap_outputs[part]
+        for wire in gate.taps[part][name]
+    }
+
+
+def _function(script: str, name: str) -> str:
+    """Return the body of the page's `function name(`, up to its closing brace."""
+    body = script[script.index(f"function {name}(") :]
+    return body[: body.index("\n}\n")]
+
+
+class TestEachPartsGateZoom:
+    """A part's Look closer opens the scope whose gates make the wires its view reads."""
+
+    @pytest.mark.parametrize("part", sorted(GateMachine(SMALL).taps))
+    def test_the_zoom_holds_the_gates_behind_every_output(self, part: str) -> None:
+        """Every gate driving one of the part's output wires sits inside its gate path."""
+        gate = GateMachine(SMALL)
+        zoom = gate_path(gate, part)
+        assert gate.simulator.circuit.has_scope(zoom)
+        for scope in _gates_making(gate, part):
+            assert scope == zoom or scope.startswith(zoom + "."), (part, scope)
+
+    def test_halt_zooms_to_the_fault_block_not_its_registers(self) -> None:
+        """The halt's wires are made in cpu.fault; cpu.halt holds none of those gates."""
+        gate = GateMachine(SMALL)
+        assert gate_path(gate, "cpu.halt") == "cpu.fault"
+        assert all(not s.startswith("cpu.halt") for s in _gates_making(gate, "cpu.halt"))
+
+    def test_the_picture_carries_every_parts_zoom(self) -> None:
+        """`parts["gates"]` names each part's zoom, and the part view says the same."""
+        session = Session(SMALL)
+        gate = session.computer.gate
+        gates = cast("dict[str, Any]", machine_picture(session)["parts"])["gates"]
+        assert gates == {part: gate_path(gate, part) for part in gate.taps}
+        assert gates == {**{part: part for part in gate.taps}, "cpu.halt": "cpu.fault"}
+        part = _json(_run(Cockpit().client.get("/api/part", query={"path": "cpu.halt"})))
+        assert part["gates"] == "cpu.fault"
+
+    def test_the_page_zooms_through_gates_of_never_the_part_name(self) -> None:
+        """Look closer, the trail, a walk and a new program all go to `gatesOf`."""
+        script = _script()
+        assert "function gatesOf(m, path) { return m.parts.gates[path] || path; }" in script
+        assert 'next === "gate" ? gatesOf(latest, shownPart(latest))' in _function(
+            script, "goDeeper"
+        )
+        assert "const base = gatesOf(m, shownPart(m));" in _function(script, "drawTrail")
+        assert "gatePath = gatesOf(m, m.parts.instruction);" in _function(script, "followWalk")
+        assert "gatePath = gatesOf(m, m.parts.instruction);" in _function(script, "startLook")
+        assert "gatePath = m.parts.instruction" not in script
+
+    def test_the_part_view_says_where_its_gates_are_when_they_sit_elsewhere(self) -> None:
+        """A part whose gates are in another block says so in the glass."""
+        assert '"Its gates are in " + part.gates' in _function(_script(), "lensPart")
+
+
+class TestTheCodePanel:
+    """The part view shows the code that built the part, closed until opened."""
+
+    def test_the_toggle_is_named_and_starts_closed(self) -> None:
+        """The toggle says "The code that built this", and is closed until pressed."""
+        script = _script()
+        assert f'const BUILT_TITLE = "{CODE_TITLE}";' in script
+        assert "let codeOpen = false;" in script
+        body = _function(script, "drawBuiltBy")
+        assert 'BUILT_TITLE + (codeOpen ? " \u25be" : " \u25b8")' in body
+        assert "inside.hidden = !codeOpen;" in body
+        assert 'toggle.setAttribute("aria-expanded", String(codeOpen));' in body
+
+    def test_the_code_goes_in_as_text_in_a_pre_that_scrolls(self) -> None:
+        """The code is a `<pre>`'s textContent, and that box scrolls inside itself."""
+        body = _function(_script(), "drawBuiltBy")
+        assert 'const code = el("pre", undefined, "built-code");' in body
+        assert "code.textContent = b.code;" in body
+        rules = _top_rules(_style())
+        assert any(
+            ".built-code" in selectors and "overflow:auto" in rule and "max-height" in rule
+            for selectors, rule in rules
+        )
+
+    def test_missing_code_says_so(self) -> None:
+        """A None `code` shows one sentence instead of the box."""
+        script = _script()
+        assert f'const NO_CODE = "{NO_CODE}";' in script
+        body = _function(script, "drawBuiltBy")
+        assert "if (b.code === null) {" in body
+        assert 'inside.append(el("p", NO_CODE));' in body
+
+    def test_it_names_the_file_and_line(self) -> None:
+        """The panel names the builder, then its file and line as file:line."""
+        body = _function(_script(), "drawBuiltBy")
+        assert '"Built by " + b.function + ", in " + b.file + ":" + b.line' in body
+
+    def test_it_links_the_page_that_explains_the_part(self) -> None:
+        """Read about it links built_by.page.url, and says to start mkdocs serve first."""
+        script = _script()
+        assert 'readAbout(b.page, "the page that explains this part")' in script
+        about = _function(script, "readAbout")
+        assert 'el("p", "Read about it: ")' in about
+        assert "link.href = page.url;" in about
+        assert "if (page.url.startsWith(DOCS_SERVER)) {" in about
+        assert 'const DOCS_SERVER = "http://127.0.0.1:8000/";' in script
+        assert MKDOCS_SERVE in script
+        assert 'box.append(line, el("p", DOCS_NOTE, "muted"));' in about
+
+    def test_the_part_view_puts_the_wires_first_then_the_code(self) -> None:
+        """The flow of wires is appended before the code panel."""
+        body = _function(_script(), "lensPart")
+        assert body.index("flow") < body.index("drawBuiltBy(part.built_by, path)")
+
+    def test_opening_the_code_scrolls_it_into_view_and_keeps_its_scroll(self) -> None:
+        """The toggle keeps the opened panel in view, and Step keeps the code box's scroll."""
+        script = _script()
+        assert "keepVisible(inside)" in _function(script, "drawBuiltBy")
+        assert "codeScroll" in _function(script, "drawBuiltBy")
+        assert "codeScroll" in _function(script, "lensPart")
+
+    def test_ram_lists_its_word_parts_last_and_says_where_its_answer_is(self) -> None:
+        """Look closer lists the non-word parts first; RAM's part view points at ram.read0."""
+        script = _script()
+        body = _function(script, "lensGates")
+        assert "view.children.filter((c) => !word(c))" in body
+        assert body.index("!word(c)") < body.index("filter(word)")
+        assert "ram.read0 to ram.read15" in _function(script, "lensPart")
+
+    def test_picking_a_part_during_a_walk_counts_as_wandering(self) -> None:
+        """A picked part, not only a different depth, takes the learner off the walk."""
+        assert (
+            "wandered = Boolean(w && !w.trying && (look !== w.look || partPath !== null));"
+            in _function(_script(), "setLook")
+        )
+
+    def test_the_code_box_is_shorter_on_a_phone(self) -> None:
+        """At 375 px the code box gets a smaller max-height so the glass shows more."""
+        assert ".built-code { max-height:10rem; }" in _style()
+
+    def test_registers_and_ram_are_no_instructions_part(self) -> None:
+        """Only the Every part list reaches the registers and RAM views."""
+        parts = {part_for_instruction(encode(op)) for op in Opcode}
+        assert parts.isdisjoint({"cpu.registers", "ram"})
+
+    def test_the_walks_done_card_points_at_its_page(self) -> None:
+        """When the try is done, the bar names the walk's see_also page with the same link."""
+        text = _page()
+        assert '<div id="try-read" hidden></div>' in text
+        body = _function(_script(), "drawWalk")
+        assert "read.hidden = !w.done;" in body
+        assert "readAbout(w.see_also, " in body
+
+    def test_the_cockpit_page_quotes_the_panel_and_links_its_concept_page(self) -> None:
+        """The Cockpit page names the toggle, the no-code sentence and the halt's gates."""
+        docs = _cockpit_text()
+        assert f"**{CODE_TITLE} \u25b8**" in docs
+        assert NO_CODE in docs
+        assert MKDOCS_SERVE in docs
+        assert "[The Code Behind a Part](the-code-behind-a-part.md)" in docs
+        assert '"Its gates are in cpu.fault"' in docs
+        gates = cast("dict[str, Any]", machine_picture(Session(SMALL))["parts"])["gates"]
+        assert gates["cpu.halt"] == "cpu.fault"
+
+    def test_the_docs_name_every_registers_and_ram_wire(self) -> None:
+        """The words for the registers' and the RAM's wires match their real taps."""
+        gate = GateMachine(SMALL)
+        assert list(gate.taps["cpu.registers"]) == REGISTER_TAPS
+        assert list(gate.taps["ram"]) == RAM_TAPS
+        docs = _cockpit_text()
+        assert "The registers show whether to write, which register gets it," in docs
+        assert "the RAM shows the address, the number to keep, the write wire" in docs
+
+    def test_no_url_but_the_local_ones_and_no_inner_html(self) -> None:
+        """Every http address in the page is on 127.0.0.1, and innerHTML never appears."""
+        text = _page()
+        assert "innerHTML" not in text
+        addresses = re.findall(r"https?://[^\s\"'<>]*", text)
+        assert addresses
+        assert all(a.startswith("http://127.0.0.1") for a in addresses), addresses
+
+
+class TestEveryPartCanBeViewed:
+    """The part depth lists every part, the registers and RAM among them."""
+
+    def test_the_part_list_offers_every_part_but_the_whole_cpu(self) -> None:
+        """PartList walks PART_WORDS, leaving out "cpu", and opens the picked part."""
+        script = _script()
+        body = _function(script, "partList")
+        assert 'Object.keys(PART_WORDS).filter((p) => p !== "cpu")' in body
+        assert 'partPath = p; setLook("part");' in body
+        assert {"cpu.registers", "ram"} <= set(_js_json("PART_WORDS"))
+
+    def test_the_trail_names_the_part_being_viewed(self) -> None:
+        """The trail's part crumb and the part view both follow `shownPart`."""
+        script = _script()
+        assert "part: partWords(shownPart(m))," in _function(script, "drawTrail")
+        assert "const path = shownPart(m);" in _function(script, "lensPart")
+        assert "function shownPart(m) { return partPath || m.parts.instruction; }" in script
+
+    def test_a_new_program_walk_or_instruction_goes_back_to_its_own_part(self) -> None:
+        """Picking a part lasts until a new program, a walk step, or looking closer again."""
+        script = _script()
+        for name in ("startLook", "followWalk"):
+            assert "partPath = null;" in _function(script, name), name
+        assert 'if (next === "part") partPath = null;' in _function(script, "goDeeper")

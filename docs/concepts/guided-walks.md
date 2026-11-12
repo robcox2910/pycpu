@@ -183,7 +183,12 @@ print("halted:", cockpit.computer.state().halted, "| done:", cockpit.walk.done)
 # halted: True | done: True
 ```
 
-**5. Wandering off.** During a walk's steps, any move of your own (a Step, a Run, a
+**5. The last card points at the guidebook.** When the try is done, the bar cheers and,
+under the cheer, says **Read about it** with the title of the walk's `see_also` page,
+linked to it, to see how the idea is built. The link opens the docs on your own
+computer, so start them first with `uv run mkdocs serve` in the `pycpu` folder.
+
+**6. Wandering off.** During a walk's steps, any move of your own (a Step, a Run, a
 load) sets `off_script`, and the page offers **Back to the walk**, which is just
 `go_to_walk` again. At the **Now you try** stage your Steps are the task, so only
 loading a different program counts as wandering off.
@@ -193,8 +198,11 @@ with `{"name", "step"}` opens one and answers the picture, and `POST /api/walk/l
 puts the guide away. The picture's `walk` key carries the step's `say`, `look` and
 `show`, and at the **Now you try** stage the `task`, `done`, and `step_kind`, which is
 `"into"` when the page should offer Step into (as the function-call walk does) and
-null otherwise. A walk name that does not exist gets a 404 that says
-"There is no walk called nonsense." in plain words.
+null otherwise. It also carries `see_also`, with the `title` and `url` of the walk's
+concept page on the docs server on your own computer, such as
+`{"title": "The ALU", "url": "http://127.0.0.1:8000/concepts/the-alu/"}`.
+A walk name that does not exist gets a 404 that says "There is no walk called
+nonsense." in plain words.
 
 ## Why Does This Matter?
 
@@ -209,6 +217,7 @@ right moment, then let you fly it yourself.
 
 ## What's Next
 
-That is the last page of the climb for now. Go back to
-[What Is a Computer, Really?](../index.md) to see the whole ladder from one NAND gate
-to a Pebble program, or open the Cockpit and take a walk.
+Every part you zoom to also shows the code that built it. Read
+[The Code Behind a Part](the-code-behind-a-part.md) to see how the Cockpit finds that
+code, then go back to [What Is a Computer, Really?](../index.md) to see the whole
+ladder from one NAND gate to a Pebble program.
