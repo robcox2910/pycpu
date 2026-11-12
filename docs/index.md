@@ -165,3 +165,6 @@ one Pebble line to one gate. The climb has reached the top.
 
 Head to [Why Build a Computer From Nothing?](from-scratch.md) to see the promises this
 project makes, and how it fits with the rest of the series.
+
+When you have climbed it all, [You Built a Computer](you-built-a-computer.md) shows every
+layer of the tower in one table.

@@ -31,6 +31,7 @@ KEY_IDEAS: dict[str, list[str]] = {
     "index.md": ["nand", "pebble", "cockpit"],
     "from-scratch.md": ["petzold", "nand", "faking", "pebble"],
     "build-it-yourself.md": ["model kit", "nand", "ripple", "cockpit"],
+    "you-built-a-computer.md": ["nand", "layer", "same program", "gates"],
     "concepts/bits-and-binary.md": ["bit", "binary", "hex"],
     "concepts/switches-and-nand.md": ["nand", "wire", "gate", "truth table"],
     "concepts/simulating-a-circuit.md": ["event", "settle", "oscillat", "netlist", "step"],
@@ -429,6 +430,16 @@ def test_build_it_yourself_has_its_sections_and_a_runnable_pinned_try_it() -> No
     check_sections(text, "build-it-yourself.md")
     check_whats_next(text, "build-it-yourself.md")
     run_try_it(text, "build-it-yourself.md")
+
+
+def test_you_built_a_computer_has_its_sections_and_a_runnable_try_it() -> None:
+    """The closing page has the four sections, follows Build It Yourself, and its Try It is run."""
+    text = (DOCS / "you-built-a-computer.md").read_text(encoding="utf-8")
+    check_sections(text, "you-built-a-computer.md")
+    check_whats_next(text, "you-built-a-computer.md")
+    run_try_it(text, "you-built-a-computer.md")
+    pages = _nav_pages()
+    assert pages.index("you-built-a-computer.md") == pages.index("build-it-yourself.md") + 1
 
 
 def test_build_it_yourself_follows_from_scratch_in_the_nav() -> None:

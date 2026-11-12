@@ -127,3 +127,6 @@ the whole series together, and the first release.
 
 Ready? Go back to the [home page](index.md) to see the whole ladder again, or start
 climbing with [Bits and Binary](concepts/bits-and-binary.md).
+
+And when you have climbed all the way, [You Built a Computer](you-built-a-computer.md)
+looks back down the tower.
