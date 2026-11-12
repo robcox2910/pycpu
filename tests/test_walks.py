@@ -221,7 +221,7 @@ class TestGoingToEveryStep:
 
     @pytest.mark.parametrize("name", WALK_ORDER)
     def test_the_picture_links_the_walks_see_also_page(self, cockpit: Cockpit, name: str) -> None:
-        """`see_also` is the page's own title and its URL on the local docs server."""
+        """`see_also` is the page's own title and its URL on the public docs site."""
         walk = _walk(name)
         cockpit.go_to_walk(name, len(walk.steps))
         heading = (CONCEPTS / f"{walk.see_also}.md").read_text(encoding="utf-8").splitlines()[0]
@@ -229,7 +229,7 @@ class TestGoingToEveryStep:
             "title": heading.removeprefix("# "),
             "url": f"{DOCS_URL}/{walk.see_also}/",
         }
-        assert DOCS_URL.startswith("http://127.0.0.1:8000/")
+        assert DOCS_URL.startswith("https://robcox2910.github.io/pycpu/concepts")
 
     def test_the_docs_quote_the_subtracting_walks_see_also(self, cockpit: Cockpit) -> None:
         """Guided Walks prints the subtracting walk's `see_also` exactly as the picture has it."""

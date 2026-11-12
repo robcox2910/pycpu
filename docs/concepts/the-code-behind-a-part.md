@@ -9,8 +9,8 @@ guess. You turn back to page 12.
 The Cockpit works the same way. When you zoom to a part of the CPU, such as the ALU,
 the page shows the part's real wires, and under them **the code that built it**: the
 Python that put those gates together. It is page 12 of the booklet, open at the right
-place. Start the docs on your own computer with `uv run mkdocs serve`, and the same
-panel has a link to the concept page that explains the part.
+place. The same panel has a link to the concept page that explains the part, on the
+public docs site.
 
 | Part you zoom to | The code that built it | The page that explains it |
 |------------------|------------------------|---------------------------|
@@ -44,7 +44,7 @@ print("page:", record["page"]["url"])
 # function: pycpu.arithmetic.alu
 # file: src/pycpu/arithmetic.py
 # first line: def alu(c: Circuit, a: Bus, b: Bus, op: Bus) -> AluOutput:
-# page: http://127.0.0.1:8000/concepts/the-alu/
+# page: https://robcox2910.github.io/pycpu/concepts/the-alu/
 ```
 
 Two parts, the write-back and the stack pointer, are built by the same method. Each

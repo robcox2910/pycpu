@@ -31,6 +31,7 @@ KEY_IDEAS: dict[str, list[str]] = {
     "index.md": ["nand", "pebble", "cockpit"],
     "from-scratch.md": ["petzold", "nand", "faking", "pebble"],
     "build-it-yourself.md": ["model kit", "nand", "ripple", "cockpit"],
+    "you-built-a-computer.md": ["nand", "layer", "same program", "gates"],
     "concepts/bits-and-binary.md": ["bit", "binary", "hex"],
     "concepts/switches-and-nand.md": ["nand", "wire", "gate", "truth table"],
     "concepts/simulating-a-circuit.md": ["event", "settle", "oscillat", "netlist", "step"],
@@ -358,13 +359,13 @@ def test_every_walks_concept_page_links_to_that_walk_in_the_cockpit() -> None:
         link = f"http://127.0.0.1:8765/#walk={name}"
         assert text.count(link) == 1, f"{page} must link to {link} exactly once"
         para = next(p for p in text.split("\n\n") if link in p)
-        assert "uv run python -m pycpu" in para
+        assert "uv run pycpu" in para
         assert para.startswith("**See it in the Cockpit.**")
         assert text.count("http://127.0.0.1:8765/#walk=") == 1, "only one walk link per page"
 
 
 def test_no_page_links_to_the_cockpit_anywhere_but_the_local_address() -> None:
-    """Nothing is exposed: the only Cockpit links point at this computer."""
+    """The Cockpit only runs on your own computer, so its links point only there."""
     for page in _all_pages():
         for url in re.findall(r"https?://[^\s)]*cockpit[^\s)]*", page.read_text(encoding="utf-8")):
             assert url.startswith("http://127.0.0.1:8765"), f"{_page_id(page)}: {url}"
@@ -429,6 +430,16 @@ def test_build_it_yourself_has_its_sections_and_a_runnable_pinned_try_it() -> No
     check_sections(text, "build-it-yourself.md")
     check_whats_next(text, "build-it-yourself.md")
     run_try_it(text, "build-it-yourself.md")
+
+
+def test_you_built_a_computer_has_its_sections_and_a_runnable_try_it() -> None:
+    """The closing page has the four sections, follows Build It Yourself, and its Try It is run."""
+    text = (DOCS / "you-built-a-computer.md").read_text(encoding="utf-8")
+    check_sections(text, "you-built-a-computer.md")
+    check_whats_next(text, "you-built-a-computer.md")
+    run_try_it(text, "you-built-a-computer.md")
+    pages = _nav_pages()
+    assert pages.index("you-built-a-computer.md") == pages.index("build-it-yourself.md") + 1
 
 
 def test_build_it_yourself_follows_from_scratch_in_the_nav() -> None:

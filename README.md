@@ -42,7 +42,7 @@ The Cockpit comes second, as the place to check and watch what you built. It is 
 screen where you can watch a program written in Pebble (a small programming language
 from the same series) run on this computer, pause at any moment, and zoom all the way
 down to individual gates.
-The Cockpit is built: a local page (`uv run python -m pycpu`) that opens on **guided
+The Cockpit is built: a local page (`uv run pycpu`) that opens on **guided
 walks**, short tours of the real machine that end with a small task for you. It shows the
 Pebble program on the left and a magnifying glass on the right. One Step button moves by a
 whole Pebble line, an instruction, a part of the CPU or a single gate, a sentence says
@@ -52,8 +52,7 @@ every exact control. Pebble programs run on PyCPU: whole numbers, variables, `if
 `while`, `for` over a range, functions and `print`, translated into machine code, with
 multiplying, dividing and printing done by small assembly routines. The rest of Pebble
 (decimals, lists, text in variables, ...) is refused with a friendly message. What is
-left comes next: PyCPU in PyStack (the series' project that joins the others together),
-and the first release.
+left comes next: PyCPU in PyStack (the series' project that joins the others together).
 
 ## Features
 
@@ -102,8 +101,9 @@ uv run python examples/run_assembly.py   # assemble and run a program that print
 uv run python examples/run_pebble.py   # translate a Pebble program and run it: prints 6, 4, 2
 uv run python examples/cockpit_tour.py   # follow one Pebble line down to a single gate
 uv run python examples/alu_tour.py   # more programs live in examples/
-uv run mkdocs serve   # read the docs at http://127.0.0.1:8000
-uv run python -m pycpu   # open the Cockpit at http://127.0.0.1:8765
+uv run mkdocs serve   # build and read the docs on your own computer
+uv run pycpu   # open the Cockpit at http://127.0.0.1:8765
+uvx --from fromscratch-pycpu pycpu   # the same, without a clone
 ```
 
 ## Concepts
@@ -174,10 +174,10 @@ uv run --no-sync pytest
 
 ## Releasing
 
-PyCPU has no release yet. Its first release, `v0.1.0`, comes when the whole
-climb is finished, from gates to Pebble programs running in the Cockpit. From
-then on, other projects in the series use a released version of it from PyPI
-(`fromscratch-pycpu`), not whatever is on `main`. To publish a change for them:
+PyCPU's first release is `v0.1.0`: the whole climb, from gates to Pebble
+programs running in the Cockpit. Other projects in the series use a released
+version of it from PyPI (`fromscratch-pycpu`), not whatever is on `main`. To
+publish a change for them:
 
 1. Merge the change to `main`.
 2. Release it: `gh release create vX.Y.Z --target main --generate-notes`

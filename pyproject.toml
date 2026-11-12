@@ -24,6 +24,9 @@ dependencies = [
     "fromscratch-pynet>=0.2.0",
 ]
 
+[project.scripts]
+pycpu = "pycpu.__main__:main"
+
 [project.urls]
 Homepage = "https://github.com/robcox2910/pycpu"
 Repository = "https://github.com/robcox2910/pycpu"

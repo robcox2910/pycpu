@@ -1,6 +1,7 @@
 """Check that every part view carries the live source of the code that built it."""
 
 import inspect
+import tomllib
 from pathlib import Path
 from typing import Any, cast
 
@@ -11,14 +12,16 @@ from pyweb.testing import TestClient, TestResponse
 from pycpu.cockpit import code as code_module
 from pycpu.cockpit.app import create_cockpit
 from pycpu.cockpit.code import DOCS_URL, PAGE_TITLES, PART_PAGES, built_by, root_for
-from pycpu.cockpit.picture import part_picture
+from pycpu.cockpit.picture import part_picture, walk_picture
 from pycpu.cockpit.session import Cockpit
 from pycpu.cockpit.walks import load_walks
 from pycpu.cpu import GateMachine
 
 ROOT = Path(__file__).parent.parent
+PUBLIC_CONCEPTS = "https://robcox2910.github.io/pycpu/concepts/"
 CONCEPTS = ROOT / "docs" / "concepts"
 BITS = 6
+WALK_BITS = 8  # the walks' programs need more memory than the part views do
 OK = 200
 # "ram" opens `c.scope(name)`, so there is no literal block to cut; "cpu.alu" makes its flags
 # after its block closes, so only the whole function shows every gate its view reads.
@@ -207,3 +210,27 @@ class TestFilePaths:
         """When the root is the package's parent, `file` reads `pycpu/arithmetic.py`."""
         monkeypatch.setattr(code_module, "_REPO_ROOT", code_module._PACKAGE_DIR.parent)
         assert built_by(gate, "cpu.alu")["file"] == "pycpu/arithmetic.py"
+
+
+def test_docs_links_are_public(gate: GateMachine) -> None:
+    """The built-by link and every walk's see_also link point at the public docs site."""
+    page = cast("dict[str, str]", built_by(gate, "cpu.alu")["page"])
+    assert page["url"].startswith(PUBLIC_CONCEPTS)
+    cockpit = Cockpit(WALK_BITS)
+    for walk in load_walks():
+        cockpit.go_to_walk(walk.name, 0)
+        picture = cast("dict[str, Any]", walk_picture(cockpit))
+        assert picture["see_also"]["url"].startswith(PUBLIC_CONCEPTS)
+
+
+def test_no_local_docs_server() -> None:
+    """No file under src/ names the old local docs server."""
+    for path in (ROOT / "src").rglob("*"):
+        if path.is_file() and path.suffix in {".py", ".html", ".toml", ".js", ".css"}:
+            assert "127.0.0.1:8000" not in path.read_text(encoding="utf-8"), path
+
+
+def test_console_script() -> None:
+    """`pycpu` is a console script that runs `pycpu.__main__:main`."""
+    config = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
+    assert config["project"]["scripts"]["pycpu"] == "pycpu.__main__:main"

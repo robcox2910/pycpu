@@ -185,8 +185,8 @@ print("halted:", cockpit.computer.state().halted, "| done:", cockpit.walk.done)
 
 **5. The last card points at the guidebook.** When the try is done, the bar cheers and,
 under the cheer, says **Read about it** with the title of the walk's `see_also` page,
-linked to it, to see how the idea is built. The link opens the docs on your own
-computer, so start them first with `uv run mkdocs serve` in the `pycpu` folder.
+linked to it, to see how the idea is built. The link opens the page on the public
+docs site.
 
 **6. Wandering off.** During a walk's steps, any move of your own (a Step, a Run, a
 load) sets `off_script`, and the page offers **Back to the walk**, which is just
@@ -199,8 +199,8 @@ puts the guide away. The picture's `walk` key carries the step's `say`, `look` a
 `show`, and at the **Now you try** stage the `task`, `done`, and `step_kind`, which is
 `"into"` when the page should offer Step into (as the function-call walk does) and
 null otherwise. It also carries `see_also`, with the `title` and `url` of the walk's
-concept page on the docs server on your own computer, such as
-`{"title": "The ALU", "url": "http://127.0.0.1:8000/concepts/the-alu/"}`.
+concept page on the public docs site, such as
+`{"title": "The ALU", "url": "https://robcox2910.github.io/pycpu/concepts/the-alu/"}`.
 A walk name that does not exist gets a 404 that says "There is no walk called
 nonsense." in plain words.
 

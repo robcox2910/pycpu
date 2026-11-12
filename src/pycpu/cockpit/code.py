@@ -15,7 +15,7 @@ from types import CodeType
 import pycpu
 from pycpu.cpu import GateMachine
 
-DOCS_URL = "http://127.0.0.1:8000/concepts"  # where `uv run mkdocs serve` shows the pages
+DOCS_URL = "https://robcox2910.github.io/pycpu/concepts"  # the public docs site; the one source
 _PACKAGE_DIR = Path(pycpu.__file__).resolve().parent
 
 
