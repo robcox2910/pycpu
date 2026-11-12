@@ -1,6 +1,3 @@
-# Publishes fromscratch-pycpu to PyPI when a vX.Y.Z tag is pushed.
-# PyCPU has no tag until Plan 5 (the whole climb finished), so until then
-# this workflow never runs and nothing is published.
 name: Release
 
 on:

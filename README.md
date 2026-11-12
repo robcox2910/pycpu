@@ -175,10 +175,10 @@ uv run --no-sync pytest
 
 ## Releasing
 
-PyCPU has no release yet. Its first release, `v0.1.0`, comes when the whole
-climb is finished, from gates to Pebble programs running in the Cockpit. From
-then on, other projects in the series use a released version of it from PyPI
-(`fromscratch-pycpu`), not whatever is on `main`. To publish a change for them:
+PyCPU's first release is `v0.1.0`: the whole climb, from gates to Pebble
+programs running in the Cockpit. Other projects in the series use a released
+version of it from PyPI (`fromscratch-pycpu`), not whatever is on `main`. To
+publish a change for them:
 
 1. Merge the change to `main`.
 2. Release it: `gh release create vX.Y.Z --target main --generate-notes`

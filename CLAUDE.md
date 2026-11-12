@@ -55,6 +55,4 @@ PyCPU is an educational computer simulated from NAND gates. Teaching comes first
 - Every public module, class and function has a docstring; module docstrings open with an analogy and run at least 3 lines.
 - Add each new page to `mkdocs.yml` and to `KEY_IDEAS` in `tests/test_docs.py`.
 - Coverage floor is 90%. Slow tests carry `@pytest.mark.slow` and are skipped by default.
-- Do not publish yet: no GitHub Pages, no `series.yml` entry, no version tags until the owner gives the go-ahead (Plan 7 at the earliest).
 - PyCPU's Hypothesis tests are named by subject (`test_lockstep.py` and the like) rather than `test_properties.py`.
-- `.github/workflows/release.yml` only runs on a `v*.*.*` tag, and PyCPU gets no tag until the owner gives the go-ahead (Plan 7 at the earliest), so nothing publishes yet.

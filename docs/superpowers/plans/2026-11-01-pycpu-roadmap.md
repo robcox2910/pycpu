@@ -2,8 +2,8 @@
 
 The spec (`docs/superpowers/specs/2026-11-01-pycpu-design.md`) is built as seven sequential
 plans. Each produces working, tested software on its own, and each adds to the local Bench
-page so progress can be seen. **Nothing is tagged or released until the owner gives the go-ahead (Plan 7 at the earliest)** (spec goal 7);
-merging to `main` is fine, publishing a version is not.
+page so progress can be seen. **The owner approved the first release on 2026-11-12; `v0.1.0` is Plan 7's** (spec goal 7).
+Until that tag, merging to `main` is fine and publishing a version is not.
 
 Only Plan 1 is written in detail. Later plans are written when the one before finishes,
 because each depends on what the last one proved: Plan 2's memory size comes from Plan 1's
@@ -363,12 +363,28 @@ whole `alu` function (Ruling 7), so its flags are on the screen.
 
 ### Owner items still open
 
-- **Nothing is exposed yet.** No GitHub Pages, no push trigger in `docs.yml`, no
-  `series.yml` entry, no tag, no PyPI release, no links from other series projects. The
-  "See it in the Cockpit" links on the concept pages point only at
-  `http://127.0.0.1:8765`, which works on your own computer. Plan 7 needs the owner's
-  go-ahead before any of that changes.
+- **Publishing is approved (2026-11-12).** Plan 7 turns on GitHub Pages, the `docs.yml`
+  push trigger, the `series.yml` entry, the `v0.1.0` tag and PyPI release, and the links
+  from other series projects. The tag and the PyPI pending publisher still need the
+  owner's word when the time comes. The "See it in the Cockpit" links on the concept
+  pages go to the public site.
 - The owner's browser check of the new page (the controller owes it before merging).
+
+## Plan 7
+
+Plan 7 integrates PyCPU with the rest of the series and releases `v0.1.0` (spec
+`docs/superpowers/specs/2026-11-12-pycpu-integration-and-release-design.md`). This is the
+original spec's section 9 table, with where each item stands.
+
+| Spec item | Status | Evidence |
+|---|---|---|
+| A Pebble program using every subset feature runs on PyCPU in the Cockpit | Done | `tests/test_conformance.py`; the `tour` example is loaded behind the walks; `uv run pycpu` starts the Cockpit |
+| It can be paused at any moment | Done | `tests/test_walks.py`, [Pausing and Rewinding](../../concepts/pausing-and-rewinding.md) |
+| ...and zoomed from Pebble line to individual gate, the gate view showing the real circuit's real values | Done | `tests/test_depths.py`, `tests/test_parts_view.py`, [The Magnifying Glass](../../concepts/the-magnifying-glass.md), [A Tour of the Cockpit](../../concepts/a-tour-of-the-cockpit.md) |
+| Both engines pass lockstep equivalence | Done | `tests/test_lockstep.py` |
+| Conformance against the Pebble VM passes | Done | `tests/test_conformance.py` |
+| Every layer has concept docs | Done | Every page under `docs/concepts/`, checked by `tests/test_docs.py`; the closing page [You Built a Computer](../../you-built-a-computer.md) |
+| PyStack launches it and `import "cpu"` works | In progress: Plan 7 Task 4, PyStack PR | Not done until that PR merges; no `pycpu` plugin in `pystack/src/pystack/plugins/` yet |
 
 ## Rule #1: docs ship with the code
 
